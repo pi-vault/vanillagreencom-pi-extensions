@@ -34,7 +34,7 @@ For each item in `Review items:`:
    - If review item contradicts an active decision, skip with decision reference (e.g., "Skipped — contradicts D010")
    - Expanding scope is OK if it relates to the parent issue/PR
 
-4. **Update docs/skills/patterns** if fix changes documented behavior
+4. **Update architecture docs** if fix changes documented behavior. If it reveals project-specific insights, add to `./vstack.toml` under `[agent-instructions]` or `[skill-instructions]`.
 
 5. **For UI lifecycle/cache fixes**: If you introduce cached/mirrored UI state or change window/event handling, trace all invalidation and event-entry paths before returning. Prefer extending existing listeners over adding parallel subscriptions for the same event family, and add regression coverage for the non-obvious paths you touched.
 
@@ -84,22 +84,22 @@ If validation failures exist, append: `[validate: FAILING_CHECK]`
 
 ---
 
-## 5. Reflect & Update Skills/Rules
+## 5. Reflect & Update Documentation
 
 **Skip if** all fixes were one-off issues unlikely to recur (e.g., typo, missing import).
 
 **Trigger**: Any of these during § 3-4:
 - Fixed same problem 2+ times (lint, pattern, API usage, test approach)
 - Discovered non-obvious gotcha worth remembering
-- Spent multiple cycles on something a rule/skill could prevent
-- Documentation in skill, rules, patterns, need changed based on discovered optimal approaches
+- Spent multiple cycles on something a rule could prevent
+- Discovered optimal approaches that differ from documented patterns
 
-**Action**: Update the source directly.
+**Action**: Update the relevant documentation.
 
-- **Repeated mistake** → Add rule to project rules or agent definition
-- **Reusable pattern** → Add to relevant skill
+- **Repeated mistake** → Add to architecture docs or project rules
 - **Missing context** → Update architecture doc or reference table
-- **Wrong guidance** → Fix incorrect rule, skill, or pattern that caused the issue
+- **Project-specific insight** → Add to the appropriate section in `./vstack.toml` (`[agent-instructions]` for agent-level guidance, `[skill-instructions]` for skill-level context). Run `vstack refresh` to apply.
+- **Wrong guidance** → Fix incorrect architecture doc or project rule
 
 Criteria: Would this save 5+ minutes in a future session? If yes, update. One surgical addition per lesson. No verbose examples.
 

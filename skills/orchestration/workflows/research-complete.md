@@ -124,7 +124,7 @@ Execute ONE flow based on § 3 unless meets escalation criteria as defined.
    - Technical changes: | Type | Description | Est | Paths | QA Triggers |
    - Supersedes: topics/patterns this replaces
    - Refactors: existing code referencing superseded patterns, independent of new implementation | Path | Old → New |
-   - Doc/skill updates: | Path | Change |
+   - Doc/config updates: | Path | Change |
    - Cross-domain impact: yes/no + which domains
    - Scope: refactor-level or initiative-level?
    </delegation_format>
@@ -160,7 +160,7 @@ Execute ONE flow based on § 3 unless meets escalation criteria as defined.
    - Technical changes: | Type | Description | Est | Paths | QA Triggers |
    - Supersedes: topics/patterns this replaces
    - Refactors: existing code referencing superseded patterns, independent of new implementation | Path | Old → New |
-   - Doc/skill updates: | Path | Change |
+   - Doc/config updates: | Path | Change |
    </delegation_format>
 
 2. **Delegate to arch-review** for cross-cutting synthesis. Follow exactly, fill placeholders, add nothing else. Omit lines/sections with empty placeholders.
@@ -218,7 +218,7 @@ Execute ONE flow based on § 3 unless meets escalation criteria as defined.
 
 4. **→ Jump to § 6**
 
-   Note: For Strategic, issue creation happens in `/roadmap create`. § 6 handles DXXX recording and doc/skill updates only.
+   Note: For Strategic, issue creation happens in `/roadmap create`. § 6 handles DXXX recording and doc/config updates only.
 
 ## 6. Complete (Common Steps)
 
@@ -276,11 +276,12 @@ For each blocked issue:
    ```
    For each child: repeat steps 1-5
 
-### 6.3 Apply Doc/Skill Updates
+### 6.3 Apply Doc/Config Updates
 
 **Implement changes** from agent reports:
-- Modify docs/skills as described
+- Update architecture docs as described
 - Add DXXX references to affected files
+- If agents reported project-specific insights, add them to the appropriate section in `./vstack.toml` (`[agent-instructions]` or `[skill-instructions]`) and run `vstack refresh`
 - For Pervasive: combine updates from all domain agents
 
 ### 6.4 Extract Requirements

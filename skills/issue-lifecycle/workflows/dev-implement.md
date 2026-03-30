@@ -75,13 +75,13 @@ $ISSUE_CLI cache issues get [ISSUE_ID] | jq -r '.description'  # Look for Resear
 
 You have domain context the orchestrator lacks. You decide how research applies.
 
-1. **Read and evaluate**: Read project research documents (e.g., `[ISSUE_ID]/findings.md`). Consider how it applies to existing patterns, which skills need updates, whether a new skill is needed.
+1. **Read and evaluate**: Read project research documents (e.g., `[ISSUE_ID]/findings.md`). Consider how it applies to existing patterns and architecture documentation.
 
 2. **Check for existing decision** (decider skill): `$DECISIONS_CMD search --issue [RESEARCH_ISSUE_ID]`. If a prior research-complete already recorded a decision, reference it — don't duplicate. Only create new decisions if evaluation reveals *additional* decisions.
 
-3. **Update skills BEFORE implementing**: Add decision references, update patterns.
+3. **Update architecture docs** if research changes documented patterns.
 
-4. **Update architecture docs** if research changes documented patterns.
+4. **Update `vstack.toml`** if research reveals project-specific context that should be included in agent or skill instructions (under `[agent-instructions]` or `[skill-instructions]`).
 
 ### 2.3 Evaluate Feasibility
 
@@ -246,22 +246,22 @@ Use visual QA skills as necessary to validate that UI changes render correctly. 
 
 ---
 
-## 6. Reflect & Update Skills/Rules
+## 6. Reflect & Update Documentation
 
 **Skip if** implementation was straightforward with no repeated issues and no notable discoveries.
 
 **Trigger**: Any of these during § 4-5:
 - Fixed same problem 2+ times (lint, pattern, API usage, test approach)
 - Discovered non-obvious gotcha worth remembering
-- Spent multiple cycles on something a rule/skill could prevent
-- Documentation in skill, rules, patterns, need changed based on discovered optimal approaches.
+- Spent multiple cycles on something a rule could prevent
+- Discovered optimal approaches that differ from documented patterns
 
-**Action**: Update the source directly.
+**Action**: Update the relevant documentation.
 
-- **Repeated mistake** → Add rule to project rules or agent definition
-- **Reusable pattern** → Add to relevant skill
+- **Repeated mistake** → Add to architecture docs or project rules
 - **Missing context** → Update architecture doc or reference table
-- **Wrong guidance** → Fix incorrect rule, skill, or pattern that caused the issue
+- **Project-specific insight** → Add to the appropriate section in `./vstack.toml` (`[agent-instructions]` for agent-level guidance, `[skill-instructions]` for skill-level context). Run `vstack refresh` to apply.
+- **Wrong guidance** → Fix incorrect architecture doc or project rule
 
 Criteria: Would this save 5+ minutes in a future session? If yes, update. One surgical addition per lesson. No verbose examples.
 
@@ -352,7 +352,7 @@ Context the next agent needs to complete its current-scope work (e.g., struct ch
 | Baseline captured | `baseline` label | § 2.6 |
 | Research applied | Research in description | § 2.2.1 |
 | Validation run | Always | § 5 |
-| Skills/rules updated | Repeated issues in § 4-5 | § 6 |
+| Docs/config updated | Repeated issues in § 4-5 | § 6 |
 | Changes committed | Always | § 7 |
 | QA labels applied | Triggers present | § 8 |
 | Summary posted | Always | § 9 |
