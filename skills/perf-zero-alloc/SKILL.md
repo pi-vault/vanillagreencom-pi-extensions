@@ -53,6 +53,7 @@ Reference these guidelines when:
 - `alloc-preallocated-buffers` - Allocate buffers at startup, reuse via .clear()
 - `alloc-static-dispatch` - Use generics over dyn/Box for zero-overhead dispatch in hot paths
 - `alloc-string-interning` - Intern strings once, compare as integers thereafter
+- `alloc-arena-allocator` - Arena allocators are conditional — profile first, confine lifetimes
 
 ### 2. Data Structures (HIGH)
 
@@ -72,6 +73,7 @@ Reference these guidelines when:
 - `pit-iterator-collect` - .collect() allocates a new collection on every call
 - `pit-recursive-box` - Box in recursive structures allocates per node; use arenas
 - `pit-string-operations` - to_uppercase/to_string create new String allocations
+- `pit-arena-viral-lifetimes` - Arena lifetimes spread through all consumers; confine to single phase
 - `pit-vec-push-growth` - Vec::push may reallocate when capacity is exhausted
 
 ## How to Use

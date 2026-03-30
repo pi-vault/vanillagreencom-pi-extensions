@@ -271,6 +271,24 @@ impl SymbolTable {
 - No string allocations after initial interning
 - Ideal for finite symbol sets (e.g., market tickers)
 
+### 1.5 Arena Allocator Guidance
+
+**Impact: MEDIUM (premature arena adoption adds viral lifetime complexity without measurable benefit)**
+
+Arena allocators (e.g., bumpalo) are conditional — use only where profiling confirms allocator cost is a meaningful contributor to tail latency.
+
+**When to consider**:
+- Parsing or deserialization phases with many short-lived allocations
+- Temporary scratch space in request-processing pipelines
+- Phases where `dhat`/`heaptrack` shows allocation overhead in P99.9
+
+**When NOT to use**:
+- Hot paths already designed for zero allocation — arenas add no value
+- Startup or configuration code — not latency-sensitive
+- Anywhere the "viral lifetimes" cost (see § 4.6) exceeds the allocation savings
+
+**If justified**: Use per-thread `Bump` arenas with phase-oriented reset — allocate, use, then `arena.reset()`. Confine arena references to a single processing phase and copy out owned data before crossing module boundaries.
+
 ---
 
 ## 2. Data Structures
@@ -682,3 +700,35 @@ vec.push(item);
 ```
 
 For production hot paths, prefer `ArrayVec::try_push()` which returns an error instead of reallocating, or pre-size the Vec and guard against overflow.
+
+### 4.6 Arena Viral Lifetimes
+
+**Impact: HIGH (arena lifetime parameters spread through all consumers, making refactoring expensive)**
+
+Arena-allocated types propagate lifetime parameters through all consumers:
+
+```rust
+// BAD: Arena lifetime infects all downstream types
+struct ParsedMessage<'arena> {
+    symbol: &'arena str,
+    levels: Vec<&'arena PriceLevel>,
+}
+
+fn process(msg: ParsedMessage<'_>) { ... } // Lifetime everywhere
+```
+
+Once one field borrows from an arena, the lifetime spreads to the containing struct, all methods, trait impls, and callers. Refactoring back to owned types later is expensive.
+
+**Mitigation**:
+- Confine arena references to a single processing phase — copy out owned data before crossing module boundaries
+- Prefer `arena.reset()` between phases over long-lived arena borrows
+- Only adopt arena lifetimes where profiling confirms the allocation overhead justifies the complexity
+
+```rust
+// GOOD: Arena confined to parse phase, owned data crosses boundaries
+fn parse_phase<'a>(arena: &'a Bump, input: &[u8]) -> OwnedMessage {
+    let temp: ParsedMessage<'a> = parse_into_arena(arena, input);
+    temp.to_owned() // Copy out before arena reference escapes
+}
+// arena.reset() here — all borrows are dead
+```
