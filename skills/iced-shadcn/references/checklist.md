@@ -36,7 +36,7 @@ Before implementation, create a **reference mapping table**:
 | Reference example/section | Local example/section | Status | Notes |
 | --- | --- | --- | --- |
 
-Use `Matched`, `Excluded`, or `Planned` for `Status`.
+Use `Matched`, `Excluded`, or `Planned` for `Status`. Do not collapse multiple reference sections into one local section without noting that explicitly.
 
 Also capture the exact reference heading set and compare 1:1 against the local page:
 
@@ -51,7 +51,7 @@ Use `Matched`, `Excluded (reason)`, `Adapted (reason)`, or `Missing`. Extra loca
 - disabled behavior
 - keyboard/focus behavior
 - icon/indicator behavior
-- hit target coverage and interaction affordances
+- hit target coverage and interaction affordances match the reference for the relevant control surface
 - justified gaps caused by Iced or product constraints
 
 2. Styling and polish
@@ -71,7 +71,8 @@ Use `Matched`, `Excluded (reason)`, `Adapted (reason)`, or `Missing`. Extra loca
 - oversized empty regions
 - missing state/variant demos
 - missing RTL/direction demos where relevant
-- generic replacement sections used where reference has concrete headings
+- reference section mismatch: local section set vs reference section set
+- generic replacement sections (`Variants`, `States`, `Surface Variants`) used where the reference page has concrete example headings
 
 4. Validation
 - widget tests

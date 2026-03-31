@@ -52,7 +52,7 @@ App > Window > Shell > Zone > TitleBar > Panel > Canvas > Overlay
 - `hr-widget-tree-consistency` - Keep widget structure stable across interaction states; toggle behavior, not wrappers
 - `hr-view-is-pure` - Keep `view()` a pure projection of state; mutate only in `update()`
 - `hr-scroll-state` - `scrollable` events do not report initial layout; capture initial size explicitly before relying on scroll updates
-- `hr-animation-invalidation` - Animated geometry changes require both `request_redraw` and `invalidate_layout`; paint-only changes need just redraw
+- `hr-animation-invalidation` - Animated geometry changes require both `request_redraw` and `invalidate_layout`; paint-only changes need just redraw; extract shared motion primitives when 2+ components share behavior
 - `hr-minimum-pane-size` - `PaneGrid::min_size` is shared across panes; handle per-pane minimums in pane content/layout
 - `hr-overlay-state-isolation` - Overlay layers must not affect the base layer's widget structure
 - `hr-pick-area-geometry` - TitleBar content must use `Shrink` width so pick area is not consumed
@@ -83,9 +83,9 @@ App > Window > Shell > Zone > TitleBar > Panel > Canvas > Overlay
 ### 5. Interaction (MEDIUM)
 
 - `interaction-overlay-starvation` - Cursor overlays starve underlying drag targets
-- `interaction-pane-drag-feedback` - Keep pane_grid drag feedback inside pane subtree
+- `interaction-pane-drag-feedback` - Keep pane_grid drag feedback inside pane subtree; compact previews must reuse existing shell
 - `interaction-split-ownership` - When `mouse_area` handles semantics and `button` handles visuals, flag the split and verify hit areas match
-- `interaction-overlay-invalidation` - Custom overlay widgets must call `shell.invalidate_layout()` on visibility transitions to prevent stale layout panics
+- `interaction-overlay-invalidation` - Built-in First for overlays; custom overlays must call `shell.invalidate_layout()` on visibility transitions and maintain the custom widget contract
 
 ## How to Use
 
@@ -105,6 +105,8 @@ The `hr-` prefix is historical. Reserve it for broad Iced constraints, not app-s
 
 ## Resources
 
+**For ANY Iced documentation lookup — research, implementation, or verification — use `find-docs` skill with ctx7 CLI first.** Iced 0.14 has significant API changes. Never assume — always verify.
+
 Documentation lookup order: local skill files → ctx7 CLI → web fallback.
 
 ### ctx7 CLI
@@ -120,8 +122,10 @@ Documentation lookup order: local skill files → ctx7 CLI → web fallback.
 | Source | URL | Use For |
 |--------|-----|---------|
 | Iced API docs | `https://docs.iced.rs/iced/` | API reference (tracks master — may serve unreleased APIs) |
+| Iced GitHub | `https://github.com/iced-rs/iced` | Examples, issues, PRs |
+| Iced Docs Repo | `https://github.com/iced-rs/docs` | Guides, tutorials |
 | Iced examples | `https://github.com/iced-rs/iced/tree/master/examples` | Reference implementations |
 
 ## Full Compiled Document
 
-For the complete guide with all rules expanded, plus chart rendering, subscriptions, theming, and API reference: `AGENTS.md`
+For the complete guide with all rules expanded, plus chart rendering, subscriptions, theming, API reference, widget catalog, and shell chrome patterns: `AGENTS.md`

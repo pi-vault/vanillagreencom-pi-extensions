@@ -64,6 +64,8 @@ Patterns and rules for building Iced 0.14 applications with Elm-style state mana
 7. [Subscription-Based Data Streams](#7-subscription-based-data-streams)
 8. [Theming](#8-theming)
 9. [Iced 0.14 API Reference](#9-iced-014-api-reference)
+10. [Widget Catalog](#10-widget-catalog)
+11. [Shell Chrome Patterns](#11-shell-chrome-patterns)
 
 ---
 
@@ -170,6 +172,16 @@ For custom widgets that own an `iced::Animation<bool>`:
 3. While animating: request redraws every frame; invalidate layout every frame if geometry changes.
 4. In `layout()`, compute animated geometry from the current animation progress.
 5. In `draw()`, clip to the animated bounds if only part of the child should be visible.
+
+**When To Extract a Shared Motion Primitive:**
+
+Extract a reusable animation widget when:
+
+- 2+ components need the same reveal/collapse behavior
+- The motion owns clipping or animated geometry
+- The animation semantics are framework-level, not component-specific
+
+Keep geometry animation logic in the widget that owns the layout — do not store it in transient preview or showcase state.
 
 ### 1.6 Overlay State Isolation
 
@@ -381,6 +393,8 @@ Stacked `mouse_area(...).interaction(...)` layers can stop underlying hover/move
 
 If pane dragging uses `pane_grid.on_drag(...)`, keep feedback inside the picked pane subtree or `pane_grid::Style`. `mouse_area`/`opaque` pane-drag overlays are rebuild-sensitive and can prevent native `Dropped` events from arriving.
 
+Compact drag previews are safe only when they reuse the same TitleBar/body shell and swap leaf styling or content in place — do not build a separate overlay widget for the preview. Passive cursor indicators (e.g., a cursor icon change) are fine; `mouse_area`/`opaque` pane-drag overlays that capture input are not. Drop-zone highlight state is rebuild-sensitive and must live inside the pane subtree or be driven by `pane_grid::Style`.
+
 ### 5.3 Split Interaction Ownership
 
 **Impact: MEDIUM (semantic and visual interaction layers diverge, causing ghost clicks or missed events)**
@@ -417,6 +431,8 @@ Document which widget owns which concern and verify hit areas match. If the sema
 ### 5.4 Overlay Visibility Requires Layout Invalidation
 
 **Impact: MEDIUM (stale layout nodes cause panics after overlay visibility toggles)**
+
+**Built-in First**: Prefer Iced's built-in widgets over custom `overlay::Overlay` implementations. Custom overlay implementations are the #1 source of crashes in Iced applications — `container.rs unwrap() on None` panics during rapid interaction. Use `iced::widget::tooltip::Tooltip` for tooltips; reserve custom overlays only for popovers or context menus that require dismiss semantics no built-in can express.
 
 Custom widgets that conditionally return an overlay from `overlay()` must call `shell.invalidate_layout()` in `update()` whenever the overlay appears or disappears. Without this, the popup tree's layout nodes go stale between `layout()` and `draw()`, causing panics like `container.rs unwrap() on None`. This is the same contract Iced's built-in `tooltip::Tooltip` follows — `shell.invalidate_layout()` on every `Open`↔`Idle` transition. Symptom: crash at `iced_widget/src/container.rs` after repeated hover cycling.
 
@@ -466,6 +482,14 @@ fn overlay<'b>(...) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
     if self.show_overlay { Some(my_popup(...)) } else { None }
 }
 ```
+
+**Custom widget overlay contract** — if you MUST build a custom overlay widget:
+
+- `children()` → return a fixed child count (never changes between frames)
+- `diff()` → reconcile ALL children regardless of visibility state
+- `layout()` → produce layout nodes matching children
+- `draw()` → use the SAME tree from layout
+- `overlay()` → call `shell.invalidate_layout()` when overlay visibility changes
 
 ---
 
@@ -541,6 +565,15 @@ fn subscription(&self) -> Subscription<Message> {
 ```
 
 Each source's subscription runs independently on Iced's executor. Use `run_with` or `.with(id)` for stable identity when a source has its own receiver.
+
+### Feed Bridge Pattern
+
+When bridging a non-async producer thread (e.g., SPSC ring buffer consumer) into Iced's subscription system:
+
+1. The producer thread owns the SPSC consumer, translates raw messages into domain events, and forwards through a bounded `tokio::sync::mpsc` with `try_send()` only.
+2. Inside Iced, build the consumer stream with `iced::stream::channel` and batch on a ~16ms timer.
+3. `ReceiverStream` is optional — `iced::stream::channel` with a manual `recv()` loop is sufficient and avoids the extra dependency.
+4. Full channels drop and count on the producer side; the UI must never push back on the data source.
 
 ### Batch Processing
 
@@ -652,7 +685,7 @@ iced::daemon(boot, State::update, State::view)
 | `pin` | Absolute positioning within parent bounds. Use for drag ghosts, context menus. | — |
 | `stack` | Z-order layering within widget tree. Use for overlay composition. | HR-4 |
 | `table` | Data tables | — |
-| `scrollable` | `on_scroll` only fires on user scroll, NOT initial render/resize. | HR-3 |
+| `scrollable` | `on_scroll` only fires on user scroll, NOT initial render/resize. No reliable programmatic viewport probe. | HR-3 |
 | `mouse_area` | `on_press` fires on mouse-down. Use for drag initiation, hold actions. | — |
 | `button` | `on_press` fires on mouse-up (release). Standard activate-on-release. | — |
 
@@ -672,3 +705,133 @@ iced::daemon(boot, State::update, State::view)
 ### Testing
 
 `iced_test`: `Simulator` (headless widget), `Emulator` (full runtime), snapshot support.
+
+---
+
+## 10. Widget Catalog
+
+**Built-in First**: Prefer Iced's built-in widgets over custom `Widget`/`overlay::Overlay` implementations. See rule `dev-surface-selection` for the surface selection ladder and `interaction-overlay-invalidation` for the custom overlay contract.
+
+### Layout
+
+| Widget | Purpose |
+|--------|---------|
+| `column` | Vertical stack |
+| `row` | Horizontal stack |
+| `container` | Single-child with alignment, padding, style |
+| `stack` | Z-axis layering (overlapping children) |
+| `scrollable` | Scrollable region |
+| `pane_grid` | Resizable docking panes with drag-and-drop |
+| `responsive` | Layout that adapts to available space |
+| `center` | Center a single child |
+| `space` | Fixed-size empty spacer |
+| `horizontal_rule` / `vertical_rule` | Divider lines |
+| `themer` | Override theme for a subtree |
+
+### Input
+
+| Widget | Purpose |
+|--------|---------|
+| `button` | Pressable action trigger (fires on release) |
+| `text_input` | Single-line text field |
+| `text_editor` | Multi-line text editor |
+| `checkbox` | Boolean toggle with checkmark |
+| `radio` | Single-choice from group |
+| `toggler` | On/off switch |
+| `slider` | Range value selector |
+| `pick_list` | Dropdown value picker |
+| `combo_box` | Searchable dropdown |
+
+### Display
+
+| Widget | Purpose |
+|--------|---------|
+| `text` | Static text display |
+| `rich_text` | Styled spans of text |
+| `image` | Raster image display |
+| `svg` | SVG vector image |
+| `tooltip` | Hover popup on trigger |
+| `progress_bar` | Determinate progress |
+| `qr_code` | QR code image |
+| `markdown` | Rendered markdown |
+
+### Advanced
+
+| Widget | Purpose |
+|--------|---------|
+| `canvas` | 2D drawing with Path/Frame/Cache |
+| `shader` | Custom wgpu pipeline |
+| `mouse_area` | Mouse event capture region |
+| `sensor` | Non-visual layout dimension sensor |
+| `keyed::Column` | Keyed diffing for dynamic lists |
+
+### Utility
+
+| Widget | Purpose |
+|--------|---------|
+| `lazy` | Deferred widget construction |
+| `opaque` | Block event propagation |
+| `pin` | Absolute positioning within parent |
+| `pop` | Remove from parent |
+| `value` | Display a value (debug) |
+
+### Custom Widget Contract (`iced::advanced`)
+
+Use `iced::advanced` only when no built-in widget supports the required behavior (custom semantics, hit-testing, focus, layout/event/runtime plumbing). Custom widgets must maintain a strict contract:
+
+- `children()` → fixed child count (never changes between frames)
+- `diff()` → reconcile ALL children regardless of visibility
+- `layout()` → produce layout nodes matching children
+- `draw()` → use the SAME tree from layout
+- `overlay()` → call `shell.invalidate_layout()` when overlay visibility changes
+
+**Warning**: Custom overlay implementations are the #1 source of crashes in Iced applications. Prefer composing built-in widgets.
+
+---
+
+## 11. Shell Chrome Patterns
+
+Patterns for building reusable shell chrome (header bars, menus, tab bars) in Iced applications.
+
+### Token-Driven Builders
+
+Extract repeated shell elements (header actions, menus, tab bar chrome) into builder/helper functions. Drive all sizing from a tokens struct or constants — never inline magic numbers.
+
+```rust
+// Helper owns hit area, centering, and chrome styling.
+// Caller owns icon selection and content.
+fn shell_action<'a, Message>(
+    content: Element<'a, Message>,
+    on_press: Message,
+) -> Element<'a, Message> {
+    let t = &*TOKENS;
+    button(
+        container(content)
+            .width(Length::Fixed(t.shell.action_size))
+            .height(Length::Fixed(t.shell.action_size))
+            .center(Length::Fill),
+    )
+    .width(Length::Fixed(t.shell.action_size))
+    .height(Length::Fixed(t.shell.action_size))
+    .padding(0)
+    .style(header_action_style)
+    .on_press(on_press)
+    .into()
+}
+```
+
+### Content-Driven Menus
+
+Floating menus should compute width from content (widest item wins), apply symmetric padding, clamp to viewport edges, and handle dismiss-on-hover-exit. Encapsulate this in a `submenu_panel()` builder that takes an origin point, window size, optional title, and item specifications.
+
+### Token Flow
+
+Organize tokens by shell layer — each builder consumes tokens from its own layer:
+
+```
+ShellTokens      → shell_action()      → header buttons
+MenuTokens       → submenu_panel()     → floating menus
+TabBarTokens     → tab_bar_view()      → tab chrome
+header_height    → view layout         → header container sizing
+status_bar_height → view layout        → status bar container sizing
+```

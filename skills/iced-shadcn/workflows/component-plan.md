@@ -13,7 +13,7 @@ Use when planning new components, deciding foundation-vs-leaf, or implementing c
 2. **Study the reference sources**
    - shadcn Base UI docs for the target component — behavior, examples, states, interactions
    - ctx7 Iced 0.14 docs when work touches `iced::advanced` (custom Widget, Overlay trait, overlay::Group)
-   - [iced-shadcn reference crate](https://github.com/FerrisMind/shadcn-rs/tree/master/crates/iced-shadcn) for architecture patterns
+   - [iced-shadcn reference crate](https://github.com/FerrisMind/shadcn-rs/tree/master/crates/iced-shadcn) for architecture patterns — use `agent-browser` to fetch the specific component files you need
    - Local widget and showcase code in your project
 
 3. **Map reference examples to local implementation**
@@ -21,7 +21,7 @@ Use when planning new components, deciding foundation-vs-leaf, or implementing c
    | Base UI example/section | Local equivalent | Status | Notes |
    | --- | --- | --- | --- |
    Use `Matched`, `Planned`, or `Excluded (reason)` for Status.
-   Preserve the reference heading names and order in this table.
+   Preserve the reference heading names and order in this table. Do not collapse named examples into generic buckets like `Variants` or `States` unless the deviation is explicitly justified.
 
 4. **Decompose the family**
    - Shared primitives (overlay positioning, menu rendering, state management)

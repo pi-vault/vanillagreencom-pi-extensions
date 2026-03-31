@@ -61,3 +61,13 @@ For custom widgets that own an `iced::Animation<bool>`:
 3. While animating: request redraws every frame; invalidate layout every frame if geometry changes.
 4. In `layout()`, compute animated geometry from the current animation progress.
 5. In `draw()`, clip to the animated bounds if only part of the child should be visible.
+
+### When To Extract a Shared Motion Primitive
+
+Extract a reusable animation widget when:
+
+- 2+ components need the same reveal/collapse behavior
+- The motion owns clipping or animated geometry
+- The animation semantics are framework-level, not component-specific
+
+Keep geometry animation logic in the widget that owns the layout — do not store it in transient preview or showcase state.

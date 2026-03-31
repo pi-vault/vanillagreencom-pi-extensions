@@ -34,7 +34,7 @@ Reference these guidelines when:
 ## Source Authority (ordered)
 
 1. **shadcn Base UI docs** (`https://ui.shadcn.com/docs/components/base/`) — behavior truth, example coverage, interaction contracts
-2. **Iced 0.14 docs via ctx7** (`/websites/rs_iced_iced`) — framework constraints, `iced::advanced` widget/overlay API
+2. **Iced 0.14 docs via ctx7** (`/websites/rs_iced_iced`) — framework constraints, `iced::advanced` widget/overlay API. Consult the iced-rs skill's widget catalog before choosing built-in vs custom Widget impl.
 3. **Project architecture docs** — overlay/menu system, token system, viewer/page ownership, widget patterns
 4. **[iced-shadcn reference crate](https://github.com/FerrisMind/shadcn-rs/tree/master/crates/iced-shadcn)** — implementation ideas, architecture patterns. Never final authority.
 
@@ -52,17 +52,18 @@ From [iced-shadcn](https://github.com/FerrisMind/shadcn-rs/tree/master/crates/ic
 ## Rules
 
 - Do not make `iced-shadcn` a production dependency — reference crate is for study only
-- Always use ctx7 / documentation lookup before coding advanced Iced behavior (overlays, custom widgets, keyboard handling)
+- Always use `find-docs` / ctx7 before coding advanced Iced behavior (overlays, custom widgets, keyboard handling)
 - Prefer the shadcn **Base UI** tab; use Radix only when Base UI is absent
 - Mirror Base UI example headings and ordering exactly before adding local extras. Extra or missing sections require explicit mapping-table justification.
 - For menus/selects/comboboxes, capture interaction semantics in the widget layer, not viewer/preview code
-- Parity work must record fine-grained deviations: hit targets, separator treatment, alignment, type hierarchy, focus/outline treatment, per-example layout gaps
-- When a component family needs distinct subpart behavior (trigger/body/icon/padding/surface), define semantic component tokens and roles instead of repeatedly selecting generic globals
-- When visual treatments differ by variant or surface, model differences in the semantic component contract
-- When multiple components need the same animation pattern, extract a shared motion primitive
+- Parity work must record fine-grained deviations explicitly: whole-row hit targets, separator treatment, alignment, type hierarchy, focus/outline treatment, and per-example layout gaps
+- When a component family needs distinct subpart behavior (trigger/body/icon/padding/surface), define semantic component tokens and roles instead of repeatedly selecting generic globals inside the widget
+- When visual treatments differ by variant or surface (plain, bordered, card, inset, etc.), model those differences in the semantic component contract instead of forcing one token set to serve every variant
+- When multiple components need the same animation pattern, extract a shared motion primitive instead of embedding per-component tween logic
 - Every exposed variant must map end-to-end: widget API → preview state → viewer page → tests
 - Do not scope installation instructions, CLI snippets, or docs-site chrome into parity work
 - Update architecture docs when work changes overlay/menu/widget patterns
+- Consult the iced-rs skill's widget catalog before implementing custom `Widget`/`overlay::Overlay` — prefer Iced built-ins per the Built-in First principle
 
 ## References
 

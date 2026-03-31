@@ -6,8 +6,8 @@ Post-implementation audit for leaf components. Run after implementation to verif
 
 1. **Capture the reference**
    - Open shadcn Base UI docs page for the target component using `agent-browser` skill or other web browsing tools
-   - Switch to **Base UI** tab if present; record `Base UI tab confirmed` with evidence
-   - Record the exact example heading set and order from the reference page
+   - Switch to **Base UI** tab if present; record `Base UI tab confirmed` with screenshot evidence
+   - Record the exact example heading set and order from the reference page before comparing local output
    - Capture interactive states: open/close, disabled, variants, keyboard behavior
 
 2. **Capture local implementation**
