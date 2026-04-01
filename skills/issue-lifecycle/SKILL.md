@@ -30,10 +30,11 @@ Reference these workflows when:
 
 Workflows reference these companion skills and tools. Install and configure per your project:
 
-| Dependency | Purpose | Variable |
-|------------|---------|----------|
+| Dependency | Purpose | Entry Point |
+|------------|---------|-------------|
 | Issue tracker CLI (e.g., `linear` skill) | Issue CRUD, cache, comments, labels | `.agents/skills/linear/scripts/linear.sh` |
 | Orchestration skill | Review-finding schema, recommendation-bias patterns | Referenced by name |
+| GitHub skill | Git diff analysis for QA review context | `.agents/skills/github/scripts/git-diff-summary` |
 | Decider skill | Decision templates, search CLI, creation workflows | `.agents/skills/decider/scripts/decisions` |
 | Benchmarking | Run benchmarks if a benchmarking skill is installed | Optional |
 

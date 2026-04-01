@@ -73,14 +73,6 @@ Extract `project` field for fallback resolution.
 Spawn sub-agent: type=[TPM] (NOT teammate -- one-shot analysis, no re-delegation):
 
 <delegation_format>
-Create your tasks first:
-```bash
-.agents/skills/orchestration/scripts/workflow-sections [project-management skill workflows]/tpm-audit-project-order.md --agent "tpm-audit" --emoji "🤹‍♂️"
-```
-Run command, pass JSON to Create task. Process in § order.
-
-Task prefix: [TASK_PREFIX]
-
 Workflow: [project-management skill workflows]/tpm-audit-project-order.md
 
 Arguments: (none)
@@ -227,14 +219,6 @@ Spawn sub-agent: type=[TPM] (NOT teammate -- one-shot analysis, no re-delegation
 **PROJECT mode**:
 
 <delegation_format>
-Create your tasks first:
-```bash
-.agents/skills/orchestration/scripts/workflow-sections [project-management skill workflows]/tpm-audit.md --agent "tpm-audit" --emoji "🤹‍♂️"
-```
-Run command, pass JSON to Create task. Process in § order.
-
-Task prefix: [TASK_PREFIX]
-
 Workflow: [project-management skill workflows]/tpm-audit.md
 
 Arguments: --project "[PROJECT_NAME]"
@@ -244,14 +228,6 @@ Worktree: [WORKTREE_PATH] (empty if main repo)
 **ISSUE mode** (from file):
 
 <delegation_format>
-Create your tasks first:
-```bash
-.agents/skills/orchestration/scripts/workflow-sections [project-management skill workflows]/tpm-audit.md --agent "tpm-audit" --emoji "🤹‍♂️"
-```
-Run command, pass JSON to Create task. Process in § order.
-
-Task prefix: [TASK_PREFIX]
-
 Workflow: [project-management skill workflows]/tpm-audit.md
 
 Arguments: --issues [FILE_PATH]
@@ -675,10 +651,6 @@ For each issue canceled during § 7.1 or § 7.2 (superseded, obsolete, or duplic
 
 ## 9. Return State
 
-**If managed** (`lifecycle: "managed"`):
-   1. **Get task** on last task → description shows return section.
-   2. **Continue there immediately**, do not stop.
+**If managed**: Return to the parent workflow's next section.
 
-**If standalone** (`lifecycle: "self"`):
-
-**END** — audit complete. Results presented in § 8.
+**If standalone**: Session complete — audit results presented in § 8.

@@ -233,10 +233,6 @@ ISSUE=$(.agents/skills/github/scripts/github.sh pr-issue [PR_NUMBER] --format=te
 
 ## 7. Return State
 
-**If managed** (`lifecycle: "managed"`):
-   1. **Check last task** → description shows return section.
-   2. **Continue there immediately**, do not stop.
+**If managed**: Return to the parent workflow's next section.
 
-**If standalone** (`lifecycle: "self"`):
-
-**END** — CI fix complete. Results presented in § 6.
+**If standalone**: Session complete — CI fix results presented in § 6.

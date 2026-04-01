@@ -156,10 +156,6 @@ No action. Issue remains as-is.
 
 ## 9. Return State
 
-**If managed** (`lifecycle: "managed"`):
-   1. **Get task** on last task → description shows return section.
-   2. **Continue there immediately**, do not stop.
+**If managed**: Return to the parent workflow's next section.
 
-**If standalone** (`lifecycle: "self"`):
-
-**END** — reconciliation complete. Results presented in § 8.
+**If standalone**: Session complete — reconciliation results presented in § 8.

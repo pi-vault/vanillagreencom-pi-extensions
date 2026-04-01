@@ -103,10 +103,6 @@ fi
 
 ## 3. Return State
 
-**If managed** (`lifecycle: "managed"`):
-   1. **Get task** on last task → description shows return section.
-   2. **Continue there immediately**, do not stop.
+**If managed**: Return to the parent workflow's next section.
 
-**If standalone** (`lifecycle: "self"`):
-
-**END** — summary posted.
+**If standalone**: Session complete — summary posted.

@@ -438,12 +438,8 @@ All bot review comments resolved (or max iterations). Verify no late-arriving th
 
 ## 7. Return State
 
-**If managed** (`lifecycle: "managed"`):
-   1. **Check task** for return section.
-   2. **Continue there immediately**, do not stop.
+**If managed**: Return to the parent workflow's next section.
 
-**If standalone** (`lifecycle: "self"`):
-
-**END** — PR submitted. Summary presented in § 6.
+**If standalone**: Session complete — PR submitted. Summary presented in § 6.
 </content>
 </invoke>

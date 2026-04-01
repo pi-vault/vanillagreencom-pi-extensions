@@ -328,8 +328,6 @@ Issue suggestions: [N] items → § 6.2 audit
    **If standalone**: launch sub-agent with delegation.
 
    <delegation_format>
-   Task prefix: [TASK_PREFIX]
-
    Workflow: issue-lifecycle skill dev-fix workflow
 
    Source: pr-comments
@@ -478,9 +476,9 @@ If user requests fixes for skipped items → delegate via § 6.1 (single item), 
 
 ### 7.3 Reconcile & Post Summaries
 
-**If managed** (`lifecycle: "managed"`): Skip → § 8
+**If managed**: Skip → § 8
 
-**If standalone** (`lifecycle: "self"`):
+**If standalone**:
 
 1. **Reconcile fixes** — skip if no fixes applied:
    Invoke: `⤵ /fix-reconcile § 1-9 → § 7.3 step 2`
@@ -522,8 +520,6 @@ If user requests fixes for skipped items → delegate via § 6.1 (single item), 
 
 2. **Return**:
 
-   **If managed** (`lifecycle: "managed"`):
-   - Check task for return section. Continue there immediately.
+   **If managed**: Return to the parent workflow's next section.
 
-   **If standalone** (`lifecycle: "self"`):
-   - **END** — triage complete. Results presented in § 7.2.
+   **If standalone**: Session complete — triage results presented in § 7.2.

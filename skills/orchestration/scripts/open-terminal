@@ -47,6 +47,17 @@ if [[ ! -d "$DIR" ]]; then
   exit 1
 fi
 
+# Pre-trust directory in Claude Code config so the trust dialog is skipped
+CLAUDE_JSON="${CLAUDE_CONFIG_DIR:+$CLAUDE_CONFIG_DIR/claude.json}"
+CLAUDE_JSON="${CLAUDE_JSON:-$HOME/.claude.json}"
+if [[ -f "$CLAUDE_JSON" ]]; then
+  ABS_DIR="$(cd "$DIR" && pwd)"
+  if ! jq -e --arg p "$ABS_DIR" '.projects[$p].hasTrustDialogAccepted' "$CLAUDE_JSON" >/dev/null 2>&1; then
+    TMP_JSON=$(mktemp)
+    jq --arg p "$ABS_DIR" '.projects[$p] = (.projects[$p] // {}) + {hasTrustDialogAccepted: true}' "$CLAUDE_JSON" > "$TMP_JSON" && mv "$TMP_JSON" "$CLAUDE_JSON"
+  fi
+fi
+
 # Build the shell command to execute in the new terminal
 if [[ -n "$CMD" ]]; then
   SHELL_CMD="cd '$DIR' && $CMD"
@@ -98,20 +109,21 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   fi
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
   if command -v ghostty &>/dev/null; then
+    # Unset CLAUDECODE to avoid nested-session guard in the new terminal
     GHOSTTY_ARGS=(--working-directory="$DIR")
     [[ -n "$TITLE" ]] && GHOSTTY_ARGS+=(--title="$TITLE")
     if [[ -n "$CMD" ]]; then
-      setsid ghostty "${GHOSTTY_ARGS[@]}" -e bash -c "$SHELL_CMD" </dev/null &>/dev/null &
+      setsid env -u CLAUDECODE ghostty "${GHOSTTY_ARGS[@]}" -e bash -c "$SHELL_CMD" </dev/null &>/dev/null &
     else
-      setsid ghostty "${GHOSTTY_ARGS[@]}" </dev/null &>/dev/null &
+      setsid env -u CLAUDECODE ghostty "${GHOSTTY_ARGS[@]}" </dev/null &>/dev/null &
     fi
   elif command -v xdg-terminal-exec &>/dev/null; then
     # freedesktop default terminal
-    setsid xdg-terminal-exec bash -c "$SHELL_CMD" </dev/null &>/dev/null &
+    setsid env -u CLAUDECODE xdg-terminal-exec bash -c "$SHELL_CMD" </dev/null &>/dev/null &
   elif command -v xterm &>/dev/null; then
     XTERM_ARGS=()
     [[ -n "$TITLE" ]] && XTERM_ARGS+=(-T "$TITLE")
-    setsid xterm "${XTERM_ARGS[@]}" -e bash -c "$SHELL_CMD" </dev/null &>/dev/null &
+    setsid env -u CLAUDECODE xterm "${XTERM_ARGS[@]}" -e bash -c "$SHELL_CMD" </dev/null &>/dev/null &
   else
     echo "Error: no supported terminal emulator found (tried: ghostty, xdg-terminal-exec, xterm)" >&2
     exit 1

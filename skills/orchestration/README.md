@@ -40,7 +40,6 @@ Multi-agent session coordination — front-to-back issue workflows, delegation p
 - `workflows/recommendation-bias.md` - Review finding categorization (fix vs issue)
 
 ### Scripts
-- `.agents/skills/orchestration/scripts/workflow-sections` - Parse workflow markdown headers → JSON for task creation
 - `.agents/skills/orchestration/scripts/workflow-state` - Read/write persistent state files with atomic locking
 
 ### Schemas

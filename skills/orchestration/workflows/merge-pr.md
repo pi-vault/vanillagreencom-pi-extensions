@@ -169,7 +169,7 @@ If `false`: Ask user: `Merge as current user` | `Abort`
 
 ## 6. Post-Merge Quality Review (overlapping files only)
 
-**Skip** if § 2.1 found no file overlaps, or if session cwd was destroyed in § 5.6.
+**Skip** if § 2.1 found no file overlaps, or if session cwd was destroyed in § 5 step 6.
 
 For each file flagged as overlapping in § 2.1:
 
@@ -242,12 +242,8 @@ Legend: ✅ merged  ⏭️ skipped (user)  ❌ skipped (error)  🗑️ cleaned
 
 ## 8. Return State
 
-**If managed** (`lifecycle: "managed"`):
-   1. **Check task** for return section.
-   2. **Continue there immediately**, do not stop.
+**If managed**: Return to the parent workflow's next section.
 
-**If standalone** (`lifecycle: "self"`):
-
-**END** — merge complete. Results presented in § 7.
+**If standalone**: Session complete — merge results presented in § 7.
 </content>
 </invoke>

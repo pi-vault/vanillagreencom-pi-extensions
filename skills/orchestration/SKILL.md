@@ -118,7 +118,6 @@ When invoked with `<command> [args]`, route to the corresponding workflow.
 ### Execution Mode
 
 When executing a command's workflow, follow ALL [Workflow Execution](#rule-categories-by-priority) rules:
-- Pre-create tasks from `.agents/skills/orchestration/scripts/workflow-sections`
 - Process sections sequentially
 - Never skip based on scope assessment
 - Use `⤵` markers for nested workflow invocation
@@ -198,7 +197,6 @@ Project-level configuration (set in `.env.local`):
 
 | Workflow | Purpose |
 |----------|---------|
-| `workflows/spawn-prompts.md` | Agent spawn prompt templates (message gate, task processing) |
 | `workflows/agent-sequencing.md` | Cross-domain blocking relations and delegation order |
 | `workflows/recommendation-bias.md` | Review finding categorization (fix vs issue) |
 
@@ -213,7 +211,6 @@ Project-level configuration (set in `.env.local`):
 
 | Script | Purpose |
 |--------|---------|
-| `.agents/skills/orchestration/scripts/workflow-sections` | Parse `## N.` headers from workflow markdown → JSON for task creation |
 | `.agents/skills/orchestration/scripts/workflow-state` | Read/write/append persistent state (init, get, set, append, increment) |
 
 ## Schemas
@@ -229,21 +226,10 @@ Project-level configuration (set in `.env.local`):
 
 | Pattern | When | Flow |
 |---------|------|------|
-| Spawn + message | Fresh agents | Create tasks → spawn (behavioral prompt) → send delegation (task prefix) |
-| Message only | Re-delegation to existing agents | Create tasks → send delegation (task prefix) |
-| Self-create | Agent without team context | Embed `workflow-sections` in delegation prompt |
+| Spawn + message | Fresh agents | Create tasks → spawn (behavioral prompt) → send delegation message |
+| Message only | Re-delegation to existing agents | Create tasks → send delegation message |
+| Self-create | Agent without team context | Full delegation instructions in prompt |
 | Consultation | One-off sub-agent | Full instructions in prompt, no task machinery |
-
-## Task Prefix Hierarchy
-
-| Context | Emoji | Example Subject |
-|---------|-------|-----------------|
-| Top-level workflow | (none) | `§ 1: Display Dashboard` |
-| Nested sub-workflow (⤵) | `⤵` | `⏤⤵ /skill § 1: Identify Failures` |
-| Dev delegation | `🐲` | `⏤⏤🐲 dev-implement § 4: Implement` |
-| TPM delegation | `🤹‍♂️` | `⏤⏤🤹‍♂️ tpm-roadmap § 1: Analyze` |
-| Review delegation | `🐞` | `⏤⏤🐞 [review-agent] § 1: Review` |
-| QA delegation | `🪲` | `⏤⏤🪲 qa-review § 1: Set Up` |
 
 ## Rule Categories by Priority
 
@@ -260,7 +246,6 @@ Project-level configuration (set in `.env.local`):
 
 ### 1. Workflow Execution (CRITICAL)
 
-- `wf-precreate-tasks` - Pre-create all workflow tasks before execution for compaction resilience
 - `wf-sequential-execution` - Process sections sequentially; never skip based on scope assessment
 - `wf-skip-if-evaluation` - Evaluate skip conditions literally; append (SKIPPED) for visibility
 - `wf-nested-workflows` - Invoke nested workflows through harness mechanism, never inline
@@ -268,18 +253,14 @@ Project-level configuration (set in `.env.local`):
 ### 2. Delegation (CRITICAL)
 
 - `del-delegation-patterns` - Four delegation patterns: spawn+message, message-only, self-create, consultation
-- `del-tasks-before-spawn` - Create tasks before spawning; spawn idle then send delegation
-- `del-message-gate` - Mandatory message gate in spawn prompts prevents processing non-delegation messages
-- `del-task-prefix-hierarchy` - Prefix hierarchy with emoji markers for orchestrator, sub-workflow, and agent tasks
-- `del-task-layers` - Three visually distinct task layers; agents filter by prefix + PENDING status
-- `del-prefix-matching` - Task prefix from workflow-sections must match delegation message exactly
+- `del-message-gate` - Mandatory message gate prevents processing non-delegation messages
+- `del-task-layers` - Visually distinct task layers; agents filter by PENDING status
 - `del-no-duplicate-spawn` - Message existing agents; only respawn after confirmed stuck
 - `del-single-return` - Last task handles return; no additional messages after
-- `del-spawn-prompt-design-principles` - Universal spawn prompt patterns: message gate, PENDING-only, task ID ordering, verbatim templates
 
 ### 3. Agent Lifecycle (HIGH)
 
-- `life-lifecycle-stages` - Seven-stage agent lifecycle: TASKS → SPAWN → DELEGATE → WORK → RETURN → IDLE/REDEL → SHUTDOWN
+- `life-lifecycle-stages` - Seven-stage agent lifecycle: SPAWN → DELEGATE → WORK → RETURN → IDLE/REDEL → SHUTDOWN
 - `life-dev-agent-persistence` - Dev agents persist entire session; re-delegate for fix cycles
 - `life-review-agent-lifecycle` - Review agents persist across fix/re-review; QA agents are one-shot
 - `life-wait-for-return` - Never intervene while tasks in-progress; quiet ≠ stalled; confirm stall via session-level evidence before shutdown

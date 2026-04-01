@@ -100,7 +100,6 @@ Before planning, check your domain's code (per your agent's Domain Setup):
 
 - Update estimate if scope differs: `.agents/skills/linear/scripts/linear.sh issues update [ISSUE_ID] --estimate N`
   - Estimates: 1=hours, 2=half-day, 3=day, 4=2-3 days, 5=week+
-- Tasks pre-created by orchestrator. Do not create duplicates.
 - **If bundled**: Plan sub-issue order based on dependencies/overlap.
 
 ### 2.5 Domain-Specific Setup

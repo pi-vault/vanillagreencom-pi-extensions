@@ -113,27 +113,17 @@ Reply with structured table. Include ONLY issues for your domain.
 
 Write input per [roadmap-plan-input.md](../schemas/roadmap-plan-input.md) to `tmp/roadmap-input-YYYYMMDD-HHMMSS.json`. Include `origin_issue` field (null if not provided).
 
-### 4.2 Create Agent Tasks
-
-```bash
-.agents/skills/orchestration/scripts/workflow-sections [project-management skill workflows]/tpm-roadmap-plan.md --agent "tpm-roadmap" --emoji "🤹‍♂️"
-```
-
-Create task for each.
-
-### 4.3 Delegate to TPM
+### 4.2 Delegate to TPM
 
 **Delegation prompt:** Follow exactly, fill placeholders, add nothing else. Omit lines/sections with empty placeholders.
 
 <delegation_format>
-Task prefix: [TASK_PREFIX]
-
 Workflow: [project-management skill workflows]/tpm-roadmap-plan.md
 
 Arguments: --input [INPUT_FILE_PATH]
 </delegation_format>
 
-### 4.4 Collect TPM Output
+### 4.3 Collect TPM Output
 
 1. **Collect JSON path**: Agent returns `.JSON` file. If missing, halt.
 
@@ -378,10 +368,6 @@ Write markdown to `docs/roadmaps/roadmap-[FEATURE].md` and JSON to `docs/roadmap
 
 ## 8. Return State
 
-**If managed** (`lifecycle: "managed"`):
-   1. **Get task** on last task → description shows return section.
-   2. **Continue there immediately**, do not stop.
+**If managed**: Return to the parent workflow's next section.
 
-**If standalone** (`lifecycle: "self"`):
-
-**END** — roadmap plan complete.
+**If standalone**: Session complete — roadmap plan complete.

@@ -165,7 +165,7 @@ After all issues processed → § 3.
 
 2. **Single agent — create consultation team** (skip for multi-agent):
    - Create agent team: `consult-[ISSUE_ID]`
-   - Spawn agent: type=[AGENT_TYPE], name="consult-[AGENT_TYPE]", team="consult-[ISSUE_ID]", prompt=[Consultation Agent template from spawn-prompts.md]
+   - Spawn agent: type=[AGENT_TYPE], name="consult-[AGENT_TYPE]", team="consult-[ISSUE_ID]"
    - Wait for agent to go idle
 
 3. **Delegate consultation**: Follow exactly, fill placeholders, add nothing else. Omit lines/sections with empty placeholders.

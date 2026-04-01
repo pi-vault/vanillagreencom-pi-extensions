@@ -119,16 +119,31 @@ for ISSUE in "${ISSUES[@]}"; do
     continue
   fi
 
-  # Replace {issue} placeholder with actual issue ID
+  # Build start command: explicit --cmd template, or auto-detect harness from install path
   START_CMD=""
   if [[ -n "$CMD_TEMPLATE" ]]; then
     START_CMD="${CMD_TEMPLATE//\{issue\}/$ISSUE}"
+  else
+    case "$SCRIPT_DIR" in
+      */.agents/*)
+        START_CMD="codex '\$orchestration start $ISSUE'"
+        ;;
+      */.opencode/*)
+        START_CMD="opencode '/orchestration start $ISSUE'"
+        ;;
+      */.claude/*)
+        START_CMD="claude -n \"$ISSUE\" '/orchestration start $ISSUE'"
+        ;;
+    esac
   fi
 
+  CMD_ARGS=()
+  [[ -n "$START_CMD" ]] && CMD_ARGS=(--cmd "$START_CMD")
+
   if [[ "$TERMINAL_MODE" == "tmux" ]]; then
-    "$SCRIPT_DIR/open-terminal" "$WT_PATH" --tmux "$ISSUE" --title "$ISSUE" --cmd "$START_CMD"
+    "$SCRIPT_DIR/open-terminal" "$WT_PATH" --tmux "$ISSUE" --title "$ISSUE" "${CMD_ARGS[@]}"
   else
-    "$SCRIPT_DIR/open-terminal" "$WT_PATH" --title "$ISSUE" --cmd "$START_CMD"
+    "$SCRIPT_DIR/open-terminal" "$WT_PATH" --title "$ISSUE" "${CMD_ARGS[@]}"
   fi
   LAUNCHED=$((LAUNCHED + 1))
 done

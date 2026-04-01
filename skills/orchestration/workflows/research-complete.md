@@ -393,10 +393,6 @@ Post a comment on the research issue documenting completion:
 
 ## 7. Return State
 
-**If managed** (`lifecycle: "managed"`):
-   1. **Get task** on last task → description shows return section.
-   2. **Continue there immediately**, do not stop.
+**If managed**: Return to the parent workflow's next section.
 
-**If standalone** (`lifecycle: "self"`):
-
-**END** — research completion processed.
+**If standalone**: Session complete — research completion processed.

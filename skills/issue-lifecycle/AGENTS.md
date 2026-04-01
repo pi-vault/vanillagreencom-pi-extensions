@@ -1,6 +1,6 @@
 # Issue Lifecycle
 
-**Version 1.1.0**
+**Version 1.2.0**
 vanillagreen
 
 > **Note:**
@@ -26,6 +26,14 @@ Agent workflows for issue implementation, review fix delegation, pre-submission 
 ---
 
 ## Dependencies
+
+| Dependency | Purpose | Entry Point |
+|------------|---------|-------------|
+| Issue tracker CLI (e.g., `linear` skill) | Issue CRUD, cache, comments, labels | `.agents/skills/linear/scripts/linear.sh` |
+| Orchestration skill | Review-finding schema, recommendation-bias patterns | Referenced by name |
+| GitHub skill | Git diff analysis for QA review context | `.agents/skills/github/scripts/git-diff-summary` |
+| Decider skill | Decision templates, search CLI, creation workflows | `.agents/skills/decider/scripts/decisions` |
+| Benchmarking | Run benchmarks if a benchmarking skill is installed | Optional |
 
 ---
 
@@ -129,7 +137,6 @@ Before planning, check your domain's code (per your agent's Domain Setup):
 
 - Update estimate if scope differs: `.agents/skills/linear/scripts/linear.sh issues update [ISSUE_ID] --estimate N`
   - Estimates: 1=hours, 2=half-day, 3=day, 4=2-3 days, 5=week+
-- Tasks pre-created by orchestrator. Do not create duplicates.
 - **If bundled**: Plan sub-issue order based on dependencies/overlap.
 
 #### 2.5 Domain-Specific Setup

@@ -404,10 +404,6 @@ mv [JSON_PATH] docs/roadmaps/archived/roadmap-[FEATURE]-$(date +%Y%m%d).json 2>/
 
 ## 9. Return State
 
-**If managed** (`lifecycle: "managed"`):
-   1. **Get task** on last task → description shows return section.
-   2. **Continue there immediately**, do not stop.
+**If managed**: Return to the parent workflow's next section.
 
-**If standalone** (`lifecycle: "self"`):
-
-**END** — roadmap created.
+**If standalone**: Session complete — roadmap created.

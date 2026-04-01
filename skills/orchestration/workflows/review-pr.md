@@ -82,27 +82,19 @@ TEAM=$(.agents/skills/orchestration/scripts/workflow-state get [ISSUE_ID] '.team
 
 **If in team session** (`$TEAM` set):
 
-1. **Create agent tasks**:
-   ```bash
-   # For each agent in [AGENTS]:
-   .agents/skills/orchestration/scripts/workflow-sections [ISSUE_LIFECYCLE_WORKFLOW]/pr-review.md --agent "[AGENT_NAME]" --emoji "🐞"
-   ```
-   Create task for each.
-
-2. **Spawn review agents**:
-   - **If re-review** (`CYCLES > 0` AND `review_agents` in state): DO NOT spawn. Agents already alive. Proceed to step 3.
+1. **Spawn review agents**:
+   - **If re-review** (`CYCLES > 0` AND `review_agents` in state): DO NOT spawn. Agents already alive. Proceed to step 2.
    - **Otherwise** (first cycle, regardless of lifecycle): Spawn each agent:
      ```
      # For each agent in [AGENTS]:
      Spawn agent: type=[AGENT], name=[AGENT], team=[TEAM], prompt=SPAWN_PROMPT
      ```
-     Copy spawn prompt **verbatim** from spawn prompt templates (project-level) (fill `[PLACEHOLDERS]` only). Agents go idle waiting for delegation.
    - Store in state:
      ```bash
      .agents/skills/orchestration/scripts/workflow-state set [ISSUE_ID] review_agents '[AGENT_LIST_JSON]'
      ```
 
-3. **Delegate via messages** (one per agent, all in parallel):
+2. **Delegate via messages** (one per agent, all in parallel):
    ```
    # For each agent in [AGENTS]:
    Send message to [AGENT]: content=DELEGATION, summary="Review changes"
@@ -124,8 +116,6 @@ TEAM=$(.agents/skills/orchestration/scripts/workflow-state get [ISSUE_ID] '.team
 **Delegation prompt:** Follow exactly, fill placeholders, add nothing else. Omit lines/sections with empty placeholders.
 
 <delegation_format>
-Task prefix: [TASK_PREFIX]
-
 Workflow: issue-lifecycle skill pr-review workflow
 
 Worktree: [WORKTREE_PATH]
@@ -292,15 +282,9 @@ If >4 suggestion items: show first 3 + `All N fixes`. Refine via "Other".
 
 2. **Determine sequence**: QA agent types are configurable per project. Example label-to-agent mappings: `needs-safety-audit` → safety audit agent, `needs-perf-test` → performance QA agent, `needs-review` → architecture review agent, `design` → visual QA agent (use visual QA skills as necessary to validate UI changes).
 
-**For each QA agent, execute steps 3–8:**
+**For each QA agent, execute steps 3–7:**
 
-3. **Create agent tasks**:
-   ```bash
-   .agents/skills/orchestration/scripts/workflow-sections [ISSUE_LIFECYCLE_WORKFLOW]/qa-review.md --agent "qa-review" --emoji "🪲"
-   ```
-   Create task for each.
-
-4. **Spawn QA agent**:
+3. **Spawn QA agent**:
 
    **If in team session**:
    ```
@@ -312,17 +296,13 @@ If >4 suggestion items: show first 3 + `All N fixes`. Refine via "Other".
    Spawn agent: type=[QA_AGENT], prompt=SPAWN_PROMPT
    ```
 
-   Copy spawn prompt **verbatim** from spawn prompt templates (project-level) (fill `[PLACEHOLDERS]` only).
-
-5. **Delegate**:
+4. **Delegate**:
 
    **If in team session**: Send message to [QA_AGENT]: content=DELEGATION, summary="QA review [ISSUE_ID]"
 
    **If standalone**: Launch as sub-agent task with DELEGATION prompt.
 
    <delegation_format>
-   Task prefix: [TASK_PREFIX]
-
    Workflow: issue-lifecycle skill qa-review workflow
 
    Issue: [ISSUE_ID]
@@ -340,15 +320,15 @@ If >4 suggestion items: show first 3 + `All N fixes`. Refine via "Other".
    - Do NOT re-report fixed or escalated items. Only report NEW issues or regressions introduced by the fixes.
    </delegation_format>
 
-6. **Wait for completion.**
+5. **Wait for completion.**
 
-7. **Shutdown QA agent**:
+6. **Shutdown QA agent**:
 
    **If in team session**: Send shutdown_request to [QA_AGENT]
 
    **If standalone**: Agent task already returned.
 
-8. **Process agent return.** Agent returns `verdict`, `json_path`, and (for performance QA agent) `benchmark_commit`.
+7. **Process agent return.** Agent returns `verdict`, `json_path`, and (for performance QA agent) `benchmark_commit`.
    - **Update state**: `.agents/skills/orchestration/scripts/workflow-state append [ISSUE_ID] json_paths "[json_path]"`
    - If `benchmark_commit` is not "none", verify: `git -C [WORKTREE_PATH] log -1 --oneline [SHA]`.
    - **If performance QA agent**: post benchmark report to issue tracker as issue comment:
@@ -385,7 +365,7 @@ If >4 suggestion items: show first 3 + `All N fixes`. Refine via "Other".
      | `pass` | Continue to next QA agent |
      | `action_required` | → § 7 |
 
-9. **After all QA agents complete** — check for accumulated fix suggestions:
+8. **After all QA agents complete** — check for accumulated fix suggestions:
    - Read all QA agent JSONs from state `json_paths`, filter items where `category == "fix"`
    - Exclude items already in `fixed_items` or `escalated_items`
    - Fix suggestions remain → § 7
@@ -548,12 +528,8 @@ Issue suggestions: [N] items → § 9 audit
 
 ## 11. Return State
 
-**If managed** (`lifecycle: "managed"`):
-   1. **Check task** for return section.
-   2. **Continue there immediately**, do not stop.
+**If managed**: Return to the parent workflow's next section.
 
-**If standalone** (`lifecycle: "self"`):
-
-**END** — review cycle complete. Summary presented in § 8.
+**If standalone**: Session complete — review cycle complete. Summary presented in § 8.
 </content>
 </invoke>

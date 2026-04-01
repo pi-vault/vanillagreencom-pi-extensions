@@ -8,12 +8,12 @@ The section ID (in parentheses) is the filename prefix used to group rules.
 ## 1. Workflow Execution (wf-)
 
 **Impact:** CRITICAL
-**Description:** Task pre-creation, sequential processing, nested workflows
+**Description:** Sequential processing, skip-if evaluation, nested workflows
 
 ## 2. Delegation (del-)
 
 **Impact:** CRITICAL
-**Description:** Spawn patterns, message delivery, task prefix matching
+**Description:** Spawn patterns, message delivery, delegation messaging
 
 ## 3. Agent Lifecycle (life-)
 

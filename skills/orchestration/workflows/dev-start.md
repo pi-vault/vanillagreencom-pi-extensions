@@ -60,24 +60,17 @@ TEAM=$(.agents/skills/orchestration/scripts/workflow-state get [ISSUE_ID] '.team
 
 **If in team session** (`$TEAM` set):
 
-1. **Create agent tasks**:
-   ```bash
-   .agents/skills/orchestration/scripts/workflow-sections [path-to-issue-lifecycle-dev-implement-workflow] --agent "dev-implement" --emoji "🐲"
-   ```
-   Create task for each section (via harness task API).
-
-2. **Spawn dev teammate** (if not alive) — check team config for existing agent:
+1. **Spawn dev teammate** (if not alive) — check team config for existing agent:
    ```
    Spawn agent: type=[AGENT_TYPE], name=[AGENT], team=[TEAM]
    ```
-   Copy spawn prompt **verbatim** from spawn prompt templates (project-level) (fill `[PLACEHOLDERS]` only). Agent goes idle waiting for delegation.
 
-3. **Delegate via message**:
+2. **Delegate via message**:
    ```
    Send delegation message to [AGENT]: content=DELEGATION, summary="Implement [ISSUE_ID]"
    ```
 
-4. **Wait for completion message**. Parse: Branch, Commit, QA Labels, Summary.
+3. **Wait for completion message**. Parse: Branch, Commit, QA Labels, Summary.
 
 **If standalone** (no team):
 
@@ -91,8 +84,6 @@ Wait for return. Parse: Branch, Commit, QA Labels, Summary.
 
 <delegation_format>
 Ultrathink.
-
-Task prefix: [TASK_PREFIX]
 
 Workflow: issue-lifecycle skill — dev-implement workflow
 
@@ -119,42 +110,17 @@ If no handoff notes found, omit the section.
 
 **If in team session** (`$TEAM` set):
 
-1. **Create agent tasks** — bundled uses per-sub-issue tasks (NOT `workflow-sections`):
-
-   **Setup tasks** (§ 1-3):
-   ```
-   Create task: "⏤⏤🐲 dev-implement § 1: Environment Setup"
-     description="Execute section 1 from issue-lifecycle dev-implement workflow"
-   Create task: "⏤⏤🐲 dev-implement § 2: Activate Issue"
-     description="Execute section 2 from issue-lifecycle dev-implement workflow"
-   Create task: "⏤⏤🐲 dev-implement § 3: Block Issue"
-     description="Execute section 3 from issue-lifecycle dev-implement workflow"
-   ```
-
-   **Per-sub-issue tasks** (§ 4-10, one per pending sub-issue, in blocking order):
-   ```
-   Create task: "⏤⏤🐲 dev-implement § 4-10: [SUB_ISSUE_1] — [TITLE]"
-     description="Execute sections 4-10 from issue-lifecycle dev-implement workflow for sub-issue [SUB_ISSUE_1]: [TITLE]"
-   ```
-
-   **Return task** (§ 11):
-   ```
-   Create task: "⏤⏤🐲 dev-implement § 11: Return to Orchestrator"
-     description="Execute section 11 from issue-lifecycle dev-implement workflow"
-   ```
-
-2. **Spawn dev teammate** (if not alive) — check team config for existing agent:
+1. **Spawn dev teammate** (if not alive) — check team config for existing agent:
    ```
    Spawn agent: type=[AGENT_TYPE], name=[AGENT], team=[TEAM]
    ```
-   Copy spawn prompt **verbatim** from spawn prompt templates (project-level) (fill `[PLACEHOLDERS]` only). Agent goes idle waiting for delegation.
 
-3. **Delegate via message**:
+2. **Delegate via message**:
    ```
    Send delegation message to [AGENT]: content=DELEGATION, summary="Implement [ISSUE_ID] bundle"
    ```
 
-4. **Wait for completion message**. Parse: Branch, Commit, QA Labels, Summary.
+3. **Wait for completion message**. Parse: Branch, Commit, QA Labels, Summary.
 
 **If standalone** (no team):
 
@@ -168,8 +134,6 @@ Wait for return. Parse: Branch, Commit, QA Labels, Summary.
 
 <delegation_format>
 Ultrathink.
-
-Task prefix: [TASK_PREFIX]
 
 Workflow: issue-lifecycle skill — dev-implement workflow
 
@@ -217,10 +181,10 @@ Handoff from prior agents:
 
    | Field | Expected | Failure Action |
    |-------|----------|----------------|
-   | commit | exists | Re-delegate § 7-10 |
+   | commit | exists | Re-delegate § 2 with retry instructions |
    | `.all_ok` | `true` | Check `.results[]` below |
    | `.results[].state_ok` | `true` | Re-delegate § 2 |
-   | `.results[].has_summary` | `true` | Re-delegate § 9 |
+   | `.results[].has_summary` | `true` | Re-delegate § 2 with retry instructions |
 
 3. **On failure**: Do NOT proceed. Re-message existing agent (team) or resume agent (standalone) with retry instructions specifying the missing step(s). Never proceed with "may have a different format" or similar excuses.
    ```
@@ -240,10 +204,6 @@ Handoff from prior agents:
 
 ## 4. Return State
 
-**If managed** (`lifecycle: "managed"`):
-   1. **Check last task** → description shows return section.
-   2. **Continue there immediately**, do not stop.
+**If managed**: Return to the parent workflow's next section.
 
-**If standalone** (`lifecycle: "self"`):
-
-**END** — dev implementation complete.
+**If standalone**: Session complete — dev implementation complete.

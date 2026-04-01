@@ -82,13 +82,7 @@ WT_PATH=$(.agents/skills/worktree/scripts/worktree path $ISSUE_ID 2>/dev/null ||
    TEAM=$(.agents/skills/orchestration/scripts/workflow-state get $ISSUE_ID '.team_name // empty')
    ```
 
-4. **Create agent tasks** (team session only):
-   ```bash
-   .agents/skills/orchestration/scripts/workflow-sections [path-to-issue-lifecycle-dev-fix-workflow] --agent "dev-fix" --emoji "🐲"
-   ```
-   Create task for each section (via harness task API).
-
-5. **Delegate:**
+4. **Delegate:**
 
    **If in team session** and agent alive (`dev_agent` or team member):
    ```
@@ -103,8 +97,6 @@ WT_PATH=$(.agents/skills/worktree/scripts/worktree path $ISSUE_ID 2>/dev/null ||
    <delegation_format>
    Ultrathink.
 
-   Task prefix: [TASK_PREFIX]
-
    Workflow: issue-lifecycle skill — dev-fix workflow
 
    Source: [SOURCE]
@@ -116,9 +108,9 @@ WT_PATH=$(.agents/skills/worktree/scripts/worktree path $ISSUE_ID 2>/dev/null ||
    [FORMATTED_ITEMS]
    </delegation_format>
 
-6. **Wait for completion.** Parse return: item decisions (Applied/Skipped/Blocked), commits, validation status.
+5. **Wait for completion.** Parse return: item decisions (Applied/Skipped/Blocked), commits, validation status.
 
-7. **Update state**:
+6. **Update state**:
    ```bash
    # For each applied item:
    .agents/skills/orchestration/scripts/workflow-state append [ISSUE_ID] fixed_items '{"description":"[DESC]","location":"[LOC]","commit":"[SHA]","source":"[SOURCE]"}'
@@ -133,7 +125,7 @@ WT_PATH=$(.agents/skills/worktree/scripts/worktree path $ISSUE_ID 2>/dev/null ||
 
 ## 3. Return
 
-**If standalone** (`lifecycle: "self"`):
+**If standalone**:
 
 1. **Present results**:
 
@@ -152,9 +144,4 @@ WT_PATH=$(.agents/skills/worktree/scripts/worktree path $ISSUE_ID 2>/dev/null ||
 
 2. **END**
 
-**If managed** (`lifecycle: "managed"`):
-
-Return parsed results to caller: item decisions, commits, validation status.
-
-1. **Check last task** → description shows return section.
-2. **Continue there immediately**, do not stop.
+**If managed**: Return parsed results to caller (item decisions, commits, validation status), then return to parent workflow.

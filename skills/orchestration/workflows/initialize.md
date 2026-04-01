@@ -30,24 +30,18 @@ Set up team, auth, cache, and workflow state for a worktree session.
    Create agent team: [ISSUE_ID_LOWERCASE]
    ```
 
-3. **Pre-create workflow tasks** (skip if `lifecycle: "self"`):
-   ```bash
-   .agents/skills/orchestration/scripts/workflow-sections workflows/start-worktree.md
-   ```
-   Create task for each section.
+3. **Run**: `.agents/skills/orchestration/scripts/session-init`
 
-4. **Run**: `.agents/skills/orchestration/scripts/session-init`
+4. **If `gh_auth` is false or issue tracker auth is false** → report error and fix before proceeding.
 
-5. **If `gh_auth` is false or issue tracker auth is false** → report error and fix before proceeding.
+5. **Set `WORKTREE_PATH`** to current working directory.
 
-6. **Set `WORKTREE_PATH`** to current working directory.
-
-7. **Sync cache**:
+6. **Sync cache**:
    ```bash
    .agents/skills/linear/scripts/linear.sh sync --reconcile
    ```
 
-8. **Init workflow state**:
+7. **Init workflow state**:
    ```bash
    .agents/skills/orchestration/scripts/workflow-state init [ISSUE_ID] --team "[ISSUE_ID_LOWERCASE]" \
      --agent "[AGENT]" --worktree "[WORKTREE_PATH]" --branch "[BRANCH]"
@@ -58,10 +52,6 @@ Set up team, auth, cache, and workflow state for a worktree session.
 
 ## 2. Return State
 
-**If managed** (`lifecycle: "managed"`):
-   1. **Get task details** on last task → description shows return section.
-   2. **Continue there immediately**, do not stop.
+**If managed**: Return to the parent workflow's next section.
 
-**If standalone** (`lifecycle: "self"`):
-
-**END** — session initialized.
+**If standalone**: Session complete — session initialized.

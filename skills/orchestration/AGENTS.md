@@ -13,7 +13,7 @@ vanillagreen
 
 ## Abstract
 
-Multi-agent session coordination with delegation patterns, workflow state management, and review pipelines. Covers task pre-creation, spawn prompt design, delegation messaging, agent lifecycle management, compaction resilience, review finding schemas, and parallel work safety analysis. Designed to work across any AI coding harness that supports agent spawning and task management.
+Multi-agent session coordination with delegation patterns, workflow state management, and review pipelines. Covers delegation messaging, agent lifecycle management, compaction resilience, review finding schemas, and parallel work safety analysis. Designed to work across any AI coding harness that supports agent spawning and task management.
 
 ## Table of Contents
 
@@ -32,12 +32,6 @@ Multi-agent session coordination with delegation patterns, workflow state manage
 
 ## 1. Workflow Execution (CRITICAL)
 
-### Pre-Create All Workflow Tasks
-
-Run `workflow-sections` to extract section headers from workflow markdown, then create all tasks before executing any section. The task list serves as a durable position anchor that survives context compaction (conversation history is discarded but task state persists).
-
-Two-step ordering: extract section data first, then create tasks. For delegation workflows with a team context, the team must exist before task creation or tasks go to the wrong scope and are invisible to teammates.
-
 ### Sequential Section Execution
 
 Process sections sequentially: mark in-progress, execute all sub-sections within the section, mark completed, then proceed to next. Never create tasks for sub-sections — they are steps within the parent task, not separate tasks. Never mark a parent section complete before all sub-sections are executed.
@@ -50,7 +44,7 @@ When a section starts with "Skip if [condition]", evaluate the condition literal
 
 ### Nested Workflow Invocation
 
-Nested workflows (marked with `⤵`) must be invoked through the harness's workflow invocation mechanism — never inlined or substituted with ad-hoc commands. Pre-create tasks using `workflow-sections --subflow "/command"`. If the marker includes a return point (`→ § X`), pass `--return "§ X"` so task descriptions contain the return point for compaction resilience.
+Nested workflows (marked with `⤵`) must be invoked through the harness's workflow invocation mechanism — never inlined or substituted with ad-hoc commands. If the marker includes a return point (`→ § X`), note it for compaction resilience.
 
 ---
 
@@ -60,64 +54,20 @@ Nested workflows (marked with `⤵`) must be invoked through the harness's workf
 
 | Pattern | When | Flow |
 |---------|------|------|
-| Spawn + message | Fresh agents (dev, QA, review) | Create tasks → spawn (behavioral prompt) → send delegation message (task prefix) | start-worktree, review-pr, cycle-plan |
-| Message only | Re-delegation to existing agents | Create tasks → send delegation message (task prefix) | dev-fix, ci-fix, review-pr-comments |
-| Self-create | Agent without team context | Embed `workflow-sections` in delegation prompt | audit-issues (TPM agent) |
+| Spawn + message | Fresh agents (dev, QA, review) | Create tasks → spawn (behavioral prompt) → send delegation message | start-worktree, review-pr, cycle-plan |
+| Message only | Re-delegation to existing agents | Create tasks → send delegation message | dev-fix, ci-fix, review-pr-comments |
+| Self-create | Agent without team context | Full delegation instructions in prompt | audit-issues (TPM agent) |
 | Consultation | One-off sub-agent | Full instructions in prompt, no task machinery | roadmap-plan, research-issue, start § 3 |
-
-### Create Tasks Before Spawning Agents
-
-Always create tasks before spawning an agent. The pattern is: create tasks (no owner assignment) → spawn agent (behavioral prompt only, goes idle) → send delegation message (includes task prefix). The agent wakes on the delegation message, checks the task list, and finds PENDING tasks matching the prefix.
-
-For re-delegation to an existing agent: create new tasks → send delegation message. The agent wakes, finds NEW PENDING tasks by prefix (prior round's tasks are already completed — not matched).
 
 ### Message Gate Pattern
 
-Every agent spawn prompt must include a mandatory message gate: for EVERY message, the agent scans for a `Task prefix:` line. No prefix found → go idle immediately. This positive gatekeeper (check for X before acting) is more robust than negative filtering (ignore Y).
+Every agent must include a mandatory message gate: for EVERY message, the agent checks for a delegation marker before acting. No marker found → go idle immediately. This positive gatekeeper (check for X before acting) is more robust than negative filtering (ignore Y).
 
-Without it, agents process task-list notifications and other non-delegation messages, producing incorrect work. The delegation arrives separately via a message containing a `Task prefix:` line. The agent extracts the prefix, checks the task list, and finds PENDING tasks whose subject starts with that prefix.
-
-The spawn prompt template must be copied verbatim (fill placeholders only). Paraphrasing has historically dropped the gate instruction.
-
-### Task Prefix Hierarchy
-
-| Context | Emoji | Example Subject | `taskPrefix` Value |
-|---------|-------|-----------------|-------------------|
-| Top-level workflow | (none) | `§ 1: Display Dashboard` | (none) |
-| Nested sub-workflow (⤵) | `⤵` | `⏤⤵ /skill § 1: Identify Failures` | `⏤⤵ /skill` |
-| Dev delegation | `🐲` | `⏤⏤🐲 dev-implement § 4: Implement` | `⏤⏤🐲 dev-implement` |
-| TPM delegation | `🤹‍♂️` | `⏤⏤🤹‍♂️ tpm-roadmap § 1: Analyze` | `⏤⏤🤹‍♂️ tpm-roadmap` |
-| Review delegation | `🐞` | `⏤⏤🐞 [review-agent] § 1: Review` | `⏤⏤🐞 [review-agent]` |
-| QA delegation | `🪲` | `⏤⏤🪲 qa-review § 1: Set Up` | `⏤⏤🪲 qa-review` |
-| Tracking (inline) | `🐲` | `⏤⏤🐲 backend: Fix CI lint` | `⏤⏤🐲 backend` |
-
-The `taskPrefix` from `workflow-sections` JSON output must be used exactly in delegation messages — never hand-written. Agents filter by prefix + PENDING status.
-
-### Task Prefix Matching
-
-**Impact: HIGH (agents claim wrong tasks or miss their assignments)**
-
-The task prefix from `workflow-sections` JSON output must be used exactly in delegation messages — never hand-written. Agents filter the task list by prefix + PENDING status, so the delegation message prefix must match the task subjects exactly.
-
-Task prefix hierarchy:
-- Top-level: `§ N: Title`
-- Nested sub-workflow: `⏤⤵ /command § N: Title`
-- Agent delegation: `⏤⏤🐲 agent-name § N: Title`
-- Inline tracking: `⏤⏤🐲 agent-name: Description`
-
-Agents only process PENDING tasks — completed and in-progress tasks from other agents or prior rounds are ignored.
+Without it, agents process task-list notifications and other non-delegation messages, producing incorrect work. The delegation arrives separately via a message containing the delegation marker. The agent checks the task list and finds PENDING tasks.
 
 ### Task Layers
 
-The shared task list contains three visually distinct layers:
-
-```
-§ N: [Title]                → orchestrator's own workflow steps
-⏤⤵ /cmd § N: [Title]      → nested sub-workflows
-⏤⏤🐲/🤹‍♂️/🐞/🪲 workflow § N: [Title] → agent tasks
-```
-
-Agents filter by their prefix + PENDING status — they never touch orchestrator or sub-workflow tasks.
+The shared task list contains visually distinct layers for orchestrator workflow steps, nested sub-workflows, and agent tasks. Agents filter by PENDING status — they never touch orchestrator or sub-workflow tasks.
 
 ### No Duplicate Agent Spawns
 
@@ -125,25 +75,7 @@ Never spawn a fresh agent when an existing one of the same type is alive — mes
 
 ### Single Return Message
 
-The LAST task in an agent's assignment handles the return message. The spawn prompt must explicitly state "Do NOT send additional messages after it."
-
-### Spawn Prompt Design Principles
-
-Spawn prompts are harness-specific — each platform has its own agent spawning mechanism. The patterns below are universal regardless of harness:
-
-**Message gate**: Every agent must check incoming messages for a delegation marker (e.g., `Task prefix:` line) before acting. No marker → wait for delegation. This prevents agents from processing system notifications as work directives.
-
-**PENDING-only filtering**: Agents only process unclaimed tasks matching their prefix. Completed tasks from prior rounds or other agents are ignored.
-
-**Task ID ordering**: Process tasks in creation order (lowest ID first). Tasks are created in section order so IDs naturally match workflow progression.
-
-**Skip-if handling**: Evaluate conditions literally, mark skipped tasks visibly so the orchestrator can track what was skipped.
-
-**Single return**: The last task sends the completion message. No additional messages after — prevents double-wakeups.
-
-**Verbatim templates**: Spawn prompts must be copied exactly (fill placeholders only). LLM paraphrasing drops critical behavioral instructions.
-
-Full verbatim templates are in `workflows/spawn-prompts.md` — copy exactly, fill placeholders only.
+The LAST task in an agent's assignment handles the return message. The agent must not send additional messages after it.
 
 ---
 
@@ -152,13 +84,12 @@ Full verbatim templates are in `workflows/spawn-prompts.md` — copy exactly, fi
 ### Lifecycle Stages
 
 ```
-1. TASKS        Orchestrator creates tasks via workflow-sections (no owner assignment)
-2. SPAWN        Spawn agent with behavioral prompt → agent goes idle
-3. DELEGATE     Send delegation message with task prefix
-4. WORK         Agent wakes, finds PENDING tasks by prefix, sets in-progress, processes in ID order
-5. RETURN       Last workflow section sends completion message to orchestrator
-6. IDLE/REDEL   Agent goes idle — may receive new tasks + message for fix cycles
-7. SHUTDOWN     Orchestrator sends shutdown request when all work complete
+1. SPAWN        Spawn agent with behavioral prompt → agent goes idle
+2. DELEGATE     Send delegation message
+3. WORK         Agent wakes, finds PENDING tasks, sets in-progress, processes in order
+4. RETURN       Last workflow section sends completion message to orchestrator
+5. IDLE/REDEL   Agent goes idle — may receive new tasks + message for fix cycles
+6. SHUTDOWN     Orchestrator sends shutdown request when all work complete
 ```
 
 ### Dev Agent Persistence
@@ -243,7 +174,7 @@ Default sequential requirements:
 
 When a parent issue has sub-issues assigned to the same agent, create one composite task per sub-issue covering all relevant sections, not one task per section.
 
-**Why per-sub-issue tasks**: Early designs used one task per section (§ 4, § 5, § 6...). Problem: first sub-issue completed all section tasks, second sub-issue had no tasks to track. The task system doesn't support looping. Fix: one composite task per sub-issue covering §§ 4-10. The spawn prompt's "Multi-section tasks" instruction tells agents to execute all referenced sections, then mark the single task complete.
+**Why per-sub-issue tasks**: Early designs used one task per section (§ 4, § 5, § 6...). Problem: first sub-issue completed all section tasks, second sub-issue had no tasks to track. The task system doesn't support looping. Fix: one composite task per sub-issue covering §§ 4-10. Agents execute all referenced sections, then mark the single task complete.
 
 ```
 § 1: Environment Setup          (one task)
@@ -356,19 +287,6 @@ Audit item requires: index, title, location (no line numbers), description (2-3 
 
 ## 7. Scripts
 
-### workflow-sections
-
-Parse `## N.` headers from workflow markdown → JSON array for task creation.
-
-```bash
-.agents/skills/orchestration/scripts/workflow-sections workflow.md                                    # Top-level
-.agents/skills/orchestration/scripts/workflow-sections workflow.md --subflow "/ci-fix"                # Sub-workflow → ⤵ /ci-fix § N
-.agents/skills/orchestration/scripts/workflow-sections workflow.md --agent "dev-fix" --emoji "🐲"     # Agent → 🐲 dev-fix § N
-.agents/skills/orchestration/scripts/workflow-sections workflow.md --subflow "/cmd" --return "§ 5"    # With return point
-```
-
-Output JSON fields: `subject`, `description`, `activeForm`, `taskPrefix`, `metadata`.
-
 ### workflow-state
 
 Read/write persistent state files with atomic flock-based locking.
@@ -424,7 +342,7 @@ Agent team implementations vary by harness. These are common behaviors to work a
 | Orchestrator loses teammate awareness after context compaction | Can't message alive teammates | Re-read `workflow-state` child session data and any harness-local agent registry, re-send delegation, only respawn if no response |
 | No session resumption for teammates after restart | Teammates lost on explicit session restart | Respawn + re-delegate pending tasks |
 | Agent teams use more tokens than sub-agents | Higher cost per persistent agent | Consultation pattern uses sub-agents for one-off tasks |
-| Spawn prompt paraphrasing | LLM drops critical instructions when paraphrasing | Copy templates verbatim, fill placeholders only |
+| Agent prompt paraphrasing | LLM drops critical instructions when paraphrasing | Copy behavioral instructions verbatim, fill placeholders only |
 | Task creation notifications | Idle agents wake prematurely on task creation | Create tasks before spawning, or create within existing team context |
 
 **Sub-agent alternative**: If agent teams prove too costly, Patterns 1-3 can be converted to one-shot sub-agent calls. Trade-offs: no re-delegation (each call is one-shot), no inter-agent messaging, but zero notification overhead and lower cost. Pattern 4 already uses sub-agents.

@@ -4,25 +4,17 @@ Generate cycle plan via TPM agent with user approval.
 
 ## 1. Generate Plan
 
-1. **Create agent tasks**:
-   ```bash
-   .agents/skills/orchestration/scripts/workflow-sections [project-management skill workflows]/tpm-cycle-plan.md --agent "tpm-cycle-plan" --emoji "🤹‍♂️"
-   ```
-   Create task for each.
-
-2. **Delegate to `[AGENT_TYPE]`**: Follow exactly, fill placeholders, add nothing else. Omit lines/sections with empty placeholders.
+1. **Delegate to `[AGENT_TYPE]`**: Follow exactly, fill placeholders, add nothing else. Omit lines/sections with empty placeholders.
 
    <delegation_format>
-   Task prefix: [TASK_PREFIX]
-
    Workflow: [project-management skill workflows]/tpm-cycle-plan.md
    </delegation_format>
 
-3. **After agent returns**: Collect JSON path. Agent returns `.JSON` file. If missing, halt.
+2. **After agent returns**: Collect JSON path. Agent returns `.JSON` file. If missing, halt.
 
-4. **Read file**: Use Read tool to get structured output.
+3. **Read file**: Use Read tool to get structured output.
 
-5. **Route by status** field from JSON output:
+4. **Route by status** field from JSON output:
 
 | Status | Action |
 |--------|--------|
@@ -218,10 +210,6 @@ TPM populates this when § 1.4 architecture ordering reveals dependencies not ye
 
 ## 6. Return State
 
-**If managed** (`lifecycle: "managed"`):
-   1. **Get task** on last task → description shows return section.
-   2. **Continue there immediately**, do not stop.
+**If managed**: Return to the parent workflow's next section.
 
-**If standalone** (`lifecycle: "self"`):
-
-**END** — cycle plan complete.
+**If standalone**: Session complete — cycle plan complete.
