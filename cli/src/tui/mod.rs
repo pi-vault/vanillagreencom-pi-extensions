@@ -576,7 +576,11 @@ pub fn parse_installed_at(ts: &str) -> Option<std::time::SystemTime> {
     days += day.saturating_sub(1);
 
     let total_secs = days * 86400 + hour * 3600 + min * 60 + sec;
-    Some(std::time::UNIX_EPOCH + std::time::Duration::from_secs(total_secs))
+    // Add 1 second to compensate for sub-second truncation in now_iso().
+    // Files written in the same second as installed_at will have sub-second
+    // mtime precision (e.g. T.270s) that appears newer than the whole-second
+    // installed_at (T.000s).  The 1s buffer prevents false "outdated" flags.
+    Some(std::time::UNIX_EPOCH + std::time::Duration::from_secs(total_secs + 1))
 }
 
 /// Check if any file under `dir` has been modified after `since`.
