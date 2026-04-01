@@ -126,46 +126,13 @@ impl SourceRegistry {
     }
 }
 
-/// Resolve the lock file path based on scope.
-/// In a git worktree, resolves from the main worktree so that a refresh
-/// in main is visible to all worktrees (avoids false staleness).
+/// Resolve the lock file path based on scope
 pub fn lock_file_path(global: bool) -> PathBuf {
     if global {
-        return global_state_dir().join(".vstack-lock.json");
+        global_state_dir().join(".vstack-lock.json")
+    } else {
+        project_root().join(".vstack-lock.json")
     }
-    let root = project_root();
-    let lock = root.join(".vstack-lock.json");
-    // If we're in a worktree AND the lock file doesn't exist here,
-    // OR the main worktree has a newer lock, use the main worktree's copy.
-    if let Ok(common) = std::process::Command::new("git")
-        .args(["rev-parse", "--git-common-dir"])
-        .current_dir(&root)
-        .output()
-    {
-        let common_dir = String::from_utf8_lossy(&common.stdout).trim().to_string();
-        if !common_dir.is_empty() && common_dir != ".git" {
-            // We're in a worktree — resolve main worktree root
-            let main_root = PathBuf::from(&common_dir)
-                .parent()
-                .map(|p| p.to_path_buf())
-                .unwrap_or_else(|| root.clone());
-            let main_lock = main_root.join(".vstack-lock.json");
-            if main_lock.exists() {
-                // Use main's lock if ours doesn't exist or main's is newer
-                if !lock.exists() {
-                    return main_lock;
-                }
-                let main_mtime = main_lock.metadata().ok().and_then(|m| m.modified().ok());
-                let our_mtime = lock.metadata().ok().and_then(|m| m.modified().ok());
-                if let (Some(main_t), Some(our_t)) = (main_mtime, our_mtime) {
-                    if main_t > our_t {
-                        return main_lock;
-                    }
-                }
-            }
-        }
-    }
-    lock
 }
 
 pub fn user_home_dir() -> PathBuf {
