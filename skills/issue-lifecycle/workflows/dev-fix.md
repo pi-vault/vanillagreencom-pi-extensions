@@ -34,7 +34,7 @@ For each item in `Review items:`:
    - If review item contradicts an active decision, skip with decision reference (e.g., "Skipped — contradicts D010")
    - Expanding scope is OK if it relates to the parent issue/PR
 
-4. **Update architecture docs** if fix changes documented behavior. If it reveals project-specific insights, add to `./vstack.toml` under `[agent-instructions]` or `[skill-instructions]`.
+4. **Update architecture docs** if fix changes documented behavior. If it reveals project-specific insights, add to `./vstack.toml` under `[agent-guidance]`, `[agent-instructions]`, or `[skill-instructions]`.
 
 5. **For UI lifecycle/cache fixes**: If you introduce cached/mirrored UI state or change window/event handling, trace all invalidation and event-entry paths before returning. Prefer extending existing listeners over adding parallel subscriptions for the same event family, and add regression coverage for the non-obvious paths you touched.
 
@@ -98,7 +98,7 @@ If validation failures exist, append: `[validate: FAILING_CHECK]`
 
 - **Architecture docs** → Update if patterns, APIs, or documented behavior changed.
 - **Project rule file** → Add a `.md` file to the relevant skill's `project-rules/` directory. Follow the rule template format (YAML frontmatter with title/impact + body). Run `vstack refresh` to rebuild.
-- **Project config** → Add to `./vstack.toml` (`[agent-instructions]` or `[skill-instructions]`). Run `vstack refresh` to apply.
+- **Project config** → Add to `./vstack.toml` (`[agent-guidance]` for execute-on-launch directives, `[agent-instructions]` for persistent agent rules, `[skill-instructions]` for skill-level context). Run `vstack refresh` to apply.
 
 Criteria: Would this save 5+ minutes in a future session? If yes, update. One surgical addition per lesson. No verbose examples.
 

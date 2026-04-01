@@ -81,7 +81,7 @@ You have domain context the orchestrator lacks. You decide how research applies.
 
 3. **Update architecture docs** if research changes documented patterns.
 
-4. **Update `vstack.toml`** if research reveals project-specific context that should be included in agent or skill instructions (under `[agent-instructions]` or `[skill-instructions]`).
+4. **Update `vstack.toml`** if research reveals project-specific context that should persist (under `[agent-guidance]` for execute-on-launch directives, `[agent-instructions]` for persistent agent rules, or `[skill-instructions]` for skill-level context).
 
 ### 2.3 Evaluate Feasibility
 
@@ -260,7 +260,7 @@ Use visual QA skills as necessary to validate that UI changes render correctly. 
 
 - **Architecture docs** → Update if patterns, APIs, or documented behavior changed.
 - **Project rule file** → Add a `.md` file to the relevant skill's `project-rules/` directory. Follow the rule template format (YAML frontmatter with title/impact + body). Run `vstack refresh` to rebuild.
-- **Project config** → Add to `./vstack.toml` (`[agent-instructions]` or `[skill-instructions]`). Run `vstack refresh` to apply.
+- **Project config** → Add to `./vstack.toml` (`[agent-guidance]` for execute-on-launch directives, `[agent-instructions]` for persistent agent rules, `[skill-instructions]` for skill-level context). Run `vstack refresh` to apply.
 
 Criteria: Would this save 5+ minutes in a future session? If yes, update. One surgical addition per lesson. No verbose examples.
 
