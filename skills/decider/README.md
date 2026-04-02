@@ -6,9 +6,7 @@ Architectural decision document management — templates, creation workflows, se
 
 ```
 skills/decider/
-├── SKILL.md              # Quick-reference index for Claude Code and skill-aware harnesses
-├── AGENTS.md             # Full compiled document for Codex, Copilot, Gemini CLI, and
-│                         # 20+ harnesses. All workflows + templates + schemas expanded inline.
+├── SKILL.md              # Skill definition for AI agents and skill-aware harnesses
 ├── README.md             # This file — human-facing docs
 ├── templates/
 │   ├── decision-entry.md # Decision file templates (minimal, standard, comprehensive)

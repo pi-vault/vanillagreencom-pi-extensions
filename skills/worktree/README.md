@@ -4,8 +4,7 @@ Git worktree lifecycle management with env/config symlinks.
 
 ## Structure
 
-- **`SKILL.md`** - Quick-reference index for skill-aware harnesses
-- **`AGENTS.md`** - Full compiled document for all harnesses
+- **`SKILL.md`** - Skill definition for AI agents and skill-aware harnesses
 - `scripts/` - Worktree management scripts
 
 ## Quick Start

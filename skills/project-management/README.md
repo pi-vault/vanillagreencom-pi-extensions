@@ -8,8 +8,7 @@ This skill is methodology-based (no `rules/` directory). All guidance lives in r
 
 ```
 skills/project-management/
-├── SKILL.md                                # Quick-reference index for Claude Code and skill-aware harnesses
-├── AGENTS.md                               # Full compiled document for Codex, Copilot, Gemini CLI, and other harnesses
+├── SKILL.md                                # Skill definition for AI agents and skill-aware harnesses
 ├── README.md                               # This file — human-facing docs
 ├── references/
 │   ├── issues.md                           # Issue creation, fields, sub-issues, estimates, templates

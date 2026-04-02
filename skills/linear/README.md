@@ -11,8 +11,7 @@ CLI wrapper for Linear's GraphQL API with local cache, bulk operations, and stru
 - `scripts/lib/formatters.sh` - Output formatters (safe, table, ids, raw)
 - `scripts/lib/attachments.sh` - Attachment download and caching
 - `scripts/lib/issue-validation.sh` - Issue state validation
-- **`SKILL.md`** - Quick-reference index for skill-aware harnesses
-- **`AGENTS.md`** - Full compiled document for all harnesses
+- **`SKILL.md`** - Skill definition for AI agents and skill-aware harnesses
 
 ## Configuration
 
@@ -44,7 +43,7 @@ To make this skill work:
 2. Source `../lib/common.sh` for shared functions
 3. Add a `show_help()` function
 4. Add the resource to the case statement in `scripts/linear.sh`
-5. Update SKILL.md command table and AGENTS.md examples
+5. Update SKILL.md command table
 
 ## Dependencies
 

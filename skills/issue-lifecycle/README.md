@@ -6,9 +6,7 @@ Agent workflows for issue implementation, review fix delegation, pre-submission 
 
 ```
 skills/issue-lifecycle/
-├── SKILL.md              # Quick-reference index for Claude Code and skill-aware harnesses
-├── AGENTS.md             # Full compiled document for Codex, Copilot, Gemini CLI, and
-│                         # 20+ harnesses. All workflows expanded inline.
+├── SKILL.md              # Skill definition for AI agents and skill-aware harnesses
 ├── README.md             # This file — human-facing docs
 └── workflows/
     ├── dev-implement.md   # Main implementation lifecycle (§ 1-11)
