@@ -304,16 +304,22 @@ Worktree creation is idempotent: existing worktrees are reused (rebased onto lat
    - **Manual**: Show the command and worktree path so the user can run it themselves.
    - **→ § 1** (restart dashboard in current session).
 
-### 4.4 Launch Parallel Group
+### 4.4 Launch Issue(s)
 
 `[ISSUE_IDS]` contains only issues that passed § 2-3 (research-needed removed in § 3).
 
 1. **If 0 issues in `[ISSUE_IDS]`** → § 1
 
-2. **Ask user** which harness and: `Launch [N] issues` | `Select subset` | `I'll launch them myself` | `Cancel`
+2. **Inform user**:
+
+   <output_format>
+   If you are using a desktop app (no terminal), switch to the worktree(s) yourself and run `/orchestration start [ISSUE_ID]` (or `$orchestration start [ISSUE_ID]` on Codex).
+   </output_format>
+
+3. **Ask user** which harness and: `Launch [N] issues` | `Select subset` | `I'll launch them myself` | `Cancel`
    - **Launch**: `.agents/skills/orchestration/scripts/open-terminal [ISSUE_IDS] --harness [HARNESS]`
    - **Select subset**: Ask user with individual issues as options (multiSelect) → `.agents/skills/orchestration/scripts/open-terminal [SELECTED_ISSUES] --harness [HARNESS]`
    - **Manual**: Show the command so the user can run it themselves.
    - **Cancel** → § 1
 
-3. **→ § 1** (restart dashboard in current session).
+4. **→ § 1** (restart dashboard in current session).
