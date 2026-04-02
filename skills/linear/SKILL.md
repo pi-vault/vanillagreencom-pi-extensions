@@ -96,6 +96,23 @@ linear.sh sync --full           # Full re-sync
 | `LINEAR_FORMAT` | Default output format | `safe` |
 | `LINEAR_TEAM_PREFIX` | Issue identifier prefix | `CC` |
 
+## Safe Format Field Mapping
+
+```
+identifier → id         # ABC-XXX issue ID
+id → uuid              # GraphQL UUID
+state.name → state     # State name
+state.type → state_type
+sortOrder → sort_order  # Manual sort position
+```
+
+## Blocked Label vs Issue Relations
+
+| Scenario | Use |
+|----------|-----|
+| Issue A blocked by Issue B (both in Linear) | Relation: `--blocked-by` |
+| Issue blocked by external factor (vendor, license) | `blocked` label + comment |
+
 ## Common Pitfalls
 
 | Option | Accepts | On failure |
@@ -105,6 +122,16 @@ linear.sh sync --full           # Full re-sync
 | `--milestone` | Name or UUID | Fail with "not found" |
 | `--labels` | Comma-separated names | Warn + skip invalid, continue |
 | `--assignee` | Name or `me` | Silent fail |
+
+- State names are case-sensitive and team-specific — verify with `linear.sh statuses list`
+- Available states: Backlog, Todo, In Progress, In Review, Done, Canceled (not "Cancelled")
+- `agent:*` labels are mutually exclusive (only one per issue)
+
+## Troubleshooting
+
+- **"labelIds not exclusive child labels" error**: Using multiple labels from the same exclusive group. Only one `agent:*` label and one `platform:*` label per issue.
+- **Need raw GraphQL output?**: Use `--format=raw`
+- **Script help**: `linear.sh <resource> --help`
 
 ## Workflow Patterns
 
@@ -126,7 +153,3 @@ linear.sh sync --full           # Full re-sync
 
 - `curl` for API calls
 - `jq` for JSON processing
-
-## Full Compiled Document
-
-For the complete guide with all examples and reference tables: `AGENTS.md`
