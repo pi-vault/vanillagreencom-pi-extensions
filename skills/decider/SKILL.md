@@ -122,13 +122,24 @@ All entries require: title (`# DXXX: Title`), date, status, research ref (or `â€
 |----------|---------|----------|
 | `DECISIONS_DIR` | Decision documents directory path | No â€” auto-discovers from CWD |
 
+## Content Guidelines
+
+### What to Log
+
+- Technology selections with alternatives considered
+- Performance trade-offs (chose X over Y for reason Z)
+- Significant path choices where conditions might change
+- Research-informed decisions
+
+### What NOT to Log
+
+- Variable names, small refactors, bug fixes
+- Obvious choices with no realistic alternatives
+- Standard pattern applications
+
 ## System Dependencies
 
 - `bash` 4+
 - `jq` for JSON processing
 - `grep` with `-P` (PCRE) support
 - `sed`, `find`
-
-## Full Compiled Document
-
-For the complete guide with all templates, workflows, and schemas expanded inline: `AGENTS.md`
