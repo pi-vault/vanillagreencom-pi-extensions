@@ -99,6 +99,7 @@ TPM workflows return JSON recommendations only. Orchestrator or user handles int
 | Label management | [references/labels.md](references/labels.md) |
 | Issue tracker CLI | Companion issue tracker skill (`.agents/skills/linear/scripts/linear.sh`) |
 
-## Full Compiled Document
+## Dependencies
 
-For the complete guide with all content expanded: `AGENTS.md`
+- Issue tracker CLI (e.g., `linear` skill)
+- `jq` for JSON processing
