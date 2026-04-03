@@ -66,7 +66,7 @@ while [[ $# -gt 0 ]]; do
       echo "  (default terminal)  Auto-detect: tmux if \$TMUX set, else GUI terminal"
       echo ""
       echo "Harness launch commands:"
-      echo "  claude   → claude -n ISSUE '/orchestration start ISSUE'"
+      echo "  claude   → claude -n ISSUE --model 'opus[1m]' --effort max '/orchestration start ISSUE'"
       echo "  codex    → codex '\$orchestration start ISSUE'"
       echo "  opencode → opencode '/orchestration start ISSUE'"
       echo ""
@@ -133,7 +133,7 @@ detect_start_cmd() {
     return
   fi
   case "$HARNESS" in
-    claude)   echo "claude -n \"$issue\" '/orchestration start $issue'" ;;
+    claude)   echo "claude -n \"$issue\" --model 'opus[1m]' --effort max '/orchestration start $issue'" ;;
     codex)    echo "codex '\$orchestration start $issue'" ;;
     opencode) echo "opencode '/orchestration start $issue'" ;;
     *)        echo "" ;;
