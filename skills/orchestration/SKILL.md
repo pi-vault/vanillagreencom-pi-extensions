@@ -10,8 +10,6 @@ metadata:
   version: "1.1.0"
 ---
 
-@AGENTS.md
-
 # Orchestration
 
 ## STOP — Required Setup
