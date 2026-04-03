@@ -59,7 +59,7 @@ Workflows reference these companion skills and tools. Install and configure per 
 
 ## Configuration
 
-This skill is workflow-based (no `rules/` directory). All behavior is defined in the workflow files.
+This skill is workflow-based. All behavior is defined in the workflow files.
 
 Agent types referenced in workflows (names are project-configurable):
 - **Dev agents**: `[AGENT_TYPE]` — specialist agents receiving implementation delegations

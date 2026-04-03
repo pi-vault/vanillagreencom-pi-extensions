@@ -1,5 +1,3 @@
-@../AGENTS.md
-
 # Start Session Workflow
 
 Initialize development session, display status, select work, evaluate research, create worktree, and hand off to worktree session.
