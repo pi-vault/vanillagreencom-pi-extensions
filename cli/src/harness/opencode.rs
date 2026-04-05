@@ -34,28 +34,6 @@ pub fn generate_agent(
     output.push_str(&format!("mode: {mode}\n"));
     output.push_str(&format!("model: {model}\n"));
 
-    // Permission/tools based on role
-    match agent.role {
-        AgentRole::Reviewer => {
-            output.push_str("permission:\n");
-            output.push_str("  edit: deny\n");
-            output.push_str("  bash:\n");
-            output.push_str("    \"*\": ask\n");
-            output.push_str("    \"git diff*\": allow\n");
-            output.push_str("    \"git log*\": allow\n");
-            output.push_str("    \"grep *\": allow\n");
-        }
-        AgentRole::Engineer => {
-            // Full access — no restrictions needed
-        }
-        AgentRole::Manager => {
-            output.push_str("permission:\n");
-            output.push_str("  edit: deny\n");
-            output.push_str("  bash:\n");
-            output.push_str("    \"*\": ask\n");
-        }
-    }
-
     output.push_str("---\n\n");
 
     let guidance = agent::guidance_section(extras.guidance.as_deref());
