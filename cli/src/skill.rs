@@ -93,7 +93,7 @@ pub fn inject_vstack_notice(skill_md_path: &Path) {
     };
 
     let notice =
-        "> **Never edit this file directly.** To make additions or modifications, edit the appropriate section in `./vstack.toml`.";
+        "> **Never edit this file directly.** To make additions or modifications, edit the appropriate section in `./vstack.toml`. Then run `vstack refresh`.";
 
     // Already present? Skip.
     if content.contains("Never edit this file directly") {

@@ -35,7 +35,7 @@ pub fn generate_agent(
     output.push_str(&format!("model: {model}\n"));
 
     output.push_str("---\n\n");
-    output.push_str("> **Never edit this file directly.** To make additions or modifications, edit the appropriate section in `./vstack.toml`.\n\n");
+    output.push_str("> **Never edit this file directly.** To make additions or modifications, edit the appropriate section in `./vstack.toml`. Then run `vstack refresh`.\n\n");
 
     let guidance = agent::guidance_section(extras.guidance.as_deref());
     let skills_section = agent::load_skills_section(skills, optional_skills);
