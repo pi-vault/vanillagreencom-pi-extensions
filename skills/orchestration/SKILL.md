@@ -76,7 +76,7 @@ When invoked with `<command> [args]`, route to the corresponding workflow.
 
 | Command | Arguments | Workflow | Notes |
 |---------|-----------|----------|-------|
-| `review` | `[last N]` \| `[HASH]` | `workflows/review.md` | On-demand review (standalone) |
+| `review` | `[all]` \| `[last N]` \| `[HASH]` | `workflows/review.md` | On-demand review (standalone) |
 | `review-pr` | `[PR_NUMBER]` | `workflows/review-pr.md` | Pre-submission review |
 | `review-pr-comments` | `PR_NUMBER` \| `BRANCH` | `workflows/review-pr-comments.md` | Triage PR comments |
 | `submit-pr` | `[PR_NUMBER]` | `workflows/submit-pr.md` | Push, create PR, bot review, CI |

@@ -6,7 +6,8 @@ On-demand code review for the current working session. Reviews recent commits, p
 
 | Command | Behavior |
 |---------|----------|
-| `review` | Review all changes on current branch vs base |
+| `review` | Review uncommitted changes since last commit |
+| `review all` | Review all branch changes vs base (committed + uncommitted) |
 | `review last [N]` | Review last N commits |
 | `review [HASH]` | Review changes in specific commit |
 
@@ -35,8 +36,9 @@ BASE_BRANCH=${WORKTREE_DEFAULT_BRANCH:-$(git symbolic-ref refs/remotes/origin/HE
 
 | Argument | `DIFF_RANGE` | Description |
 |----------|-------------|-------------|
-| (none) | `origin/$BASE_BRANCH...HEAD` | All branch changes |
-| `last [N]` | `HEAD~[N]..HEAD` | Last N commits |
+| (none) | `HEAD` | Uncommitted changes (staged + unstaged) vs last commit |
+| `all` | `origin/$BASE_BRANCH..` | All branch changes including uncommitted work |
+| `last [N]` | `HEAD~[N]..HEAD` | Last N commits (committed only) |
 | `[HASH]` | `[HASH]~1..[HASH]` | Single commit |
 
 ```bash

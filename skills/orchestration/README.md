@@ -14,7 +14,7 @@ Invoke via your AI coding harness (e.g., `/$orchestration <command>`).
 | `dev-start [ISSUE_ID]` | Delegate implementation to specialist agents |
 | `dev-fix [ISSUE_ID]` | Delegate review fix items |
 | `ci-fix PR_NUMBER` | Fix CI failures |
-| `review [last N \| HASH]` | On-demand code review |
+| `review [all \| last N \| HASH]` | On-demand code review |
 | `review-pr [PR_NUMBER]` | Pre-submission review |
 | `review-pr-comments PR_NUMBER` | Triage PR review comments |
 | `submit-pr [PR_NUMBER]` | Push, create PR, bot review, CI |
