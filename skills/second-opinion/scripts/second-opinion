@@ -119,8 +119,9 @@ while [[ $# -gt 0 ]]; do
     --prompt=*)  PROMPT_FILE="${1#--prompt=}"; shift ;;
     --output)    [[ $# -ge 2 ]] || { echo "Error: --output requires a value" >&2; exit 1; }; OUTPUT_PATH="$2"; shift 2 ;;
     --output=*)  OUTPUT_PATH="${1#--output=}"; shift ;;
-    --target)    [[ $# -ge 2 ]] || { echo "Error: --target requires a value" >&2; exit 1; }; TARGET="$2"; shift 2 ;;
+    --target|--provider)  [[ $# -ge 2 ]] || { echo "Error: $1 requires a value" >&2; exit 1; }; TARGET="$2"; shift 2 ;;
     --target=*)  TARGET="${1#--target=}"; shift ;;
+    --provider=*) TARGET="${1#--provider=}"; shift ;;
     --range)     [[ $# -ge 2 ]] || { echo "Error: --range requires a value" >&2; exit 1; }; RANGE="$2"; shift 2 ;;
     --range=*)   RANGE="${1#--range=}"; shift ;;
     --cwd)       [[ $# -ge 2 ]] || { echo "Error: --cwd requires a value" >&2; exit 1; }; CWD="$2"; shift 2 ;;
@@ -128,6 +129,8 @@ while [[ $# -gt 0 ]]; do
     --timeout)   [[ $# -ge 2 ]] || { echo "Error: --timeout requires a value" >&2; exit 1; }; TIMEOUT="$2"; shift 2 ;;
     --timeout=*) TIMEOUT="${1#--timeout=}"; shift ;;
     -h|--help)   show_help; exit 0 ;;
+    --*)
+      echo "Error: unknown flag: $1" >&2; exit 1 ;;
     *)
       # Non-flag arg after mode → treat as inline prompt text
       if [[ -n "$MODE" && -z "$PROMPT_FILE" ]]; then
@@ -358,6 +361,15 @@ elif [[ $EXIT_CODE -ne 0 ]]; then
 fi
 
 echo "→ Response received (${#RESULT} bytes)" >&2
+
+if [[ ${#RESULT} -eq 0 ]]; then
+  echo "{\"error\": \"$TARGET_CLI returned empty response — check CLI auth and configuration\", \"target\": \"$TARGET_CLI\"}" >&2
+  if [[ -s "$STDERR_TMP" ]]; then
+    echo "--- stderr ---" >&2
+    head -20 "$STDERR_TMP" >&2
+  fi
+  exit 1
+fi
 
 # --- Extract JSON (review/audit modes) ----------------------------------------
 
