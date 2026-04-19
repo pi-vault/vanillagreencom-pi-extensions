@@ -86,8 +86,6 @@ reviewer = ["issue-lifecycle", "linear"]
 [hook-events]
 "PreToolUse:Bash" = "all"
 "PostToolUse:Edit|Write" = ["engineer"]
-"PostToolUse:Bash" = "all"
-"PostCompact:" = "all"
 "TaskCompleted:" = ["engineer"]
 
 [agent-guidance]

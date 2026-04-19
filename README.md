@@ -324,8 +324,6 @@ Windows note:
 | `block-bare-cd` | `PreToolUse` | Blocks unsafe bare `cd` usage and nudges toward subshell-safe patterns. |
 | `pre-commit-check` | `PreToolUse` | Validates formatting and lint before commits. |
 | `post-edit-lint` | `PostToolUse` | Runs lint checks after source edits. |
-| `post-commit-lsp-warn` | `PostToolUse` | Warns about stale LSP diagnostics after commits. |
-| `post-compact-lsp-warn` | `PostCompact` | Warns about stale diagnostics after context compaction. |
 | `task-completed-check` | `TaskCompleted` | Runs final lint checks before marking work complete. |
 
 ## License
