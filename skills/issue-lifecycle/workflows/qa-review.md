@@ -85,6 +85,8 @@ See the project's benchmarking skill for full recording details if available.
 
 ## 3. Complete
 
+Send this result to the orchestrator as an agent-to-agent message. **Writing the JSON to disk is not a return** — the orchestrator does not poll the filesystem, and turn text is not visible across team boundaries. Send exactly one message with the body below, then go idle.
+
 **Return exactly**:
 
 <output_format>

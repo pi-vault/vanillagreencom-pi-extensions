@@ -57,6 +57,8 @@ Build JSON per the orchestration skill's review-finding schema. Save to `[WORKTR
 
 ### 1.6 Return
 
+Send this result to the orchestrator as an agent-to-agent message. **Writing the JSON to disk is not a return** — the orchestrator does not poll the filesystem, and turn text is not visible across team boundaries. Send exactly one message with the body below, then go idle.
+
 **Return exactly** (return to orchestrator):
 
 <output_format>

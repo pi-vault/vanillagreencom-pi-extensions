@@ -101,6 +101,8 @@ Criteria: Would this save 5+ minutes in a future session? If yes, update. One su
 
 ## 6. Return
 
+Send this result to the orchestrator as an agent-to-agent message. **Writing artifacts to disk or posting comments is not a return** — the orchestrator does not poll the filesystem, and turn text is not visible across team boundaries. Send exactly one message with the body below, then go idle.
+
 **Return exactly**:
 
 <output_format>

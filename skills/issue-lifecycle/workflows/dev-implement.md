@@ -410,7 +410,9 @@ Do NOT push or submit PR — orchestrator handles after review passes.
    [Discovered work: ...]"
    ```
 
-3. **Return exactly**:
+3. Send this result to the orchestrator as an agent-to-agent message. **Posting the parent summary comment is not a return** — the orchestrator does not poll the filesystem or issue tracker, and turn text is not visible across team boundaries. Send exactly one message with the body below, then go idle.
+
+   **Return exactly**:
 
    <output_format>
    Parent: [ISSUE_ID]

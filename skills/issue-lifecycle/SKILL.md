@@ -37,6 +37,7 @@ Agent workflows for specialist agents receiving delegations from an orchestrator
 
 - Execute all workflow sections in order. The workflow decides what to skip via "**Skip if**" conditions — never skip based on your own scope assessment.
 - `<delegation_format>` and `<output_format>` tags are literal templates: fill `[PLACEHOLDERS]`, omit empty lines, add nothing else, do not paraphrase.
+- **Return requires an agent-to-agent message.** Every `**Return exactly**` step must be delivered via the harness's message tool (Claude Code: `SendMessage`; Codex: `send_input`; OpenCode: resume via stored `task_id`). Disk writes and turn text do not reach the orchestrator.
 
 ## Configuration
 
