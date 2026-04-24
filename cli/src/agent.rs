@@ -87,9 +87,9 @@ impl Agent {
                 other => other.into(),
             },
             "openai" => match base.as_str() {
-                "opus" => "openai/gpt-5.4".into(),
-                "sonnet" => "openai/gpt-5.4".into(),
-                "haiku" => "openai/gpt-5.4".into(),
+                "opus" => "openai/gpt-5.5".into(),
+                "sonnet" => "openai/gpt-5.5".into(),
+                "haiku" => "openai/gpt-5.5".into(),
                 other => format!("openai/{other}"),
             },
             "claude-code" => match base.as_str() {

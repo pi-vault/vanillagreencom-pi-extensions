@@ -142,9 +142,9 @@ trading-design = "Focus on dark theme with green/red accent colors for this proj
 
 | Canonical | Claude Code | OpenCode | Codex |
 |-----------|-------------|----------|-------|
-| `opus` | `opus[1m]` | `openai/gpt-5.4` | `gpt-5.4` (xhigh) |
-| `sonnet` | `sonnet` | `openai/gpt-5.4` | `gpt-5.4` (high) |
-| `haiku` | `haiku` | `openai/gpt-5.4` | `gpt-5.4` (medium) |
+| `opus` | `opus[1m]` | `openai/gpt-5.5` | `gpt-5.5` (xhigh) |
+| `sonnet` | `sonnet` | `openai/gpt-5.5` | `gpt-5.5` (high) |
+| `haiku` | `haiku` | `openai/gpt-5.5` | `gpt-5.5` (medium) |
 
 ## Rules
 

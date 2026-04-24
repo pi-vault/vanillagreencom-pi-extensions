@@ -77,7 +77,7 @@ SECOND_OPINION_CLAUDE_CMD="claude -p --no-session-persistence --model opus --eff
 
 **Codex** (called when running from Claude):
 ```bash
-SECOND_OPINION_CODEX_CMD="codex exec -m gpt-5.4 -s read-only -c model_reasoning_effort=xhigh --ephemeral"
+SECOND_OPINION_CODEX_CMD="codex exec -m gpt-5.5 -s read-only -c model_reasoning_effort=xhigh --ephemeral"
 ```
 
 To customize, copy the full command into `.env.local` and edit any flags. The entire variable is used as-is.

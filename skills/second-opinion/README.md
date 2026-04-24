@@ -64,7 +64,7 @@ All optional — defaults work out of the box. Set in `.env.local` at project ro
 SECOND_OPINION_CLAUDE_CMD="claude -p --no-session-persistence --model opus --effort max --allowedTools Bash(read-only:true),Read,Glob,Grep"
 
 # When calling Codex (from Claude):
-SECOND_OPINION_CODEX_CMD="codex exec -m gpt-5.4 -s read-only -c model_reasoning_effort=xhigh --ephemeral"
+SECOND_OPINION_CODEX_CMD="codex exec -m gpt-5.5 -s read-only -c model_reasoning_effort=xhigh --ephemeral"
 ```
 
 Edit the full command string to change model, effort level, or tool access. No additional flags are appended.
@@ -85,7 +85,7 @@ Edit the full command string to change model, effort level, or tool access. No a
 
 | Flag | Purpose |
 |------|---------|
-| `-m gpt-5.4` | Model (change to any supported model) |
+| `-m gpt-5.5` | Model (change to any supported model) |
 | `-s read-only` | Sandbox (`read-only`, `workspace-write`) |
 | `-c model_reasoning_effort=xhigh` | Reasoning effort (`low`, `medium`, `high`, `xhigh`) |
 | `--ephemeral` | Ephemeral session |

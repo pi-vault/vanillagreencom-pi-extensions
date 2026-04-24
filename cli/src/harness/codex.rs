@@ -29,9 +29,9 @@ pub fn generate_agent(
     // Map model to reasoning effort
     let lower = agent.model.to_lowercase();
     let (model, reasoning_effort) = match lower.as_str() {
-        "opus" => ("gpt-5.4", "xhigh"),
-        "sonnet" => ("gpt-5.4", "high"),
-        "haiku" => ("gpt-5.4", "medium"),
+        "opus" => ("gpt-5.5", "xhigh"),
+        "sonnet" => ("gpt-5.5", "high"),
+        "haiku" => ("gpt-5.5", "medium"),
         other => (other, "high"),
     };
 
