@@ -100,7 +100,35 @@ After reconciliation, store only the active reviewer set in state:
   .agents/skills/orchestration/scripts/workflow-state set [ISSUE_ID] review_agent_ids '[AGENT_ID_MAP_JSON]'
   ```
 
-Delegate to each active review agent in `[AGENTS]` in parallel with the prompt below.
+**Do NOT delegate yet.** Continue to § 2.1 to make the external review decision *before* any reviewer is spawned.
+
+## 2.1 External Review Decision (Optional)
+
+**This subsection MUST run before any internal reviewer delegation in § 2.2.** Sub-agent task calls are blocking — asking the user after § 2.2 means the prompt fires only after every internal reviewer has already completed.
+
+**Skip if** second-opinion skill is not installed (`.agents/skills/second-opinion/scripts/second-opinion` does not exist). Set `EXTERNAL_REVIEW_REQUESTED=false` → § 2.2.
+
+**Detect external target**:
+```bash
+EXTERNAL_TARGET=$(.agents/skills/second-opinion/scripts/second-opinion detect 2>/dev/null) || true
+```
+
+**Skip if** `EXTERNAL_TARGET` is empty or `"none"`. Set `EXTERNAL_REVIEW_REQUESTED=false` → § 2.2.
+
+→ Ask user:
+
+| Question | Type |
+|----------|------|
+| `In addition to internal agent reviews, request an external code review from [EXTERNAL_TARGET]? (typically 1-3 min)` | `Yes` \| `No` |
+
+| Answer | Action |
+|--------|--------|
+| No | Set `EXTERNAL_REVIEW_REQUESTED=false` → § 2.2 |
+| Yes | Set `EXTERNAL_REVIEW_REQUESTED=true` → § 2.2 |
+
+## 2.2 Delegate Review Agents
+
+Delegate to each active review agent in `[AGENTS]` in parallel with the prompt below. **If `EXTERNAL_REVIEW_REQUESTED=true`**, launch the external review (block below) in the *same parallel batch* as the internal reviewers so the user does not wait for serialized completion.
 
 **Delegation prompt:** Follow exactly, fill placeholders, add nothing else. Omit lines/sections with empty placeholders.
 
@@ -120,26 +148,7 @@ Re-review cycle [N]. Already resolved — do NOT re-report:
 </if>
 </delegation_format>
 
-## 2.1 External Review (Optional)
-
-**Skip if** second-opinion skill is not installed (`.agents/skills/second-opinion/scripts/second-opinion` does not exist). → § 3
-
-**Detect external target**:
-```bash
-EXTERNAL_TARGET=$(.agents/skills/second-opinion/scripts/second-opinion detect 2>/dev/null) || true
-```
-
-**Skip if** `EXTERNAL_TARGET` is empty or `"none"`. → § 3
-
-→ Ask user:
-
-| Question | Type |
-|----------|------|
-| `In addition to internal agent reviews, request an external code review from [EXTERNAL_TARGET]? (typically 1-3 min)` | `Yes` \| `No` |
-
-**If No** → § 3
-
-**If Yes** — this runs sequentially before § 3 (blocking call, default timeout from `SECOND_OPINION_TIMEOUT` env var or 300s):
+**External review execution** (only if `EXTERNAL_REVIEW_REQUESTED=true`, default timeout from `SECOND_OPINION_TIMEOUT` env var or 300s):
 
 ```bash
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
