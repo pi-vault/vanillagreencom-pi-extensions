@@ -18,7 +18,7 @@ Set up team, auth, cache, and workflow state for a worktree session.
 
 ## 1. Initialize
 
-> If you are running in **Claude Code**: Create a team before any other steps — before auth checks, cache sync, or workflow-state init. All agents launch within the team. Other harnesses have no team concept; skip this.
+> If you are running in **Claude Code**: Create a team before any other steps — before auth checks, cache sync, or workflow-state init. The team is for the **dev agent only**. Review, QA, and TPM agents spawn as background sub-agents (Task tool) and are re-engaged across cycles via `SendMessage` to their stored agent ID — they do not join the team. Other harnesses have no team concept; skip this.
 
 1. **Run**: `.agents/skills/orchestration/scripts/session-init --json [ISSUE_ID]`
    - Pass `[ISSUE_ID]` as a positional argument if the caller provided one; otherwise omit it.

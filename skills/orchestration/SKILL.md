@@ -27,7 +27,7 @@ If you cannot load a skill, stop and tell the user. Do not proceed without them.
 
 > **MODE SWITCH**: Loading this skill puts you in **orchestrator mode**. Do not write code yourself. Delegate all implementation, review, and QA work to specialist sub-agents using the workflows in this skill.
 
-> If you are running in **Claude Code**: Always create a team before launching agents. Spawn and delegate to agents within the team context so they share state and can be messaged for re-delegation. When asking the user a question or presenting options, always use the `AskUserQuestion` tool. `SendMessage` accepts exactly `to`, `summary`, `message` — extra fields (`type`, `recipient`, `content`, `body`) have caused duplicate delivery on idle wake-up.
+> If you are running in **Claude Code**: Create a team for the **dev agent only** so it can be re-delegated across the session. Review, QA, and TPM agents are background sub-agents — spawn them with the `Task` tool, store the returned agent ID, and re-engage across cycles via `SendMessage` to that ID. **Never add review/QA/TPM agents to the team.** When asking the user a question or presenting options, always use the `AskUserQuestion` tool. `SendMessage` accepts exactly `to`, `summary`, `message` — extra fields (`type`, `recipient`, `content`, `body`) have caused duplicate delivery on idle wake-up.
 
 > If you are running in **Codex**: Spawn workers with `fork_context: false`. Two-step pattern: (1) spawn with the `<bootstrap_format>` message, (2) `send_input` a `DELEGATION:` prefixed message containing exactly the filled `<delegation_format>` content — nothing more.
 
@@ -198,7 +198,7 @@ When executing a command's workflow, follow ALL [Workflow Execution](#workflow-e
 | Script | Purpose |
 |--------|---------|
 | `workflow-state` | Persistent state read/write/append (survives compaction) |
-| `open-terminal` | Launch worktree(s) for one or more issues with auto-detected harness — **never hand-roll tmux/terminal commands; use this for every session spawn** |
+| `open-terminal` | Launch worktree(s) for one or more issues with auto-detected harness — **dev sessions only**. Never hand-roll tmux/terminal commands; never use this for review/QA/TPM agents (they are background sub-agents). |
 | `parallel-groups` | Read/manage parallel issue groups |
 | `bot-review-wait` | Block until bot review posts on a PR |
 | `ci-wait` | Block until CI completes on a PR |
@@ -222,7 +222,7 @@ When executing a command's workflow, follow ALL [Workflow Execution](#workflow-e
 .agents/skills/orchestration/scripts/open-terminal ISSUE-1 [ISSUE-2 ...] --harness <claude|codex|opencode> [--tmux | --ghostty]
 ```
 
-Auto-detects terminal (tmux if `$TMUX` set, else GUI). Creates the worktree (reuses existing), pre-trusts the directory in Claude config, and launches the harness with `/orchestration start ISSUE` as the initial prompt. **Use this any time the user asks to spawn / launch / start sessions for issues.**
+Auto-detects terminal (tmux if `$TMUX` set, else GUI). Creates the worktree (reuses existing), pre-trusts the directory in Claude config, and launches the harness with `/orchestration start ISSUE` as the initial prompt. **Use this any time the user asks to spawn / launch / start dev sessions for issues. Never use it for review, QA, or TPM agents — those spawn as background sub-agents inside the orchestrator session.**
 
 ## Schemas
 
@@ -289,6 +289,18 @@ If the current directory is a worktree, never automatically create, switch to, o
 | Message only | Re-delegation to existing agents | Send delegation message to running agent |
 | Self-create | Agent without team context | Full delegation instructions in prompt |
 | Consultation | One-off sub-agent | Full instructions in prompt, no task machinery |
+
+#### Agent Placement
+
+Only **dev agents** get a tmux pane (via `open-terminal`). Review, QA, and TPM agents are background sub-agents — spawned inside the orchestrator session and persisted across cycles by stored agent/task ID, **not** by team membership or pane occupancy.
+
+| Role | Where it lives | Re-delegation mechanism |
+|------|----------------|--------------------------|
+| Orchestrator (worktree session) | Tmux pane via `open-terminal` | — |
+| Dev sub-agent (`rust`, `iced`, …) | Team teammate (Claude Code) / persistent sub-agent (Codex, OpenCode) | `SendMessage` by name (Claude) / `send_input` (Codex) / `functions.task(task_id=…)` (OpenCode) |
+| Review / QA / TPM | Background sub-agent — **never team, never pane** | Store agent/task ID at first spawn → `SendMessage` to ID (Claude) / `send_input` (Codex) / `functions.task(task_id=…)` (OpenCode) on every fix → re-review cycle |
+
+Reviewers persist across the full review → fix → re-review loop so their initial-review context is retained on re-engagement. Shut them down only when the review pass completes (see [Review Agent Lifecycle Management](#review-agent-lifecycle-management)).
 
 #### Bootstrap Message
 
