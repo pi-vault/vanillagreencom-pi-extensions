@@ -76,7 +76,9 @@ case "$ACTION" in
         unknown_since: null,
         last_capture_hash: null,
         last_response_at: null,
+        spawned_at: $now,
         last_polled_at: $now,
+        orchestration_started: false,
         scope_files_declared: null,
         scope_files_actual: null,
         decisions_log: []

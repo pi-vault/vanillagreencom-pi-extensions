@@ -44,6 +44,9 @@ Master mode entry point. Polls every spawned issue pane, classifies their prompt
 
 For each tracked issue currently in a non-terminal state (`waiting | prompting | submitting | merge-ready`):
 
+0. **Pane-hijack check** — only if `orchestration_started` is `false` for this issue:
+   - If the orchestration workflow-state file exists at `tmp/workflow-state-<ISSUE>.json` (or wherever `ORCH_STATE_DIR` resolves to), set `orchestration_started: true` via `pane-registry set <ISSUE> orchestration_started true` and proceed to step 1.
+   - Otherwise check `(now - spawned_at)`. If elapsed exceeds `FLIGHTDECK_HIJACK_GRACE_SECS` (default 90), the pane was either hijacked for unrelated work or orchestration silently failed to start. Escalate: `paused_for_user = {issue_id, reason: "orchestration-never-started", prompt_text: "<ISSUE> spawned <elapsed>s ago; no workflow-state file. Pane may have been hijacked or orchestration failed to start."}`. Skip the rest of § 2 for this issue.
 1. Run `pane-poll`:
    ```
    .agents/skills/flightdeck/scripts/pane-poll <session>:<window> <pinned-pane-index>

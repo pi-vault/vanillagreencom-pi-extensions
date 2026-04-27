@@ -160,6 +160,7 @@ State enum: `state ∈ {waiting, prompting, submitting, merge-ready, merged, abo
 | `FLIGHTDECK_STATE_DIR` | `tmp` | Override for master-state file directory |
 | `FLIGHTDECK_DEBOUNCE_CYCLES` | `2` | Consecutive poll cycles required for "all-done" termination check |
 | `FLIGHTDECK_AUTO_MERGE` | `1` | When `0`, the `merge-now` handler escalates instead of auto-answering. For sessions where the human gate is desired (compliance, big-blast-radius PRs) |
+| `FLIGHTDECK_HIJACK_GRACE_SECS` | `90` | Seconds after spawn that master tolerates no orchestration `workflow-state-<ISSUE>.json` before escalating "orchestration-never-started". Catches hijacked panes / failed launches. |
 
 ## Workflows
 
