@@ -129,8 +129,9 @@ if grep -qE 'Cleanup the .* worktree|Worktree for .* exists\. Cleanup|Remove (th
   emit cleanup-prompt "worktree-cleanup prompt"
 fi
 
-# audit-relation-prompt (issue audit creating new issues)
-if grep -qE 'Create (these )?audit(ed)? (follow-up )?issues|ISSUE AUDIT|Issue Audit\b' <<< "$buf"; then
+# audit-relation-prompt (issue audit creating new issues; also post-creation
+# delegate-or-defer prompts asking what to do with newly-created children)
+if grep -qE 'Create (these )?audit(ed)? (follow-up )?issues|ISSUE AUDIT|Issue Audit\b|TPM audit complete|delegate (now )?or defer|Delegate all|Defer all' <<< "$buf"; then
   emit audit-relation-prompt "issue-audit creation"
 fi
 
@@ -140,12 +141,17 @@ if grep -qE 'Descope CC?-?[A-Z0-9-]+|FIX RECONCILIATION' <<< "$buf"; then
 fi
 
 # external-fix-suggestions (post-cycle external review)
-if grep -qE 'Apply the external review fix suggestions|external review fix' <<< "$buf"; then
+# Matches: "Apply the external review fix suggestions?", "Apply external review fixes",
+# and variants like "Apply <topic> fix from <external-reviewer>?".
+if grep -qE 'Apply (the )?external[- ]?review|external[- ]?review (fix|suggestion)|Apply\s+[A-Za-z0-9 \-]{1,40}\s+(fix|suggestion)s?\s+from\s+(external|second-opinion|gemini|gpt|codex)' <<< "$buf"; then
   emit external-fix-suggestions "external-review fixes"
 fi
 
 # cycle-fix-suggestions
-if grep -qE 'Apply (the )?fix suggestions|Apply fixes\?' <<< "$buf"; then
+# Matches: canonical "Apply fix suggestions?", "Apply fixes?", and topical
+# variants like "Apply doc-wording fix from reviewer-doc?" or
+# "Apply <topic> fix from <reviewer-name>?".
+if grep -qE 'Apply (the )?fix suggestions|Apply fixes\?|Apply\s+[A-Za-z0-9 \-]{1,40}\s+(fix|suggestion)s?\s+from\s+reviewer[- ]' <<< "$buf"; then
   emit cycle-fix-suggestions "cycle-review fixes"
 fi
 

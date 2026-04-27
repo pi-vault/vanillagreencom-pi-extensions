@@ -16,7 +16,7 @@ Classification tags and per-tag handler logic for the prompts that surface acros
 | `scope-creep-detected` | Computed: `gh pr view --json files | length > 2 × scope_files_declared` | Escalate to user |
 | `merge-now` | `"PR .* is approved with CI passing. Merge now"` | Auto-merge if no overlap with later queue |
 | `external-fix-suggestions` | `"Apply the external review fix suggestions"` | Apply per expansion bias unless scope-creep risk |
-| `cycle-fix-suggestions` | `"Apply fix suggestions"` post-review | Apply per expansion bias |
+| `cycle-fix-suggestions` | `"Apply fix suggestions"` post-review (also matches topical variants like `"Apply doc-wording fix from reviewer-doc?"`) | Apply per expansion bias |
 | `force-merge-confirm` | `"Mergeable status still UNKNOWN after .+ min.* Force merge"` | Force-merge predicate |
 | `descope-related` | `"Descope CC-.* to reflect"` | Auto-descope when reconciliation flags overlap |
 | `rendering` | Buffer doesn't end with a recognized terminator (e.g., `Enter to select` footer or `❯ ` cursor) | Re-poll, do not act |
