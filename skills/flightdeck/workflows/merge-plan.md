@@ -45,16 +45,34 @@ See `patterns/decision-biases.md` § Smaller-PR-first merge order and § Merge-o
 1. Pop the head of `merge_queue`.
 2. Re-validate immediately before merging:
    ```
-   gh pr view <PR> --json mergeable,mergeStateStatus,reviewDecision,statusCheckRollup
+   github pr-view <PR>
    ```
+   Use the `mergeable`, `mergeStateStatus`, `reviewDecision`, and `statusCheckRollup` fields from its output. (If the state is transient `UNKNOWN`, prefer `github await-mergeable <PR>` to bound the wait — see § 3.5.)
 3. Decision:
-   - `MERGEABLE` + `CLEAN` + APPROVED + all-checks-green → **direct the per-issue agent**: the per-issue agent is the one that owns merging its own PR. If its pane is alive and idle, send a message instructing it to run its `merge-pr` workflow on its current PR (no `⤵` from flightdeck — flightdeck observes-and-directs). If its pane is dead or absent (rare edge case for a PR whose session already ended), perform the merge directly via `gh pr merge <PR> --squash --delete-branch` and apply post-merge Linear updates inline.
+   - `MERGEABLE` + `CLEAN` + APPROVED + all-checks-green → **direct the per-issue agent**: the per-issue agent is the one that owns merging its own PR. If its pane is alive and idle, send a message instructing it to run its `merge-pr` workflow on its current PR (no `⤵` from flightdeck — flightdeck observes-and-directs). If its pane is dead or absent (rare edge case for a PR whose session already ended), invoke the github skill's wrapper:
+     ```
+     github pr-merge <PR> --squash --delete-branch
+     ```
+     Branch on exit code (the wrapper distinguishes outcomes that raw `gh pr merge` collapses to a single 0):
+     - `0` (MERGED) → § 4. The PR landed immediately.
+     - `75` (QUEUED FOR AUTO-MERGE) → set the issue's `substate = queued-for-auto-merge`; do NOT mark merged. The merge will fire when CI / branch protection clear; the watch loop will catch the eventual MERGED state on a later poll. Push the issue back to the queue tail.
+     - `1` (BLOCKED) → escalate (`paused_for_user`); the wrapper's stderr classifies the block as transient or permanent — surface that in the pause message.
    - `UNKNOWN` AND elapsed since first observed < `FLIGHTDECK_FORCE_MERGE_AFTER_SECS` → push back to queue tail; return to § 1 (graph unchanged).
-   - `UNKNOWN` AND elapsed ≥ threshold AND force-merge predicate satisfied (see `patterns/conflict-detection.md`) → direct the per-issue agent to force-merge (or `gh pr merge --admin` directly if no live pane).
+   - `UNKNOWN` AND elapsed ≥ threshold AND force-merge predicate satisfied (see `patterns/conflict-detection.md`) → direct the per-issue agent to force-merge. If no live pane, invoke `github pr-merge <PR> --force --squash --delete-branch` (admin path) and apply the same exit-code branching above.
    - `DIRTY | BEHIND` with overlap → escalate (set `paused_for_user`); return to caller.
-4. On successful merge:
+4. On successful merge (exit 0):
    - `pane-registry set-state <ISSUE_ID> merged`.
    - `pane-registry set <ISSUE_ID> pr_number <number>` (if not already set).
+
+### § 3.5: Bounded UNKNOWN wait (optional)
+
+If the queue head is in `UNKNOWN` state and you want to bound the wait without yielding the full poll cycle:
+
+```
+github await-mergeable <PR>
+```
+
+Polls `state` and `mergeStateStatus` correctly (never `mergeable`, which stays `UNKNOWN` permanently after merge). Exit 0 + JSON on stdout when resolved; exit 124 on timeout. Use sparingly — extended waits should still go through the poll loop's `FLIGHTDECK_FORCE_MERGE_AFTER_SECS` clock so the master state remains consistent across compaction.
 
 ---
 

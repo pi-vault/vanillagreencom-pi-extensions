@@ -98,9 +98,13 @@ GitHub may have flipped state between the predicate evaluation and the actual me
 
 ```bash
 gh pr view <N> --json mergeable,mergeStateStatus
+# or, equivalently via the skill wrapper:
+github pr-view <N>
 ```
 
 If state flipped to `DIRTY` or `BEHIND` AND content is no longer disjoint → escalate to user instead of force-merging. UNKNOWN→DIRTY transitions sometimes mean a real conflict appeared.
+
+> **Never gate termination on the `mergeable` field alone.** It stays `UNKNOWN` permanently once a PR is merged or closed, so an `until [ mergeable != UNKNOWN ]` loop never terminates after merge. For bounded polling, use `github await-mergeable <N>` — it polls `state` and `mergeStateStatus` correctly and exits 124 on timeout.
 
 ## Handler: `merge-ready-but-unknown`
 
