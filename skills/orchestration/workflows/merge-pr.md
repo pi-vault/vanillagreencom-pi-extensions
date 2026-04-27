@@ -133,76 +133,81 @@ them to `Done` and drop the work. Detach and rebundle them first.
 
 **Skip if** no `[ISSUE]` extracted in § 4.1.
 
-1. **Query pending children of the merging issue:**
+**Note**: Shell variables (`$VAR`) do NOT survive across separate bash calls
+in agent harnesses. Each step below is its own call — capture the printed
+value and substitute as the documented `[PLACEHOLDER]` in subsequent calls.
+
+1. **Query pending children of the merging issue.** Returns one ID per line.
+   `--pending` excludes `Done`/`Canceled` only — it includes Backlog, Todo,
+   AND `In Progress` children (an In Progress child cascade-flipped to Done
+   is the worst case: actively-running work silently marked complete).
    ```bash
-   ORPHANS=$(.agents/skills/linear/scripts/linear.sh cache issues children [ISSUE] --pending --recursive --format=ids)
+   .agents/skills/linear/scripts/linear.sh cache issues children [ISSUE] --pending --recursive --format=ids
    ```
 
-2. **Skip if** `ORPHANS` empty → § 5.
+   - **No output** → skip § 4.3 entirely → § 5.
+   - **Output present** → capture line-separated IDs as `[ORPHAN_IDS]` and continue.
 
-3. **Otherwise — rebundle under a new parent so cascade-Done cannot reach them:**
+2. **Read parent metadata.** Capture `.title` → `[PARENT_TITLE]`,
+   `.project.id` → `[PARENT_PROJECT]`, the labels array as a comma-joined
+   string → `[PARENT_LABELS]`:
+   ```bash
+   .agents/skills/linear/scripts/linear.sh cache issues get [ISSUE] \
+       | jq -r '"title=\(.title)\nproject=\(.project.id // .project.name // "")\nlabels=\([.labels.nodes[].name] | join(","))"'
+   ```
 
-   a. Read parent metadata:
-      ```bash
-      PARENT_JSON=$(.agents/skills/linear/scripts/linear.sh cache issues get [ISSUE])
-      PARENT_TITLE=$(echo "$PARENT_JSON" | jq -r '.title')
-      PARENT_PROJECT=$(echo "$PARENT_JSON" | jq -r '.project.id // .project.name // empty')
-      PARENT_LABELS=$(echo "$PARENT_JSON" | jq -r '[.labels.nodes[].name] | join(",")')
-      ```
+3. **Compute bundle priority** as the highest-priority value across the
+   orphans (Linear: `1`=Urgent, `2`=High, `3`=Normal, `4`=Low, `0`=None;
+   lower non-zero number = higher priority). One call returns the answer:
+   ```bash
+   .agents/skills/linear/scripts/linear.sh cache issues children [ISSUE] --pending --recursive \
+       | jq '[.[] | select(.priority > 0) | .priority] | (min // 3)'
+   ```
+   Capture the printed integer as `[BUNDLE_PRIORITY]`.
 
-   b. Compute max priority across orphans (Linear: 1=Urgent ... 4=Low; lower number = higher priority):
-      ```bash
-      BUNDLE_PRIORITY=$(for o in $ORPHANS; do
-          .agents/skills/linear/scripts/linear.sh cache issues get "$o" | jq -r '.priority // 0'
-      done | awk '$1 > 0 { if (min == "" || $1 < min) min = $1 } END { print (min == "" ? 3 : min) }')
-      ```
+4. **Synthesize bundle description.** Read each orphan's title from the
+   same `cache issues children --pending --recursive` output (already
+   produced in step 3 — agent reuses that JSON in-memory rather than
+   re-querying). Build `[BUNDLE_DESC]` per
+   `.agents/skills/project-management/templates/parent-issue-template.md`:
+   - 1-2 sentence summary synthesized from orphan titles.
+   - `## Sub-Issues` listing each `- [ORPHAN_ID]: [title] (agent:X)`.
+   - `## Context` line: `Detached from [ISSUE] before merge to prevent Linear cascade-Done. See related link for original audit context.`
 
-   c. Build the new bundle parent using `.agents/skills/project-management/templates/parent-issue-template.md`. Synthesize summary from the orphans' titles. Title: `"[PARENT_TITLE] follow-ups"`.
+5. **Create the new bundle parent.** `--format=ids` prints the new
+   identifier on stdout — capture as `[NEW_BUNDLE]`:
+   ```bash
+   .agents/skills/linear/scripts/linear.sh issues create \
+       --title "[PARENT_TITLE] follow-ups" \
+       --description "[BUNDLE_DESC]" \
+       --project "[PARENT_PROJECT]" \
+       --labels "[PARENT_LABELS]" \
+       --priority [BUNDLE_PRIORITY] \
+       --format=ids
+   ```
+   **If this command exits non-zero or prints no ID, ABORT the merge** and
+   surface the error to the user. Do not proceed — better to let the user
+   intervene than silently let cascade-Done destroy the orphans.
 
-      ```bash
-      BUNDLE_DESC=$(cat <<EOF
-      [SUMMARY — synthesized from orphan titles, 1-2 sentences]
+6. **Reparent each orphan** (replaces existing `parent_id`, breaking the
+   cascade chain to `[ISSUE]`). One call per ID in `[ORPHAN_IDS]`:
+   ```bash
+   .agents/skills/linear/scripts/linear.sh issues update [ORPHAN_ID] --parent [NEW_BUNDLE]
+   ```
 
-      ## Sub-Issues
+7. **Link the new bundle back to the merging issue** so the audit trail
+   survives:
+   ```bash
+   .agents/skills/linear/scripts/linear.sh issues add-relation [NEW_BUNDLE] --related [ISSUE]
+   ```
 
-      [For each ORPHAN_ID: "- [ORPHAN_ID]: [orphan title] (agent:X)"]
+8. **Comment on the merging issue:**
+   ```bash
+   .agents/skills/linear/scripts/linear.sh comments create [ISSUE] \
+       --body "Pending children rebundled under [NEW_BUNDLE] before merge to avoid cascade-Done."
+   ```
 
-      ## Context
-
-      - Detached from [ISSUE] before merge to prevent Linear cascade-Done. See related link to [ISSUE] for original audit context.
-      EOF
-      )
-
-      NEW_BUNDLE=$(.agents/skills/linear/scripts/linear.sh issues create \
-          --title "$PARENT_TITLE follow-ups" \
-          --description "$BUNDLE_DESC" \
-          --project "$PARENT_PROJECT" \
-          --labels "$PARENT_LABELS" \
-          --priority "$BUNDLE_PRIORITY" \
-          --format=ids)
-      ```
-
-      If creation fails, **abort the merge** and surface the error to the user — do not proceed and let cascade-Done destroy the orphans.
-
-   d. Reparent each orphan (replaces existing `parent_id`):
-      ```bash
-      for o in $ORPHANS; do
-          .agents/skills/linear/scripts/linear.sh issues update "$o" --parent "$NEW_BUNDLE"
-      done
-      ```
-
-   e. Add a `related` link from the new bundle to the merging issue so the audit trail survives:
-      ```bash
-      .agents/skills/linear/scripts/linear.sh issues add-relation "$NEW_BUNDLE" --related [ISSUE]
-      ```
-
-   f. Comment on the merging issue:
-      ```bash
-      .agents/skills/linear/scripts/linear.sh comments create [ISSUE] \
-          --body "Pending children rebundled under $NEW_BUNDLE before merge to avoid cascade-Done."
-      ```
-
-4. Proceed to § 5.
+9. Proceed to § 5.
 
 ## 5. Execute Merge
 

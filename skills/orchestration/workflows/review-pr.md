@@ -539,13 +539,18 @@ Issue suggestions: [N] items → § 9 audit
 
 4. **Delegate immediately.** Do **not** surface a Defer/Skip prompt — § 10 is mandatory once § 9 created `make_child` issues under `[ISSUE_ID]`. Delegate regardless of how sub-issues were created or their perceived scope.
 
-   If delegation must be skipped (e.g., user manually overrides via Type-something or escalates), § 10 must FIRST detach every issue in `audit_issues_created` from `[ISSUE_ID]` before returning to § 11 — otherwise the parent merging in `merge-pr.md` will cascade-Done these children:
+   If delegation must be skipped (e.g., user manually overrides via Type-something or escalates), § 10 must FIRST detach every issue in `audit_issues_created` from `[ISSUE_ID]` before returning to § 11 — otherwise the parent merging in `merge-pr.md` will cascade-Done these children.
+
+   Read the list (one ID per line) and capture as `[AUDIT_CREATED_IDS]`:
    ```bash
-   AUDIT_CREATED=$(.agents/skills/orchestration/scripts/workflow-state get [ISSUE_ID] '.audit_issues_created // []' | jq -r '.[]')
-   for child in $AUDIT_CREATED; do
-       .agents/skills/linear/scripts/linear.sh issues update "$child" --remove-parent
-       .agents/skills/linear/scripts/linear.sh issues add-relation "$child" --related [ISSUE_ID]
-   done
+   .agents/skills/orchestration/scripts/workflow-state get [ISSUE_ID] '.audit_issues_created // []' | jq -r '.[]'
+   ```
+
+   Then per `[CHILD_ID]` in that list, two calls (shell `$VAR` does not
+   survive across bash blocks in agent harnesses — use the placeholder):
+   ```bash
+   .agents/skills/linear/scripts/linear.sh issues update [CHILD_ID] --remove-parent
+   .agents/skills/linear/scripts/linear.sh issues add-relation [CHILD_ID] --related [ISSUE_ID]
    ```
 
    The `merge-pr.md § 4.3` cascade-Done guard is a backstop, not a license to defer here.
