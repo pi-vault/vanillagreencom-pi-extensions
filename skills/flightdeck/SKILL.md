@@ -104,7 +104,7 @@ Lessons distilled from real multi-issue session experience are grouped by domain
 |--------|---------|
 | `open-terminal` | Launch worktree(s) for one or more issues with auto-detected harness — **never hand-roll tmux/terminal commands; use this for every session spawn** |
 | `parallel-groups` | Read/manage parallel issue groups |
-| `flightdeck-state` | Master-state CRUD wrapper — atomic init/get/set/append/increment for `tmp/flightdeck-state-<TMUX_SESSION>.json` |
+| `flightdeck-state` | Master-state CRUD wrapper — atomic init/get/set/append/increment/archive for `tmp/flightdeck-state-<TMUX_SESSION>.json`. `init` sweeps stale `.tmp.<PID>` orphans from prior crashed writes; `archive` rotates a terminated state file to `<file>-<terminated_at>.json.archive` so the next session in the same tmux name starts clean |
 | `pane-registry` | Issue↔pane mapping CRUD (init from spawned issue list, list, update state per issue, reconcile against live tmux windows to drop stale entries) |
 | `pane-poll` | Single-window status read: bell flag + `capture-pane -t <session>:<window>.0 -p -S -200` + classify |
 | `pane-respond` | Send a response to a pane. Three modes: positional `<payload>` for free-text, `--option N` for numeric option pick (harness-aware: Claude Code uses arrow navigation, NOT digit-as-shortcut), `--keys k1,k2,...` for multi-step forms (toggle / advance page / submit). Validates rebase-multi-choice payloads include the preserve/apply/verify triplet |
@@ -114,7 +114,7 @@ Lessons distilled from real multi-issue session experience are grouped by domain
 
 ## Schema — master state
 
-`tmp/flightdeck-state-<TMUX_SESSION_ID>.json` is keyed by tmux session ID. It survives compaction and is rehydrated on `watch` re-entry.
+`tmp/flightdeck-state-<TMUX_SESSION_ID>.json` is keyed by tmux session ID. It survives compaction and is rehydrated on `watch` re-entry. On terminate, the file is rotated to `tmp/flightdeck-state-<TMUX_SESSION_ID>-<terminated_at>.json.archive` (see `terminate.md § 5`) so the next session reusing the same tmux name doesn't inherit prior state.
 
 ```json
 {

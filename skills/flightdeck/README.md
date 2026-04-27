@@ -57,7 +57,7 @@ Every script in `scripts/` appears in `SKILL.md`'s Scripts table. No hidden scri
 |--------|--------------|
 | `open-terminal` | Launch worktree(s) with auto-detected harness — never hand-roll tmux/terminal commands |
 | `parallel-groups` | Read/manage parallel issue groups |
-| `flightdeck-state` | Atomic CRUD on `tmp/flightdeck-state-<TMUX_SESSION>.json` |
+| `flightdeck-state` | Atomic CRUD on `tmp/flightdeck-state-<TMUX_SESSION>.json` (init/get/set/append/increment/archive). `init` sweeps stale `.tmp.<PID>` orphans; `archive` rotates terminated state to `<file>-<terminated_at>.json.archive` |
 | `pane-registry` | Issue↔pane mapping wrapper |
 | `pane-poll` | Bell + capture-pane (pane 0 explicit) + classify |
 | `pane-respond` | Send to pane 0 (free-text / `--option N` / `--keys` modes); harness-aware option pick; validates rebase payloads have preserve/apply/verify triplet |

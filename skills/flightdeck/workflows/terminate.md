@@ -109,9 +109,11 @@ Emit to `tmp/flightdeck-summary-<SESSION>-<TS>.md` (TS = ISO8601, no colons):
 ```
 flightdeck-state set terminated true
 flightdeck-state set terminated_at "\"<ISO8601>\""
+flightdeck-state set summary_path "\"<tmp/flightdeck-summary-<SESSION>-<TS>.md>\""
+flightdeck-state archive
 ```
 
-Persist a pointer to the summary file path in master state for inspection later.
+`archive` rotates the live state file to `tmp/flightdeck-state-<SESSION>-<terminated_at>.json.archive` so the next session in the same tmux name (e.g. `HT`) starts clean instead of inheriting this session's `issues` map, `merge_queue`, and `terminated` flag. The archive line preserves the full state for post-mortem inspection.
 
 ---
 
@@ -195,7 +197,7 @@ On "Stick with planned cycle / Done": proceed to § 8.
 
 Do **not** close panes. Pane lifecycle stays with the user — they may want to inspect transcripts post-session, or resume a paused issue manually.
 
-The terminated master state means subsequent `watch` invocations on this `$TMUX_SESSION` will refuse to proceed (tell the user "session already terminated; use `watch --reset` to start over").
+§ 5's `flightdeck-state archive` rotated the live state away, so a subsequent `flightdeck start` (or bare `watch`) in the same tmux session creates a fresh master-state file — no stale `issues` / `merge_queue` carryover. Past sessions remain inspectable via `tmp/flightdeck-state-<SESSION>-<TS>.json.archive` and the summary file.
 
 ---
 

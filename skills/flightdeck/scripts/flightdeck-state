@@ -13,6 +13,7 @@
 #   flightdeck-state set [--session <name>] <field> <value>  # value is JSON
 #   flightdeck-state append [--session <name>] <field> <value>
 #   flightdeck-state increment [--session <name>] <field>
+#   flightdeck-state archive [--session <name>]              # rotate live file to <file>-<ts>.archive
 #   flightdeck-state path [--session <name>]                 # print state file path
 #
 # Environment:
@@ -68,11 +69,27 @@ state_path() {
   echo "$STATE_BASE/flightdeck-state-$1.json"
 }
 
-# Atomic update via flock + tmp-file rename
+# Accept both bare field names (`terminated`) and explicit jq paths
+# (`.issues["CC-486"].state`). Bare names get a leading `.` so the resulting
+# jq filter is well-formed; existing path expressions pass through.
+normalize_path() {
+  local p="$1"
+  if [[ "$p" == .* || "$p" == "(."* ]]; then
+    echo "$p"
+  else
+    echo ".$p"
+  fi
+}
+
+# Atomic update via flock + tmp-file rename. EXIT trap removes the tmp file
+# if the script aborts mid-write (signal, jq failure, etc.) so we don't leave
+# zero-byte `.tmp.<PID>` orphans piling up next to the live state file.
 update_state() {
   local file="$1" jq_filter="$2"
   local lock="${file}.lock"
   local tmp="${file}.tmp.$$"
+
+  trap 'rm -f "$tmp"' EXIT
 
   exec 9>"$lock"
   flock 9
@@ -85,6 +102,26 @@ update_state() {
   mv "$tmp" "$file"
 
   exec 9>&-
+  trap - EXIT
+}
+
+# Sweep stale `.tmp.<PID>` orphans for this state file. Only files whose owner
+# PID is no longer running are removed — guards against racing a concurrent
+# writer. Called from `init` so each session start cleans up after prior crashes.
+gc_tmp_orphans() {
+  local file="$1"
+  local dir
+  dir=$(dirname "$file")
+  local base
+  base=$(basename "$file")
+  shopt -s nullglob
+  for orphan in "$dir/$base".tmp.*; do
+    local pid="${orphan##*.tmp.}"
+    if [[ "$pid" =~ ^[0-9]+$ ]] && ! kill -0 "$pid" 2>/dev/null; then
+      rm -f "$orphan"
+    fi
+  done
+  shopt -u nullglob
 }
 
 # --- Argument parsing -----------------------------------------------------
@@ -112,8 +149,11 @@ case "$ACTION" in
     ;;
 
   init)
+    gc_tmp_orphans "$FILE"
     if [[ -f "$FILE" ]]; then
-      # Idempotent — don't clobber existing state
+      # Idempotent — don't clobber existing state (compaction-recovery path).
+      # Stale `terminated: true` files are rotated by `terminate.md § 5` via
+      # the `archive` action, so a present file here is always a live session.
       exit 0
     fi
     started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -139,27 +179,41 @@ case "$ACTION" in
 
   set)
     [[ ${#ARGS[@]} -lt 2 ]] && { echo "Usage: set <field> <json-value>" >&2; exit 2; }
-    field="${ARGS[0]}"
+    field=$(normalize_path "${ARGS[0]}")
     value="${ARGS[1]}"
-    update_state "$FILE" ". | $field = ($value)"
+    update_state "$FILE" "$field = ($value)"
     ;;
 
   append)
     [[ ${#ARGS[@]} -lt 2 ]] && { echo "Usage: append <field> <json-value>" >&2; exit 2; }
-    field="${ARGS[0]}"
+    field=$(normalize_path "${ARGS[0]}")
     value="${ARGS[1]}"
-    update_state "$FILE" ". | $field += [($value)]"
+    update_state "$FILE" "$field += [($value)]"
     ;;
 
   increment)
     [[ ${#ARGS[@]} -lt 1 ]] && { echo "Usage: increment <field>" >&2; exit 2; }
-    field="${ARGS[0]}"
-    update_state "$FILE" ". | $field = (($field // 0) + 1)"
+    field=$(normalize_path "${ARGS[0]}")
+    update_state "$FILE" "$field = (($field // 0) + 1)"
+    ;;
+
+  archive)
+    [[ ! -f "$FILE" ]] && exit 0
+    ts=$(jq -r '.terminated_at // empty' "$FILE" 2>/dev/null)
+    [[ -z "$ts" ]] && ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    safe_ts="${ts//:/}"
+    archive_path="${FILE%.json}-${safe_ts}.json.archive"
+    lock="${FILE}.lock"
+    exec 9>"$lock"
+    flock 9
+    mv "$FILE" "$archive_path"
+    exec 9>&-
+    echo "$archive_path"
     ;;
 
   *)
     echo "Unknown action: $ACTION" >&2
-    echo "Actions: init | get | set | append | increment | path" >&2
+    echo "Actions: init | get | set | append | increment | archive | path" >&2
     exit 2
     ;;
 esac
