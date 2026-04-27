@@ -136,9 +136,32 @@ case "$ACTION" in
     "$FD_STATE" set ".issues" "(.issues | del(.[\"$ISSUE\"]))"
     ;;
 
+  reconcile)
+    # Drop entries whose tmux windows no longer exist. Called by watch.md § 1
+    # at startup to clean up stale registry state from prior sessions.
+    SESSION=$(tmux display-message -p '#S' 2>/dev/null || echo unknown)
+    LIVE_WINDOWS=$(tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | sort -u || true)
+    REGISTERED=$("$FD_STATE" get '.issues // {} | keys[]?' 2>/dev/null | tr -d '"' || true)
+    DROPPED=()
+    while IFS= read -r issue; do
+      [[ -z "$issue" ]] && continue
+      window=$("$FD_STATE" get ".issues[\"$issue\"].window // empty" | tr -d '"')
+      if [[ -n "$window" ]] && ! grep -qx "$window" <<< "$LIVE_WINDOWS"; then
+        "$FD_STATE" set ".issues" "(.issues | del(.[\"$issue\"]))"
+        DROPPED+=("$issue")
+      fi
+    done <<< "$REGISTERED"
+    if [[ ${#DROPPED[@]} -gt 0 ]]; then
+      printf 'reconciled: dropped %d stale entr%s (%s)\n' \
+        "${#DROPPED[@]}" \
+        "$([ ${#DROPPED[@]} -eq 1 ] && echo y || echo ies)" \
+        "$(IFS=,; echo "${DROPPED[*]}")"
+    fi
+    ;;
+
   *)
     echo "Unknown action: $ACTION" >&2
-    echo "Actions: init | list | get | set-state | set-substate | set | log-decision | remove" >&2
+    echo "Actions: init | list | get | set-state | set-substate | set | log-decision | remove | reconcile" >&2
     exit 2
     ;;
 esac

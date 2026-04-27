@@ -18,7 +18,11 @@ Master mode entry point. Polls every spawned issue pane, classifies their prompt
    .agents/skills/flightdeck/scripts/flightdeck-state init
    ```
    Idempotent — preserves an existing state file if one exists (compaction-recovery path).
-3. For each `ISSUE_ID` in the spawn batch, build / refresh registry entry:
+3. Reconcile registry against live tmux windows (drops stale entries from prior sessions whose windows are gone):
+   ```
+   .agents/skills/flightdeck/scripts/pane-registry reconcile
+   ```
+4. For each `ISSUE_ID` in the spawn batch, build / refresh registry entry:
    - Look up the spawned window by name (`open-terminal` names windows after the issue ID, lowercased).
    - Determine harness from the agent process running in pane 0 (`tmux list-panes -t <session>:<window> -F '#{pane_index} #{pane_current_command}'`).
    - Determine worktree path (passed by `start.md`; cross-check `git worktree list`).
@@ -28,7 +32,7 @@ Master mode entry point. Polls every spawned issue pane, classifies their prompt
      .agents/skills/flightdeck/scripts/pane-registry init <ISSUE_ID> \
        --window <window-name> --harness <h> --worktree <path> --pane-index <N>
      ```
-4. If resuming, recompute the conflict graph against the live PR set in case PRs moved during compaction:
+5. If resuming, recompute the conflict graph against the live PR set in case PRs moved during compaction:
    ```
    .agents/skills/flightdeck/scripts/pr-conflict-graph <PR1> <PR2> ...
    ```

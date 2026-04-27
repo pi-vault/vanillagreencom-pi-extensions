@@ -105,7 +105,7 @@ Lessons distilled from real multi-issue session experience are grouped by domain
 | `open-terminal` | Launch worktree(s) for one or more issues with auto-detected harness — **never hand-roll tmux/terminal commands; use this for every session spawn** |
 | `parallel-groups` | Read/manage parallel issue groups |
 | `flightdeck-state` | Master-state CRUD wrapper — atomic init/get/set/append/increment for `tmp/flightdeck-state-<TMUX_SESSION>.json` |
-| `pane-registry` | Issue↔pane mapping CRUD (init from spawned issue list, list, update state per issue) |
+| `pane-registry` | Issue↔pane mapping CRUD (init from spawned issue list, list, update state per issue, reconcile against live tmux windows to drop stale entries) |
 | `pane-poll` | Single-window status read: bell flag + `capture-pane -t <session>:<window>.0 -p -S -200` + classify |
 | `pane-respond` | Send a response to a pane. Three modes: positional `<payload>` for free-text, `--option N` for numeric option pick (harness-aware: Claude Code uses arrow navigation, NOT digit-as-shortcut), `--keys k1,k2,...` for multi-step forms (toggle / advance page / submit). Validates rebase-multi-choice payloads include the preserve/apply/verify triplet |
 | `pane-clear-bell` | Atomic chained-command bell clear (no flicker) |
