@@ -69,6 +69,26 @@ See `patterns/prompt-handlers.md` § Handler: `rebase-multi-choice`.
 
 ---
 
+## § 4.5: Handler — `force-push-prompt`
+
+Per-issue agent has prompted to force-push (typically over an orphan or diverged remote ref). Master auto-approves only when the push is bounded.
+
+### Auto-approve predicate
+
+All must be true:
+
+1. The push uses `--force-with-lease` (NOT `--force`). Re-read the prompt buffer and confirm the lease flag is present in the proposed command.
+2. No other in-flight session's PR depends on this branch's remote ref. Cross-check `pr-conflict-graph` against the issue's branch.
+3. The branch's last remote commit author equals the current orchestrator's identity (no foreign commits on remote that would be silently dropped).
+
+If the predicate is satisfied → answer the affirmative option via `pane-respond <pane> --option <N>`.
+
+If any clause fails → escalate (`paused_for_user`) with the failing reason named (`"force-push without --force-with-lease"`, `"sibling PR depends on this ref"`, `"foreign author on remote — confirm intentional"`).
+
+Log decision via `pane-registry log-decision`.
+
+---
+
 ## § 5: Handler — `audit-relation-prompt`
 
 See `patterns/prompt-handlers.md` § Handler: `audit-relation-prompt`.

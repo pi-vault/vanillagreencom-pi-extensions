@@ -63,6 +63,7 @@ For each tracked issue currently in a non-terminal state (`waiting | prompting |
    | `cleanup-prompt` | `prompting` | substate = tag |
    | `bot-review-wait-stuck` | `prompting` | substate = tag |
    | `rebase-multi-choice` | `prompting` | substate = tag |
+   | `force-push-prompt` | `prompting` | substate = tag |
    | `audit-relation-prompt` | `prompting` | substate = tag |
    | `merge-now` | `prompting` | substate = tag |
    | `merge-ready-but-unknown` | `prompting` | substate = tag; if `unknown_since` is null, set it now |

@@ -20,6 +20,7 @@
 #   merge-now                  - "PR ... is approved with CI passing. Merge now?"
 #   bot-review-wait-stuck      - bot-review-wait timeout with Skip/Wait/Abort options
 #   rebase-multi-choice        - merge-conflict resolution prompt
+#   force-push-prompt          - confirm force push (typically --force-with-lease over orphan/diverged remote)
 #   cleanup-prompt             - worktree cleanup post-merge / on abort
 #   audit-relation-prompt      - issue-audit creating new issues with structure column
 #   descope-related            - reconciliation suggesting child-issue descope
@@ -114,6 +115,13 @@ fi
 # rebase-multi-choice
 if grep -qE 'merge conflicts|How should I resolve.*conflicts|Rebase \+ force push' <<< "$buf"; then
   emit rebase-multi-choice "rebase-conflict prompt"
+fi
+
+# force-push-prompt — confirm a force push (typically --force-with-lease over
+# an orphan/diverged remote ref). Distinct from rebase-multi-choice which is
+# about resolving merge conflicts. Sentinels match common phrasings.
+if grep -qE 'Force[- ]push (to|over|the)|--force-with-lease|push.*\?.*force|Confirm force push' <<< "$buf"; then
+  emit force-push-prompt "force-push confirmation"
 fi
 
 # cleanup-prompt (post-merge or on-abort worktree removal)
