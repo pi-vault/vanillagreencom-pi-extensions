@@ -127,8 +127,15 @@ Inner pane's shell is dead because the worktree was removed mid-session. After t
 | Harness | Mechanic |
 |---------|----------|
 | Claude Code | `(N-1) × Down` then `Enter`. Numbers are NOT shortcuts; they're buffered as text. |
-| codex | (TBD) |
-| opencode | (TBD) |
+| codex | (TBD — verify before wiring; do not assume Claude Code's mechanic.) |
+| opencode | (TBD — verify before wiring. Workaround callers have used: `--keys Enter,Tab,Enter` to confirm the default-highlighted option, but this is fragile and only works when the desired option is the default. Real adapter needed.) |
+
+To add an adapter for a new harness:
+1. Verify the actual keystroke contract by inspecting the harness's TUI in interactive use.
+2. Add a `<harness>_select_option` function in `scripts/pane-respond` next to `claude_select_option`.
+3. Register it in the `select_option_for_harness` dispatch case.
+4. Update this table with the mechanic.
+5. Smoke-test against the harness with options 1, 2, and 3 to confirm correct routing.
 
 ### Capture viewport (script: `pane-poll` `--harness` flag)
 

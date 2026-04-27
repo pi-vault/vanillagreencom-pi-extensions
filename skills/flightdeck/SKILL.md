@@ -210,6 +210,14 @@ The user-visible output blocks at the end of `terminate.md` and `close-issue.md`
    - **Other harnesses**: use the equivalent (codex/opencode each have their own scheduling tool). If the harness has none, document the fallback in `patterns/tmux-monitoring.md` for that harness's adapter; do NOT introduce a `sleep` workaround.
 7. **All scripts must appear in this SKILL.md's Scripts table.** No "hidden" scripts. README.md mirrors the table for human readers.
 
+## Known Limitations
+
+### No bell-driven wake
+
+Master sleeps via the harness scheduler (`ScheduleWakeup` on Claude Code) and only checks tmux bell flags when it next wakes. Worst-case prompt-response latency = the chosen `delaySeconds`. Tmux bells DO fire and propagate, but they're data, not a wake trigger.
+
+A bell-driven wake would require: a tmux hook (`set-hook -g alert-bell <command>`) that writes a bell event to a file, plus a lightweight watcher running outside the agent's main loop that signals master. Standard agent harnesses don't currently support out-of-loop signal injection, so this stays a documented limitation. Mitigation: tighten `delaySeconds` per § Adaptive cadence in `watch.md` § 6 step 3 when issues are in `prompting` state.
+
 ## Compaction Recovery
 
 Master state is persisted on every state mutation. On `watch` re-entry:
