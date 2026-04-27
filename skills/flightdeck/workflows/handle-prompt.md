@@ -140,7 +140,40 @@ The agent's reconciliation pass found that a sibling issue's scope has been part
 
 ---
 
-## § 10: Handler — `generic-multi-choice`
+## § 10: Handler — `bash-permission-prompt`
+
+The harness is asking permission to run a bash command. Default state is bypass-enabled (`--dangerously-skip-permissions` for Claude Code, pre-flight `bypassPermissions` settings file) so this prompt should be rare. It surfaces when:
+
+- Bypass was opted out via `OPEN_TERMINAL_NO_BYPASS=1` / `OPEN_TERMINAL_NO_BYPASS_SETTINGS=1`.
+- Harness has no bypass flag wired yet (codex / opencode adapters TBD).
+- A specific command pattern bypassed the harness's allowlist (e.g., shell substitutions tripping the parser).
+
+### Allowlist auto-approve
+
+Master maintains a regex allowlist of command patterns that are safe to auto-approve. The allowlist is conservative — anything not matching escalates.
+
+Patterns to match (from the prompt's command excerpt):
+
+| Pattern | Why safe |
+|---------|----------|
+| `\.agents/skills/[^/]+/scripts/[^/]+` | Vstack-installed skill scripts (orchestration's `workflow-state`, github skill commands, linear CLI, etc.) — these are part of the skill contract |
+| `^gh (pr (view|list|files|diff|checks)|issue view|run (list|view))` | Read-only `gh` calls |
+| `^git (status|log|diff|show|rev-parse|fetch|worktree list)` | Read-only git |
+| `^tmux (capture-pane|list-(windows|panes)|display-message|send-keys|select-window)` | Pane observation and response (master's own primitives, indirectly) |
+| `^(jq|cat|head|tail|grep|awk|sed|wc|sort|uniq|tr|cut)\s` | Read-only text processing |
+| `^(linear)\s` | Linear CLI wrapper handles its own auth and scope |
+
+### Decision
+
+1. Extract the proposed command from the prompt buffer.
+2. If the command matches any allowlist pattern → answer the "Allow once" / "Yes" option via `pane-respond <pane> --option <N>`.
+3. Otherwise → escalate. The user reviews and either approves once, approves always (which the harness records), or denies.
+
+Allowlist additions are skill-level concerns, not project-level. If a project frequently sees a non-allowlisted prompt for a routine command, the right response is usually to add the command's wrapper to a skill, not to widen the allowlist for arbitrary patterns.
+
+---
+
+## § 11: Handler — `generic-multi-choice`
 
 No specific tag matched. The classifier returned a generic option-list — bounded numeric options, possibly with a "(recommended)" marker on one option, possibly with a "Type something" free-text option at the end.
 

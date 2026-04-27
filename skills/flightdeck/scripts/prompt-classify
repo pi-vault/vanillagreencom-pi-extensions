@@ -14,6 +14,7 @@
 # Tags (in match-priority order):
 #   rendering                  - prompt isn't fully painted yet
 #   terminal-state-reached     - inner pane has signaled work-complete, end-the-session, or destroyed-cwd
+#   bash-permission-prompt     - harness asking for explicit permission to run a bash command
 #   force-merge-confirm        - "Force merge?" dialog after extended UNKNOWN
 #   merge-ready-but-unknown    - "Mergeable status still UNKNOWN"
 #   merge-now                  - "PR ... is approved with CI passing. Merge now?"
@@ -71,6 +72,13 @@ if ! grep -qE '(Enter to (select|toggle|submit)|↑.*↓ (to )?navigate|esc.*dis
 fi
 
 # Specific-shape sentinels in priority order. Most specific first.
+
+# bash-permission-prompt — harness asking for permission to run a bash command.
+# Most common when --dangerously-skip-permissions (or equivalent) is NOT set on
+# the inner agent. Sentinels match common harness phrasings.
+if grep -qE 'Bash command requires permission|Allow command\?|Run this command\?|requires permission to run' <<< "$buf"; then
+  emit bash-permission-prompt "permission prompt"
+fi
 
 # terminal-state-reached — work complete, session over, no further prompts coming.
 # Portable signals (any harness):

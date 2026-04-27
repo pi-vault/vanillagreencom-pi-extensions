@@ -52,6 +52,7 @@ For each tracked issue currently in a non-terminal state (`waiting | prompting |
    | `idle` | unchanged | nothing to do |
    | `rendering` | unchanged | re-poll next cycle |
    | `terminal-state-reached` | (handled below) | route to `close-issue.md`; do not enter `prompting` |
+   | `bash-permission-prompt` | `prompting` | substate = tag |
    | `cleanup-prompt` | `prompting` | substate = tag |
    | `bot-review-wait-stuck` | `prompting` | substate = tag |
    | `rebase-multi-choice` | `prompting` | substate = tag |
