@@ -10,6 +10,8 @@
 #   pane-registry set <ISSUE> <field> <json-value>      # arbitrary field write
 #   pane-registry log-decision <ISSUE> <prompt-tag> <answer>
 #   pane-registry remove <ISSUE>
+#   pane-registry remove-merged                          # drop terminal-state issues with closed windows
+#   pane-registry reconcile                              # drop entries whose windows no longer exist
 #
 # All commands operate on the master state for the current $TMUX session
 # (override via FLIGHTDECK_STATE_DIR + flightdeck-state --session).
@@ -158,6 +160,36 @@ case "$ACTION" in
     "$FD_STATE" set ".issues" "(.issues | del(.[\"$ISSUE\"]))"
     ;;
 
+  remove-merged)
+    # Drop registry entries for issues in terminal state (merged|aborted|dead)
+    # whose tmux windows are already gone. Called by terminate.md § 5 before
+    # archive so the archived state file is scoped to actually-tracked
+    # issues, not zombie post-merge entries.
+    SESSION=$(tmux display-message -p '#S' 2>/dev/null || echo unknown)
+    LIVE_WINDOWS=$(tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | sort -u || true)
+    REGISTERED=$("$FD_STATE" get '.issues // {} | keys[]?' 2>/dev/null | tr -d '"' || true)
+    DROPPED=()
+    while IFS= read -r issue; do
+      [[ -z "$issue" ]] && continue
+      state=$("$FD_STATE" get ".issues[\"$issue\"].state // empty" | tr -d '"')
+      window=$("$FD_STATE" get ".issues[\"$issue\"].window // empty" | tr -d '"')
+      case "$state" in
+        merged|aborted|dead) ;;
+        *) continue ;;
+      esac
+      if [[ -n "$window" ]] && ! grep -qx "$window" <<< "$LIVE_WINDOWS"; then
+        "$FD_STATE" set ".issues" "(.issues | del(.[\"$issue\"]))"
+        DROPPED+=("$issue:$state")
+      fi
+    done <<< "$REGISTERED"
+    if [[ ${#DROPPED[@]} -gt 0 ]]; then
+      printf 'remove-merged: dropped %d entr%s (%s)\n' \
+        "${#DROPPED[@]}" \
+        "$([ ${#DROPPED[@]} -eq 1 ] && echo y || echo ies)" \
+        "$(IFS=,; echo "${DROPPED[*]}")"
+    fi
+    ;;
+
   reconcile)
     # Drop entries whose tmux windows no longer exist. Called by watch.md § 1
     # at startup to clean up stale registry state from prior sessions.
@@ -183,7 +215,7 @@ case "$ACTION" in
 
   *)
     echo "Unknown action: $ACTION" >&2
-    echo "Actions: init | list | get | set-state | set-substate | set | log-decision | remove | reconcile" >&2
+    echo "Actions: init | list | get | set-state | set-substate | set | log-decision | remove | remove-merged | reconcile" >&2
     exit 2
     ;;
 esac
