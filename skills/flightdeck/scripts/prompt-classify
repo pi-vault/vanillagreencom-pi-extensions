@@ -102,13 +102,17 @@ if grep -qE 'Mergeable status (stuck|still) UNKNOWN|GitHub mergeable status (stu
   emit merge-ready-but-unknown "UNKNOWN-state notice"
 fi
 
-# merge-now offer
-if grep -qE 'is approved.*CI passing.*Merge( it)? now|approved with CI passing.*Merge now' <<< "$buf"; then
+# merge-now offer. Broadened (Run 4): orchestration sometimes prompts with
+# the bare "Merge PR #N now?" form, and opencode sometimes wraps the line
+# differently. Match the "merge ... now" intent rather than the exact
+# preamble — gated by the option-list footer above so banners don't trip.
+if grep -qE 'is approved.*CI passing.*Merge( it)? now|approved with CI passing.*Merge now|Merge( the)? PR #?[0-9]+ now\??|Merge now\??' <<< "$buf"; then
   emit merge-now "merge-ready confirmation"
 fi
 
-# bot-review-wait stuck
-if grep -qE 'No bot review comments were found|Bot review hasn.t started|bot review verdict.*pending' <<< "$buf"; then
+# bot-review-wait stuck. Broadened (Run 4): opencode renders the prompt
+# with Skip/Wait/Abort options on a stuck bot review.
+if grep -qE 'No bot review comments were found|Bot review hasn.t started|bot review verdict.*pending|bot[- ]review[- ]wait.*(stuck|stalled|timed out)|Skip.*Wait.*Abort' <<< "$buf"; then
   emit bot-review-wait-stuck "bot-review timeout"
 fi
 

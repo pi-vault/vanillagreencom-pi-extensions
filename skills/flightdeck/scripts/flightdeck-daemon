@@ -65,6 +65,8 @@
 #                                   for this long after first sighting.
 #                                   Prevents cold-start TUI banners from
 #                                   firing classifier wakes.
+#   FD_OPENCODE_STABILITY 5         Stability threshold for opencode panes
+#                                   (mid-frame churn requires longer settle).
 set -euo pipefail
 
 # Resolve daemon state dir + session-keyed file paths via shared helper so
@@ -88,6 +90,9 @@ WAKE_PENDING_TTL="${FD_WAKE_PENDING_TTL:-300}"
 HEARTBEAT_TICKS="${FD_HEARTBEAT_TICKS:-60}"
 MAX_LIFETIME="${FD_MAX_LIFETIME:-14400}"  # 4h; 0 disables
 GRACE_SEC="${FD_GRACE_SEC:-30}"           # cold-start wake-suppression window
+# opencode TUI has higher mid-frame hash churn than Claude Code; bump
+# stability threshold for opencode panes specifically.
+OPENCODE_STABILITY_SEC="${FD_OPENCODE_STABILITY:-5}"
 
 # Canonical classifier tag allowlist for stable-wake. Only these wake the
 # master from a stable buffer. Bell wake is independent and unconditional.
@@ -119,7 +124,7 @@ is_canonical_tag() {
 
 usage() { cat >&2 <<EOF
 Usage:
-  flightdeck-daemon start       --session <S> --master <pane> --inner <p1>[,<p2>...] [--foreground|--in-tmux-window]
+  flightdeck-daemon start       --session <S> --master <pane> --inner <p1>[,<p2>...] [--inner-harnesses <h1>[,<h2>...]] [--foreground|--in-tmux-window] [--debug-pane <pane_id>]
   flightdeck-daemon stop        --session <S>
   flightdeck-daemon status      --session <S>
   flightdeck-daemon health      --session <S>     # operator-friendly diagnosis
@@ -146,16 +151,19 @@ ORIG_ARGS=("$@")
 
 ACTION="${1:-}"; [[ -z "$ACTION" ]] && usage; shift
 
-SESSION_NAME="" MASTER_TARGET="" INNER_TARGETS=""
+SESSION_NAME="" MASTER_TARGET="" INNER_TARGETS="" INNER_HARNESSES=""
 FOREGROUND=0
 SPAWN_MODE="${FD_SPAWN_MODE:-detach}"  # detach | tmux-window
+DEBUG_PANE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --session) SESSION_NAME="$2"; shift 2 ;;
     --master)  MASTER_TARGET="$2"; shift 2 ;;
     --inner)   INNER_TARGETS="$2"; shift 2 ;;
+    --inner-harnesses) INNER_HARNESSES="$2"; shift 2 ;;
     --foreground|--no-detach) FOREGROUND=1; shift ;;
     --in-tmux-window) SPAWN_MODE="tmux-window"; shift ;;
+    --debug-pane) DEBUG_PANE="$2"; shift 2 ;;
     *) echo "unknown arg: $1" >&2; usage ;;
   esac
 done
@@ -292,9 +300,11 @@ session_alive() {
 }
 
 # --- Capture strategy (per harness) -------------------------------------------
+# Harness arg is per-pane (from PANE_HARNESS map populated at run_loop init);
+# falls back to the global FD_HARNESS env if no per-pane mapping was passed.
 capture_pane() {
-  local target="$1"
-  case "$HARNESS" in
+  local target="$1" pane_harness="${2:-$HARNESS}"
+  case "$pane_harness" in
     opencode)
       # opencode TUI scrolls rendered buffer above viewport; -S returns stale
       # middle content. Visible viewport only.
@@ -303,6 +313,15 @@ capture_pane() {
     *)
       tmux capture-pane -t "$target" -p -S "-${CAPTURE_LINES}" 2>/dev/null
       ;;
+  esac
+}
+
+# Per-pane stability threshold. opencode's mid-frame churn requires a
+# longer settle window before classifying.
+stability_for_harness() {
+  case "$1" in
+    opencode) echo "$OPENCODE_STABILITY_SEC" ;;
+    *)        echo "$STABILITY_SEC" ;;
   esac
 }
 
@@ -680,8 +699,19 @@ clear_bell_for_window() {
 
 # --- Main loop -----------------------------------------------------------------
 run_loop() {
-  declare -A LAST_HASH HASH_SINCE NOTIFIED_HASH LAST_BELL_HASH LAST_GONE_LOG FIRST_SEEN
+  declare -A LAST_HASH HASH_SINCE NOTIFIED_HASH LAST_BELL_HASH LAST_GONE_LOG FIRST_SEEN PANE_HARNESS
   IFS=',' read -r -a INNER_TARGET_ARR <<< "$INNER_TARGETS"
+  # Parallel harness list. Caller passes either the same length as
+  # --inner (per-pane mapping) or omits it entirely (fallback to global
+  # FD_HARNESS or "" for unspecified).
+  declare -a INNER_HARNESS_ARR=()
+  if [[ -n "$INNER_HARNESSES" ]]; then
+    IFS=',' read -r -a INNER_HARNESS_ARR <<< "$INNER_HARNESSES"
+    if (( ${#INNER_HARNESS_ARR[@]} != ${#INNER_TARGET_ARR[@]} )); then
+      echo "Error: --inner-harnesses count (${#INNER_HARNESS_ARR[@]}) != --inner count (${#INNER_TARGET_ARR[@]})" >&2
+      exit 2
+    fi
+  fi
 
   local master_id
   master_id=$(resolve_pane_id "$MASTER_TARGET") || {
@@ -689,6 +719,7 @@ run_loop() {
 
   declare -a INNER_IDS=()
   declare -A SEEN_INNER=()
+  local idx=0
   for t in "${INNER_TARGET_ARR[@]}"; do
     local id
     id=$(resolve_pane_id "$t") || { echo "Error: cannot resolve inner pane '$t'" >&2; exit 2; }
@@ -702,6 +733,8 @@ run_loop() {
     fi
     SEEN_INNER[$id]=1
     INNER_IDS+=("$id")
+    PANE_HARNESS[$id]="${INNER_HARNESS_ARR[$idx]:-$HARNESS}"
+    (( idx++ ))
   done
 
   local HEARTBEAT_COUNTER=0
@@ -792,12 +825,21 @@ run_loop() {
       [[ -z "$target" ]] && continue
       local win_id
       win_id=$(window_id_for_pane "$inner_id")
+      local pane_harness="${PANE_HARNESS[$inner_id]:-$HARNESS}"
       local bell
       bell=$(tmux display-message -p -t "$target" '#{window_bell_flag}' 2>/dev/null || echo 0)
       local buf
-      buf=$(capture_pane "$target" || echo "")
+      buf=$(capture_pane "$target" "$pane_harness" || echo "")
       local hash
       hash=$(printf '%s' "$buf" | sha256sum | cut -d' ' -f1 | head -c 12)
+      local stab; stab=$(stability_for_harness "$pane_harness")
+
+      # Per-tick debug-pane hook: log every observation for the targeted
+      # pane so missed wakes can be diagnosed without external capture.
+      if [[ -n "$DEBUG_PANE" && "$DEBUG_PANE" == "$inner_id" ]]; then
+        local _dbg_tag; _dbg_tag=$(classify_buffer "$buf")
+        log debug-pane "$inner_id harness=$pane_harness bell=$bell hash=$hash stable=$stab tag=$_dbg_tag in_grace=$in_grace pane_age=${pane_age}s"
+      fi
 
       local prev_hash="${LAST_HASH[$inner_id]:-}"
       local prev_since="${HASH_SINCE[$inner_id]:-0}"
@@ -831,7 +873,7 @@ run_loop() {
       fi
 
       local age=$(( now - prev_since ))
-      if (( age >= STABILITY_SEC )) && [[ "${NOTIFIED_HASH[$inner_id]:-}" != "$hash" ]]; then
+      if (( age >= stab )) && [[ "${NOTIFIED_HASH[$inner_id]:-}" != "$hash" ]]; then
         local tag; tag=$(classify_buffer "$buf")
         # Cold-start grace: classify for visibility but skip wake firing.
         if (( in_grace == 1 )) && is_canonical_tag "$tag"; then
