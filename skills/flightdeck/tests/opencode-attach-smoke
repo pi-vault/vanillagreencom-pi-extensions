@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# Phase 1 smoke test — opencode HTTP-attach adapter end-to-end.
+#
+# Verifies: port allocator, /usr/bin/opencode --port spawn, session
+# discovery via GET /session, run --attach JSON event stream completes
+# with step_finish reason=stop + the assistant echoes the message,
+# /session/<id>/message returns user + assistant pair, port release on
+# teardown.
+#
+# Assertions never use `tmux send-keys` or `tmux capture-pane`. The test
+# spawns a real tmux window for visualization; the adapter's contract is
+# verified entirely via HTTP + the opencode CLI.
+#
+# Requires: $TMUX set, /usr/bin/opencode (or opencode in PATH that isn't
+# an alias), curl, jq, flock.
+#
+# Usage: tests/opencode-attach-smoke
+# Exits 0 on success, non-zero on failure with diagnostic output.
+
+set -euo pipefail
+
+TEST_NAME="opencode-attach-smoke"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPTS="$SKILL_DIR/scripts"
+
+# shellcheck source=../scripts/lib/oc-paths.sh
+source "$SCRIPTS/lib/oc-paths.sh"
+
+red()    { printf '\033[31m%s\033[0m\n' "$*" >&2; }
+green()  { printf '\033[32m%s\033[0m\n' "$*"; }
+note()   { printf '  %s\n' "$*"; }
+fail()   { red "FAIL[$TEST_NAME]: $*"; cleanup; exit 1; }
+
+# --- Preflight ---------------------------------------------------------------
+[[ -z "${TMUX:-}" ]] && fail "must run inside a tmux session"
+for cmd in curl jq flock sha256sum; do
+  command -v "$cmd" >/dev/null 2>&1 || fail "missing required cmd: $cmd"
+done
+OC_BIN=""
+if [[ -x /usr/bin/opencode ]]; then
+  OC_BIN=/usr/bin/opencode
+else
+  OC_BIN=$(type -P opencode 2>/dev/null || true)
+fi
+[[ -z "$OC_BIN" || ! -x "$OC_BIN" ]] && fail "opencode binary not found (PATH or /usr/bin)"
+
+# --- Isolation ---------------------------------------------------------------
+TEST_TMPDIR=$(mktemp -d -t fd-oc-smoke-XXXXXX)
+WORKTREE="$TEST_TMPDIR/worktree"
+mkdir -p "$WORKTREE"
+ABS_WORKTREE=$(cd "$WORKTREE" && pwd)
+
+export FD_STATE_DIR="$TEST_TMPDIR/state"
+mkdir -p "$FD_STATE_DIR"
+chmod 0700 "$FD_STATE_DIR"
+
+ISSUE="SMOKE-TEST-1"
+WINDOW_NAME="oc-smoke-$$"
+TEST_WINDOW=""
+ALLOCATED_PORT=""
+
+cleanup() {
+  if [[ -n "$TEST_WINDOW" ]]; then
+    tmux kill-window -t "$TEST_WINDOW" 2>/dev/null || true
+  fi
+  if [[ -n "$ALLOCATED_PORT" ]]; then
+    oc_release_port "$ALLOCATED_PORT" 2>/dev/null || true
+  fi
+  rm -rf "$TEST_TMPDIR"
+}
+trap cleanup EXIT INT TERM
+
+# --- Step 1: allocate port + spawn opencode ----------------------------------
+note "step 1: allocate port + spawn opencode TUI in test tmux window"
+ALLOCATED_PORT=$(oc_alloc_port "$ISSUE") || fail "oc_alloc_port returned non-zero"
+[[ "$ALLOCATED_PORT" =~ ^[0-9]+$ ]] || fail "allocated port not numeric: $ALLOCATED_PORT"
+note "  port=$ALLOCATED_PORT"
+
+CMD=$(printf "%s %q --port %s --hostname 127.0.0.1 --dangerously-skip-permissions --prompt %q" \
+        "$OC_BIN" "$ABS_WORKTREE" "$ALLOCATED_PORT" "READY-CHECK")
+
+SESSION_NAME=$(tmux display-message -p '#S')
+LAST_IDX=$(tmux list-windows -t "$SESSION_NAME" -F '#{window_index}' | tail -1)
+tmux new-window -d -a -t "${SESSION_NAME}:${LAST_IDX}" -n "$WINDOW_NAME" -c "$ABS_WORKTREE" "$CMD"
+TEST_WINDOW="${SESSION_NAME}:${WINDOW_NAME}"
+note "  spawned in tmux window $TEST_WINDOW"
+
+# --- Step 2: poll GET /session for session matching directory ---------------
+note "step 2: poll GET /session for session matching directory"
+SESSION_ID=""
+deadline=$((SECONDS + 30))
+while (( SECONDS < deadline )); do
+  resp=$(curl -s --max-time 5 "http://127.0.0.1:$ALLOCATED_PORT/session" 2>/dev/null || echo "")
+  if [[ -n "$resp" ]]; then
+    SESSION_ID=$(jq -r --arg dir "$ABS_WORKTREE" '
+      ( . // [] )
+      | ( if type == "object" then (.sessions // .data // .items // []) else . end )
+      | map(select((.directory // .cwd // "") == $dir))
+      | sort_by(.created_at // .createdAt // .updated_at // .updatedAt // 0)
+      | last
+      | (.id // "")
+    ' <<< "$resp" 2>/dev/null || echo "")
+    if [[ -n "$SESSION_ID" && "$SESSION_ID" != "null" ]]; then
+      break
+    fi
+  fi
+  sleep 1
+done
+[[ -z "$SESSION_ID" || "$SESSION_ID" == "null" ]] && fail "session discovery timed out (port=$ALLOCATED_PORT, dir=$ABS_WORKTREE)"
+note "  session_id=$SESSION_ID"
+
+# --- Step 3: run --attach with SMOKE-OK assertion ---------------------------
+note "step 3: opencode run --attach --format json (echo SMOKE-OK)"
+ATTACH_OUT=$(timeout 60 "$OC_BIN" run --attach \
+              --url "http://127.0.0.1:$ALLOCATED_PORT" \
+              --session "$SESSION_ID" \
+              --format json -- "respond literally with the text SMOKE-OK and nothing else" 2>&1) \
+  || fail "opencode run --attach exit non-zero: $ATTACH_OUT"
+
+if ! grep -qE '"type"\s*:\s*"step_finish"|"reason"\s*:\s*"stop"' <<< "$ATTACH_OUT"; then
+  red "  no step_finish reason=stop in event stream:"
+  echo "$ATTACH_OUT" | head -n 30 >&2
+  fail "step_finish/reason=stop missing from event stream"
+fi
+if ! grep -q "SMOKE-OK" <<< "$ATTACH_OUT"; then
+  red "  SMOKE-OK not echoed in event stream:"
+  echo "$ATTACH_OUT" | head -n 30 >&2
+  fail "assistant did not echo SMOKE-OK"
+fi
+note "  step_finish + SMOKE-OK observed"
+
+# --- Step 4: GET /session/<id>/message contains user + assistant ------------
+note "step 4: GET /session/$SESSION_ID/message contains user + assistant"
+MSG=$(curl -s --max-time 5 "http://127.0.0.1:$ALLOCATED_PORT/session/$SESSION_ID/message" 2>/dev/null || echo "")
+[[ -z "$MSG" ]] && fail "/session/<id>/message returned empty"
+
+USER_PRESENT=$(jq -r '
+  ( . // [] )
+  | ( if type == "object" then (.messages // .data // .items // []) else . end )
+  | map(select(((.role // .message.role) // "") == "user")) | length
+' <<< "$MSG" 2>/dev/null || echo "0")
+ASSISTANT_PRESENT=$(jq -r '
+  ( . // [] )
+  | ( if type == "object" then (.messages // .data // .items // []) else . end )
+  | map(select(((.role // .message.role) // "") == "assistant")) | length
+' <<< "$MSG" 2>/dev/null || echo "0")
+(( USER_PRESENT >= 1 ))      || fail "no user message in /message response"
+(( ASSISTANT_PRESENT >= 1 )) || fail "no assistant message in /message response"
+note "  user_count=$USER_PRESENT assistant_count=$ASSISTANT_PRESENT"
+
+# --- Step 5: extract last assistant text via the production jq filter -------
+note "step 5: OC_LAST_ASSISTANT_JQ extracts non-empty assistant text"
+LAST_TEXT=$(jq -r "$OC_LAST_ASSISTANT_JQ" <<< "$MSG" 2>/dev/null || echo "")
+[[ -z "$LAST_TEXT" ]] && fail "OC_LAST_ASSISTANT_JQ returned empty"
+note "  last_text length=${#LAST_TEXT}"
+
+# --- Step 6: kill the TUI, verify port released ------------------------------
+note "step 6: kill TUI window + release port"
+tmux kill-window -t "$TEST_WINDOW" 2>/dev/null || true
+TEST_WINDOW=""
+oc_release_port "$ALLOCATED_PORT"
+PORTS_AFTER=$(jq -r --arg p "$ALLOCATED_PORT" 'has($p)' "$(oc_ports_file)" 2>/dev/null || echo "false")
+[[ "$PORTS_AFTER" == "false" ]] || fail "port $ALLOCATED_PORT still present in ports file after release"
+ALLOCATED_PORT=""
+note "  port released"
+
+green "PASS[$TEST_NAME]"
