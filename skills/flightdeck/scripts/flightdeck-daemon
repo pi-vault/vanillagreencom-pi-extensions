@@ -727,23 +727,39 @@ PANE_REGISTRY="$_daemon_script_dir/pane-registry"
 WAKE_EVENTS_LOG=$(oc_wake_events_log "$SESSION_KEY")
 
 oc_subscriber_loop() {
+  # Run defensively: don't let the parent's set -e/pipefail kill the
+  # subscriber on a transient curl/jq hiccup. We log + retry on the
+  # next tick instead.
+  set +e
+  set +o pipefail
   local pane_id="$1" oc_url="$2" session_id="$3" parent_pid="$4"
   local last_hash=""
+  local sub_log; sub_log="${LOG}.oc-sub-$(oc_pane_id_safe "$pane_id")"
+  printf '%s [oc-sub-start] pane=%s url=%s session=%s parent=%s\n' \
+    "$(date -Iseconds)" "$pane_id" "$oc_url" "$session_id" "$parent_pid" \
+    >> "$sub_log" 2>/dev/null || true
   while true; do
-    if ! kill -0 "$parent_pid" 2>/dev/null; then exit 0; fi
+    if ! kill -0 "$parent_pid" 2>/dev/null; then
+      printf '%s [oc-sub-exit] parent gone\n' "$(date -Iseconds)" >> "$sub_log" 2>/dev/null || true
+      exit 0
+    fi
     local resp last_text hash tag text_excerpt
-    resp=$(curl -s --max-time 5 "$oc_url/session/$session_id/message" 2>/dev/null || echo "")
+    resp=$(curl -s --max-time 5 "$oc_url/session/$session_id/message" 2>/dev/null)
     if [[ -n "$resp" ]]; then
-      last_text=$(jq -r "$OC_LAST_ASSISTANT_JQ" <<< "$resp" 2>/dev/null || echo "")
+      last_text=$(jq -r "$OC_LAST_ASSISTANT_JQ" <<< "$resp" 2>/dev/null)
       if [[ -n "$last_text" ]]; then
-        hash=$(printf '%s' "$last_text" | sha256sum | cut -d' ' -f1 | head -c 12)
+        hash=$(printf '%s' "$last_text" | sha256sum | awk '{print substr($1,1,12)}')
         if [[ "$hash" != "$last_hash" ]]; then
-          if [[ -n "$CLASSIFIER" && -x "$CLASSIFIER" ]]; then
-            tag=$(printf '%s' "$last_text" | "$CLASSIFIER" 2>/dev/null || echo "rendering")
+          if [[ -n "${CLASSIFIER:-}" && -x "${CLASSIFIER:-}" ]]; then
+            tag=$(printf '%s' "$last_text" | "$CLASSIFIER" 2>/dev/null)
+            [[ -z "$tag" ]] && tag="rendering"
           else
             tag="rendering"
           fi
-          text_excerpt=$(printf '%s' "$last_text" | head -c 1024)
+          text_excerpt=$(printf '%s' "$last_text" | awk 'BEGIN{RS=""} {print substr($0,1,1024); exit}')
+          printf '%s [oc-sub-emit] pane=%s hash=%s tag=%s text_len=%s\n' \
+            "$(date -Iseconds)" "$pane_id" "$hash" "$tag" "${#last_text}" \
+            >> "$sub_log" 2>/dev/null || true
           # Append under SESSION_LOCK on a fresh FD so concurrent
           # subscribers + the main loop's drain serialize.
           ( exec 211>"$SESSION_LOCK"
@@ -760,6 +776,9 @@ oc_subscriber_loop() {
           last_hash="$hash"
         fi
       fi
+    else
+      printf '%s [oc-sub-tick] pane=%s curl_empty\n' "$(date -Iseconds)" "$pane_id" \
+        >> "$sub_log" 2>/dev/null || true
     fi
     sleep "$OC_POLL_SEC"
   done
@@ -1343,6 +1362,19 @@ case "$ACTION" in
       log stop-via-cli "pid=$pid"
     fi
     rm -f "$PID_FILE"
+    # Reap subscriber pid files explicitly. Daemon's EXIT trap may not
+    # complete cleanly under the SIGTERM-then-SIGKILL race (KILL after
+    # 0.5s grace), leaving subscriber pid files behind. Do it from the
+    # stop action directly so cleanup is deterministic.
+    shopt -s nullglob
+    for _sub_file in "$STATE_DIR"/fd-subscriber-*.pid; do
+      _sub_pid=$(cat "$_sub_file" 2>/dev/null || echo "")
+      if [[ "$_sub_pid" =~ ^[1-9][0-9]*$ ]] && kill -0 "$_sub_pid" 2>/dev/null; then
+        kill "$_sub_pid" 2>/dev/null || true
+      fi
+      rm -f "$_sub_file"
+    done
+    shopt -u nullglob
     locked_state_cleanup
     echo "stopped daemon pid=$pid"
     ;;

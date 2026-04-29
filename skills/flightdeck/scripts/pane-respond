@@ -333,7 +333,11 @@ resolve_opencode_bin() {
 # 5 on adapter failure (timeout, non-zero exit, no completion event).
 opencode_run_attach() {
   local url="$1" sid="$2" message="$3"
-  local timeout="${FD_ATTACH_TIMEOUT:-30}"
+  # Default 90s — when the session is busy with a long-running
+  # orchestration turn, run --attach piggybacks on that event stream
+  # and only emits step_finish when the background turn completes.
+  # 30s was too tight; 90s gives orchestration room to finish a step.
+  local timeout="${FD_ATTACH_TIMEOUT:-90}"
   local bin
   bin=$(resolve_opencode_bin) || {
     echo "Error: opencode binary not found" >&2
