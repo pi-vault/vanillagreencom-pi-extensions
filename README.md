@@ -2,7 +2,7 @@
 
 Cross-harness package manager for AI coding systems.
 
-Write a package once as a harness-agnostic skill, agent, or hook, then install it into Claude Code, Cursor, OpenCode, or Codex through one Rust CLI.
+Write a package once as a harness-agnostic skill, agent, or hook, then install it into Claude Code, Cursor, OpenCode, Codex, or Pi through one Rust CLI.
 
 [![Rust](https://img.shields.io/badge/Rust-%20-000000?style=flat-square&logo=rust)](./cli/Cargo.toml)
 [![Ratatui](https://img.shields.io/badge/TUI-ratatui-5D3FD3?style=flat-square)](https://ratatui.rs)
@@ -10,6 +10,7 @@ Write a package once as a harness-agnostic skill, agent, or hook, then install i
 [![Cursor](https://img.shields.io/badge/Cursor-supported-0EA5E9?style=flat-square)](#supported-harnesses)
 [![OpenCode](https://img.shields.io/badge/OpenCode-supported-0EA5E9?style=flat-square)](#supported-harnesses)
 [![Codex](https://img.shields.io/badge/Codex-supported-0EA5E9?style=flat-square)](#supported-harnesses)
+[![Pi](https://img.shields.io/badge/Pi-supported-0EA5E9?style=flat-square)](#supported-harnesses)
 
 ![vstack TUI](docs/assets/vstack-tui.png)
 
@@ -202,7 +203,8 @@ source repo
         ├─ Claude Code → .claude/agents, .claude/skills, .claude/hooks, settings.json
         ├─ Cursor      → .cursor/rules
         ├─ OpenCode    → .opencode/agents, .opencode/skills, opencode.json
-        └─ Codex       → .codex/agents, .agents/skills
+        ├─ Codex       → .codex/agents, .agents/skills
+        └─ Pi          → .pi/agents, .agents/skills, .pi/packages, .pi/settings.json
 ```
 
 ### Repo Sources
@@ -221,8 +223,11 @@ Compatible repos follow the same content model:
 agents/
 skills/
 hooks/
+pi-extensions/
 vstack.toml
 ```
+
+`pi-extensions/` is optional — only include it if your repo ships Pi extension packages.
 
 ## Supported Harnesses
 
@@ -232,13 +237,25 @@ vstack.toml
 | Cursor | `.cursor/rules/*.mdc` | `.cursor/rules/<name>/` | safety rules only | project scope only |
 | OpenCode | `.opencode/agents/*.md` | `.opencode/skills/<name>/` | instructions + `opencode.json` permissions | config-dir aware |
 | Codex | `.codex/agents/*.toml` | `.agents/skills/<name>/` | safety prose in `developer_instructions` | uses `CODEX_HOME` when set |
+| Pi | `.pi/agents/*.md` | `.agents/skills/<name>/` | safety prose in agent body | extensions install to `.pi/packages/<name>` and register in `.pi/settings.json` |
 
 Global install behavior:
 
 - Claude Code: user home `~/.claude`
 - OpenCode: config-dir based, respecting `OPENCODE_CONFIG` / `OPENCODE_CONFIG_DIR`
 - Codex: `CODEX_HOME` or `~/.codex`
+- Pi: `~/.pi/agent`, respecting `PI_CODING_AGENT_DIR`
 - Cursor: intentionally project-only
+
+### Pi notes
+
+Pi has no built-in subagent mechanism, so installed `.pi/agents/*.md` files are inert until you also install a Pi extension that loads them. The `pi-session-bridge` package shipped in this repo is unrelated to subagents — it is a TUI side-channel for external controllers.
+
+vstack writes Pi agent frontmatter (`name`, `description`, `tools`, `model`, optional `pane: true`) and the same vstack-managed body sections (Required Skills, Hook Rules, Additional Instructions) used by other harnesses. Hooks have no native Pi runtime and are surfaced only as inline safety prose inside the agent body.
+
+When `vstack add` writes a Pi extension, it copies the package directory into `~/.pi/agent/packages/<name>` (or `.pi/packages/<name>` for project scope) and adds its absolute path to the `packages` array of Pi's `settings.json` — preserving any existing entries. Pi auto-loads the package on next launch.
+
+Local-path Pi packages do **not** automatically expose `bin` scripts on `PATH` (this is a Pi limitation, not a vstack one). To use the `pi-bridge` CLI shipped with `pi-session-bridge`, either symlink it into your `PATH`, run the script directly, or use the raw socket protocol. See [`pi-extensions/session-bridge/README.md`](pi-extensions/session-bridge/README.md).
 
 Windows note:
 
@@ -326,6 +343,70 @@ Windows note:
 | `pre-commit-check` | `PreToolUse` | Validates formatting and lint before commits. |
 | `post-edit-lint` | `PostToolUse` | Runs lint checks after source edits. |
 | `task-completed-check` | `TaskCompleted` | Runs final lint checks before marking work complete. |
+
+### Pi Extensions
+
+#### `pi-session-bridge`
+
+- **Purpose:** Keeps the normal interactive Pi TUI visible while exposing a Unix-socket JSONL side channel for external control and event streaming.
+- **Enables:** send prompts, steer/follow-up, abort, inspect state/history, subscribe to live events — all without tmux send-keys or pane scraping.
+- **Socket registry:** `${PI_BRIDGE_DIR:-/tmp/pi-session-bridge-$UID}/instances/<pid>.json`
+- **Socket path:** `${PI_BRIDGE_DIR:-/tmp/pi-session-bridge-$UID}/pi-<pid>.sock`
+- **CLI** (`pi-bridge`):
+  - `pi-bridge list`
+  - `pi-bridge state --pid <pid>`
+  - `pi-bridge commands --pid <pid>`
+  - `pi-bridge stream --pid <pid>`
+  - `pi-bridge send --pid <pid> "message"`
+  - `pi-bridge steer --pid <pid> "message"`
+  - `pi-bridge follow-up --pid <pid> "message"`
+  - `pi-bridge history --pid <pid> [limit]`
+  - `pi-bridge emit --pid <pid> "test event"`
+- **More:** [pi-extensions/session-bridge/README.md](pi-extensions/session-bridge/README.md).
+
+#### `pi-statusline`
+
+- **Purpose:** Replaces Pi's default footer/editor chrome with a compact Claude-style status line and `π` prompt.
+- **Shows:** repo/project, branch with worktree dirty state, model, thinking level, context window size, remaining context percent.
+- **Behavior:** wraps long input cleanly, adds one blank line below the prompt, keeps autocomplete visible.
+- **Commands:** none.
+- **Best for:** interactive Pi TUI mode. Safely degrades / no-ops in RPC, JSON, and print modes.
+- **More:** [pi-extensions/pi-statusline/README.md](pi-extensions/pi-statusline/README.md).
+
+Source layout:
+
+```text
+pi-extensions/
+└─ <name>/
+   ├─ package.json        npm-shaped, with `pi.extensions` and optional `bin`
+   ├─ extensions/*.ts     loaded by Pi via the `pi.extensions` manifest
+   ├─ bin/*               optional CLI scripts
+   └─ README.md
+```
+
+Authoring a new Pi extension package: write a `package.json` with `keywords: ["pi-package"]`, `pi.extensions`, and any `bin` scripts. vstack will pick it up automatically the next time you run `vstack add` against a source repo containing it.
+
+Updates: edit files under `pi-extensions/<name>/` in the vstack repo, then run `vstack refresh` (or `vstack add` again) — installed Pi scopes pick up the change. Users never edit the deployed copy directly.
+
+#### Settings layout
+
+vstack writes Pi's `packages` array using the relative form Pi resolves against the settings file directory:
+
+```json
+{
+  "packages": [
+    "./packages/pi-session-bridge",
+    "./packages/pi-statusline"
+  ]
+}
+```
+
+| Scope | Settings file | Packages directory |
+|---|---|---|
+| Global | `~/.pi/agent/settings.json` | `~/.pi/agent/packages/<name>/` |
+| Project | `.pi/settings.json` | `.pi/packages/<name>/` |
+
+Other entries in `settings.json` are preserved across installs and refreshes; vstack only mutates the `packages` array, dedupes the entries it owns, and writes the file back. A legacy absolute-path entry (from earlier vstack versions) is replaced with the canonical relative form on the next `vstack add`/`refresh`.
 
 ## License
 

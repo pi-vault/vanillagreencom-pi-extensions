@@ -1,6 +1,6 @@
 # vstack
 
-Cross-harness distribution system for AI coding skills, agents, and hooks. Installs into Claude Code, Cursor, OpenCode, and Codex via a Rust CLI.
+Cross-harness distribution system for AI coding skills, agents, hooks, and Pi extensions. Installs into Claude Code, Cursor, OpenCode, Codex, and Pi via a Rust CLI.
 
 ## Repo Layout
 
@@ -18,6 +18,7 @@ cli/src/
 ├── agent.rs             Agent parsing, skill/hook matching heuristics
 ├── skill.rs             Skill parsing, frontmatter dependency resolution, dep reference injection
 ├── hook.rs              Hook parsing (YAML-in-comments frontmatter from .sh files)
+├── pi_extension.rs      Pi extension package discovery, install/remove, settings.json merge
 ├── frontmatter.rs       YAML frontmatter splitting/parsing
 ├── config.rs            Lock file (JSON), project root detection, staleness/mtime helpers
 ├── mapping.rs           Source vstack.toml loader — MappingConfig (agent-skills, role-skills, hook-events)
@@ -29,11 +30,12 @@ cli/src/
 │   ├── claude.rs        → .claude/agents/*.md (skills + hooks frontmatter, "Required Skills")
 │   ├── cursor.rs        → .cursor/rules/*.mdc (description + alwaysApply + skills section)
 │   ├── opencode.rs      → .opencode/agents/*.md (YAML frontmatter + skills section)
-│   └── codex.rs         → .codex/agents/*.toml (developer_instructions + skills section)
+│   ├── codex.rs         → .codex/agents/*.toml (developer_instructions + skills section)
+│   └── pi.rs            → .pi/agents/*.md (Pi frontmatter: name, description, tools, model, pane)
 └── tui/
-    ├── mod.rs           Re-exports and shared types
+    ├── mod.rs           Re-exports and shared types (DiscoveredItems incl. pi_extensions)
     ├── install_flow.rs  Install wizard, event loop, inline update, tab mutation
-    ├── state.rs         Installed state, staleness detection, tab building
+    ├── state.rs         Installed state, staleness detection, tab building (incl. Pi Extensions tab)
     ├── summary.rs       Post-install summary screen
     ├── multiselect.rs   Selection state, scroll, toggle, confirm dialog
     └── render.rs        Ratatui rendering (header, list, status, help bar, dialog overlay)
@@ -42,16 +44,18 @@ vstack.toml              Skill/hook-to-agent mapping config (read by CLI at inst
 agents/                  12 canonical agents — role field drives per-harness access control
 skills/                  29 skill packages — each has SKILL.md with optional dependencies
 hooks/                   6 safety hooks — bash scripts with YAML comment headers
+pi-extensions/           Pi extension packages (npm-shaped). Each package has package.json with `pi.extensions`.
 skill-templates/         Templates for new skills
 ```
 
 ## Key Design Decisions
 
-- **Everything is discovered dynamically.** The CLI scans `agents/`, `skills/`, `hooks/` at runtime. No hardcoded lists.
+- **Everything is discovered dynamically.** The CLI scans `agents/`, `skills/`, `hooks/`, `pi-extensions/` at runtime. No hardcoded lists.
 - **Canonical source is harness-agnostic.** Agents, skills, and hooks contain no harness-specific syntax. Translation happens in `cli/src/harness/`.
 - **Agent `role` drives access control.** `reviewer` → read-only/subagent. `engineer` → full access/primary. `manager` → analysis only.
 - **Skill dependencies use frontmatter.** `dependencies: { required: [...], optional: [...] }` in SKILL.md.
-- **Hooks diverge by harness.** Claude Code gets native shell hooks + settings.json + agent frontmatter. Cursor gets safety `.mdc` rules. OpenCode gets `.opencode/agents/*.md` + instructions. Codex gets inline prose in `developer_instructions`.
+- **Hooks diverge by harness.** Claude Code gets native shell hooks + settings.json + agent frontmatter. Cursor gets safety `.mdc` rules. OpenCode gets `.opencode/agents/*.md` + instructions. Codex gets inline prose in `developer_instructions`. Pi has no native hook runtime — safety prose is appended to the agent body instead.
+- **Pi extensions are npm-shaped packages.** vstack copies them to `~/.pi/agent/packages/<name>` (or `.pi/packages/<name>`) and registers the path in Pi's `settings.json` `packages` array.
 - **Skill/hook attribution is config-driven.** Source `vstack.toml` `[agent-skills]` is authoritative — explicit entries skip prefix matching. `[role-skills]` adds skills to all agents of a role. Project `vstack.toml` also has `[agent-skills]` populated at install time; users can add/remove skills and refresh. Agents get a `skills:` frontmatter field and a "Required Skills" body section.
 - **Reconciliation is automatic.** After every `vstack add`, all installed agents are regenerated with the current full set of installed skills and hooks. Adding a skill after an agent updates that agent.
 - **Project root walks up from CWD.** `config::project_root()` finds `.vstack-lock.json`, `.claude/`, `.cursor/`, `.codex/`, `.opencode/`, or `.agents/` by walking parent dirs — works from subdirectories.
@@ -88,6 +92,22 @@ dependencies:
 # timeout: 30             # optional, seconds
 # ---
 ```
+
+### Pi extension package (`pi-extensions/<name>/package.json`)
+Npm-shaped manifest. vstack discovers any subdirectory containing a `package.json`.
+```json
+{
+  "name": "pi-statusline",
+  "keywords": ["pi-package"],
+  "pi": { "extensions": ["./extensions/statusline.ts"] },
+  "bin": { "pi-bridge": "./bin/pi-bridge.js" },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*"
+  }
+}
+```
+On install vstack copies `pi-extensions/<name>/` into `<scope>/packages/<name>/` and adds `./packages/<name>` to the `packages` array of Pi's `settings.json` (relative to the settings file dir). Existing entries and other settings keys are preserved; legacy absolute-path entries are replaced with the relative form. Catalog packages: `pi-session-bridge` (Unix-socket JSONL side channel + `pi-bridge` CLI), `pi-statusline` (compact Claude-style status line + `π` prompt; TUI-only, safely no-ops in RPC/JSON/print).
 
 ### Mapping config (`vstack.toml`)
 ```toml
@@ -140,11 +160,11 @@ trading-design = "Focus on dark theme with green/red accent colors for this proj
 
 ## Per-Harness Model Mapping
 
-| Canonical | Claude Code | OpenCode | Codex |
-|-----------|-------------|----------|-------|
-| `opus` | `opus[1m]` | `openai/gpt-5.5` | `gpt-5.5` (xhigh) |
-| `sonnet` | `sonnet` | `openai/gpt-5.5` | `gpt-5.5` (high) |
-| `haiku` | `haiku` | `openai/gpt-5.5` | `gpt-5.5` (medium) |
+| Canonical | Claude Code | OpenCode | Codex | Pi |
+|-----------|-------------|----------|-------|-----|
+| `opus` | `opus[1m]` | `openai/gpt-5.5` | `gpt-5.5` (xhigh) | `openai/gpt-5.5:xhigh` |
+| `sonnet` | `sonnet` | `openai/gpt-5.5` | `gpt-5.5` (high) | `openai/gpt-5.5:high` |
+| `haiku` | `haiku` | `openai/gpt-5.5` | `gpt-5.5` (medium) | `openai/gpt-5.5:medium` |
 
 ## Rules
 

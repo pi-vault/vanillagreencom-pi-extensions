@@ -28,8 +28,12 @@ pub fn run_install_flow(
     items: DiscoveredItems,
     source_selector: &SourceSelectorData,
 ) -> Result<InstallFlowResult> {
-    if items.agents.is_empty() && items.skills.is_empty() && items.hooks.is_empty() {
-        eprintln!("No agents, skills, or hooks found.");
+    if items.agents.is_empty()
+        && items.skills.is_empty()
+        && items.hooks.is_empty()
+        && items.pi_extensions.is_empty()
+    {
+        eprintln!("No agents, skills, hooks, or pi-extensions found.");
         return Ok(InstallFlowResult::Cancelled);
     }
 
@@ -74,6 +78,7 @@ pub fn run_install_flow(
         selected_agents,
         selected_skills,
         selected_hooks,
+        selected_pi_extensions,
         update_cli,
         harnesses,
         skipped_harnesses,
@@ -138,12 +143,24 @@ pub fn run_install_flow(
             .cloned()
             .collect();
 
+        let selected_pi_extensions: Vec<crate::pi_extension::PiExtension> = items
+            .pi_extensions
+            .iter()
+            .filter(|e| {
+                all_selected
+                    .iter()
+                    .any(|(tab, label)| *tab == "Pi Extensions" && *label == e.name)
+            })
+            .cloned()
+            .collect();
+
         let no_new_selection = selected_agents.is_empty()
             && selected_skills.is_empty()
             && selected_hooks.is_empty()
+            && selected_pi_extensions.is_empty()
             && !update_cli;
 
-        let (selected_agents, selected_skills, selected_hooks) =
+        let (selected_agents, selected_skills, selected_hooks, selected_pi_extensions) =
             if no_new_selection && has_installed_items {
                 (
                     items
@@ -164,14 +181,26 @@ pub fn run_install_flow(
                         .filter(|h| installed_names.contains(&h.name))
                         .cloned()
                         .collect(),
+                    items
+                        .pi_extensions
+                        .iter()
+                        .filter(|e| installed_names.contains(&e.name))
+                        .cloned()
+                        .collect(),
                 )
             } else {
-                (selected_agents, selected_skills, selected_hooks)
+                (
+                    selected_agents,
+                    selected_skills,
+                    selected_hooks,
+                    selected_pi_extensions,
+                )
             };
 
         if selected_agents.is_empty()
             && selected_skills.is_empty()
             && selected_hooks.is_empty()
+            && selected_pi_extensions.is_empty()
             && !update_cli
         {
             return Ok(InstallFlowResult::Cancelled);
@@ -410,6 +439,15 @@ pub fn run_install_flow(
                     if selected_hooks.len() == 1 { "" } else { "s" }
                 ));
             }
+            if !selected_pi_extensions.is_empty()
+                && harnesses.iter().any(|h| matches!(h, Harness::Pi))
+            {
+                count_lines.push(format!(
+                    "{} pi-extension{}",
+                    selected_pi_extensions.len(),
+                    if selected_pi_extensions.len() == 1 { "" } else { "s" }
+                ));
+            }
             if update_cli {
                 count_lines.push("CLI binary update".into());
             }
@@ -474,6 +512,7 @@ pub fn run_install_flow(
             selected_agents,
             selected_skills,
             selected_hooks,
+            selected_pi_extensions,
             update_cli,
             harnesses,
             skipped_harnesses,
@@ -486,6 +525,7 @@ pub fn run_install_flow(
         agents: selected_agents,
         skills: selected_skills,
         hooks: selected_hooks,
+        pi_extensions: selected_pi_extensions,
         harnesses,
         skipped_harnesses,
         global,
@@ -1207,12 +1247,16 @@ fn remove_installed_items(select: &mut TabbedSelect, names: &[String]) {
             let mut changed = false;
             for name in names {
                 if let Some(entry) = lock.entries.get(name).cloned() {
-                    let harnesses: Vec<Harness> = entry
-                        .harnesses
-                        .iter()
-                        .filter_map(|h| Harness::from_id(h))
-                        .collect();
-                    let _ = crate::installer::remove_item(name, &harnesses, scope_global);
+                    if entry.kind == crate::config::ItemKind::PiExtension {
+                        let _ = crate::pi_extension::remove_pi_extension(name, scope_global);
+                    } else {
+                        let harnesses: Vec<Harness> = entry
+                            .harnesses
+                            .iter()
+                            .filter_map(|h| Harness::from_id(h))
+                            .collect();
+                        let _ = crate::installer::remove_item(name, &harnesses, scope_global);
+                    }
                     lock.remove(name);
                     changed = true;
                 }
@@ -1446,6 +1490,14 @@ fn perform_inline_update(
                             &agents_for_hook,
                         );
                     }
+                }
+                crate::config::ItemKind::PiExtension => {
+                    let Some(ext) =
+                        items.pi_extensions.iter().find(|e| e.name == *name)
+                    else {
+                        continue;
+                    };
+                    let _ = crate::pi_extension::install_pi_extension(ext, scope_global);
                 }
             }
         }

@@ -19,11 +19,12 @@ pub struct LockEntry {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum ItemKind {
     Skill,
     Agent,
     Hook,
+    PiExtension,
 }
 
 impl std::fmt::Display for ItemKind {
@@ -32,6 +33,7 @@ impl std::fmt::Display for ItemKind {
             ItemKind::Skill => write!(f, "skill"),
             ItemKind::Agent => write!(f, "agent"),
             ItemKind::Hook => write!(f, "hook"),
+            ItemKind::PiExtension => write!(f, "pi-extension"),
         }
     }
 }
@@ -217,6 +219,39 @@ pub fn codex_home_dir() -> PathBuf {
         .unwrap_or_else(|| user_home_dir().join(".codex"))
 }
 
+/// Global Pi config directory.
+///
+/// Honors `PI_CODING_AGENT_DIR` so tests can redirect to a sandbox dir
+/// without touching the real `~/.pi/agent`.
+pub fn pi_global_dir() -> PathBuf {
+    std::env::var_os("PI_CODING_AGENT_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| user_home_dir().join(".pi").join("agent"))
+}
+
+/// Project-local Pi config directory.
+pub fn pi_project_dir() -> PathBuf {
+    project_root().join(".pi")
+}
+
+/// Pi `settings.json` for the chosen scope.
+pub fn pi_settings_path(global: bool) -> PathBuf {
+    if global {
+        pi_global_dir().join("settings.json")
+    } else {
+        pi_project_dir().join("settings.json")
+    }
+}
+
+/// Directory where Pi packages installed via vstack land.
+pub fn pi_packages_dir(global: bool) -> PathBuf {
+    if global {
+        pi_global_dir().join("packages")
+    } else {
+        pi_project_dir().join("packages")
+    }
+}
+
 /// Find the project root by walking up from CWD.
 /// Looks for `.vstack-lock.json` or harness config dirs.
 pub fn project_root() -> PathBuf {
@@ -234,6 +269,7 @@ fn find_project_root() -> PathBuf {
             || dir.join(".cursor").is_dir()
             || dir.join(".codex").is_dir()
             || dir.join(".opencode").is_dir()
+            || dir.join(".pi").is_dir()
             || dir.join(".agents").is_dir()
         {
             return dir;
@@ -457,6 +493,12 @@ pub fn compute_source_hash(entry: &LockEntry) -> String {
             let file = source_root.join("hooks").join(format!("{}.sh", entry.name));
             if file.exists() {
                 state = fnv1a_chain(state, &hash_file_bytes(&file).to_le_bytes());
+            }
+        }
+        ItemKind::PiExtension => {
+            let dir = source_root.join("pi-extensions").join(&entry.name);
+            if dir.exists() {
+                state = fnv1a_chain(state, &hash_dir_bytes(&dir).to_le_bytes());
             }
         }
     }

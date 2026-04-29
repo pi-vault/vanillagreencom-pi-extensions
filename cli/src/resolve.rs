@@ -66,7 +66,7 @@ pub fn build_agent_extras(
     }
 }
 
-/// Check if a directory looks like a vstack source repo (has 2+ of agents/, skills/, hooks/).
+/// Check if a directory looks like a vstack source repo (has 2+ of agents/, skills/, hooks/, pi-extensions/).
 pub fn is_vstack_source(dir: &Path) -> bool {
     if dir
         .file_name()
@@ -79,6 +79,7 @@ pub fn is_vstack_source(dir: &Path) -> bool {
         dir.join("agents").is_dir(),
         dir.join("skills").is_dir(),
         dir.join("hooks").is_dir(),
+        dir.join("pi-extensions").is_dir(),
     ]
     .iter()
     .filter(|&&b| b)

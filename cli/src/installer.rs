@@ -185,6 +185,10 @@ pub fn install_hook(
         Harness::OpenCode => install_hook_opencode(hook, global)?,
         Harness::Codex => install_hook_codex(hook, global, agents)?,
         Harness::Cursor => install_hook_cursor(hook, global)?,
+        // Pi has no native hook system — safety prose lives in agent bodies
+        // (already injected by the Pi agent generator), so installing a hook
+        // is a no-op here.
+        Harness::Pi => {}
     }
 
     Ok(format!(
@@ -465,6 +469,7 @@ pub fn remove_item(name: &str, harnesses: &[Harness], global: bool) -> Result<Ve
             }
             Harness::OpenCode => vec![harness.agents_dir(global).join(format!("{name}.md"))],
             Harness::Codex => vec![harness.agents_dir(global).join(format!("{name}.toml"))],
+            Harness::Pi => vec![harness.agents_dir(global).join(format!("{name}.md"))],
         };
 
         for path in agent_paths {

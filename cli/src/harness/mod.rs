@@ -2,6 +2,7 @@ pub mod claude;
 pub mod codex;
 pub mod cursor;
 pub mod opencode;
+pub mod pi;
 
 use crate::agent::Agent;
 use crate::skill::Skill;
@@ -15,6 +16,7 @@ pub enum Harness {
     Cursor,
     OpenCode,
     Codex,
+    Pi,
 }
 
 impl Harness {
@@ -23,6 +25,7 @@ impl Harness {
         Harness::Cursor,
         Harness::OpenCode,
         Harness::Codex,
+        Harness::Pi,
     ];
 
     pub fn name(&self) -> &'static str {
@@ -31,6 +34,7 @@ impl Harness {
             Harness::Cursor => "Cursor",
             Harness::OpenCode => "OpenCode",
             Harness::Codex => "Codex",
+            Harness::Pi => "Pi",
         }
     }
 
@@ -40,6 +44,7 @@ impl Harness {
             Harness::Cursor => "cursor",
             Harness::OpenCode => "opencode",
             Harness::Codex => "codex",
+            Harness::Pi => "pi",
         }
     }
 
@@ -49,6 +54,7 @@ impl Harness {
             "cursor" => Some(Harness::Cursor),
             "opencode" => Some(Harness::OpenCode),
             "codex" => Some(Harness::Codex),
+            "pi" => Some(Harness::Pi),
             _ => None,
         }
     }
@@ -99,6 +105,13 @@ impl Harness {
                     crate::config::project_root().join(".codex").join("agents")
                 }
             }
+            Harness::Pi => {
+                if global {
+                    crate::config::pi_global_dir().join("agents")
+                } else {
+                    crate::config::pi_project_dir().join("agents")
+                }
+            }
         }
     }
 
@@ -131,6 +144,16 @@ impl Harness {
             Harness::Codex => {
                 if global {
                     crate::config::codex_home_dir().join("skills")
+                } else {
+                    crate::config::project_root().join(".agents").join("skills")
+                }
+            }
+            Harness::Pi => {
+                // Pi loads skills from ~/.pi/agent/skills (global) and from
+                // .agents/skills (project, also picked up by Codex). Sharing
+                // the project skill location keeps the skill-tree single-rooted.
+                if global {
+                    crate::config::pi_global_dir().join("skills")
                 } else {
                     crate::config::project_root().join(".agents").join("skills")
                 }
@@ -179,6 +202,13 @@ impl Harness {
                     crate::config::project_root().join(".codex")
                 }
             }
+            Harness::Pi => {
+                if global {
+                    crate::config::pi_global_dir()
+                } else {
+                    crate::config::pi_project_dir()
+                }
+            }
         }
     }
 
@@ -194,13 +224,19 @@ impl Harness {
                 paths.push(config_path);
             }
         }
+        if matches!(self, Harness::Pi) {
+            let settings_path = crate::config::pi_settings_path(global);
+            if !paths.contains(&settings_path) {
+                paths.push(settings_path);
+            }
+        }
         paths
     }
 
     /// Filename for a generated agent in this harness
     pub fn agent_filename(&self, name: &str) -> String {
         match self {
-            Harness::ClaudeCode | Harness::OpenCode => format!("{name}.md"),
+            Harness::ClaudeCode | Harness::OpenCode | Harness::Pi => format!("{name}.md"),
             Harness::Cursor => format!("{name}.mdc"),
             Harness::Codex => format!("{name}.toml"),
         }
@@ -237,6 +273,9 @@ impl Harness {
             Harness::Codex => {
                 codex::generate_agent(agent, &dir, skills, optional_skills, hooks, extras)
             }
+            Harness::Pi => {
+                pi::generate_agent(agent, &dir, skills, optional_skills, hooks, extras)
+            }
         }
     }
 
@@ -266,8 +305,27 @@ impl Harness {
                     || project.join("opencode.jsonc").exists()
             }
             Harness::Codex => crate::config::codex_home_dir().exists(),
+            Harness::Pi => {
+                crate::config::pi_global_dir().exists()
+                    || project.join(".pi").is_dir()
+                    || pi_binary_on_path()
+            }
         }
     }
+}
+
+/// Best-effort `pi` binary detection used by `Harness::Pi.is_detected()`.
+fn pi_binary_on_path() -> bool {
+    let Some(path_var) = std::env::var_os("PATH") else {
+        return false;
+    };
+    for dir in std::env::split_paths(&path_var) {
+        let candidate = dir.join("pi");
+        if candidate.is_file() {
+            return true;
+        }
+    }
+    false
 }
 
 impl std::fmt::Display for Harness {
@@ -286,5 +344,81 @@ mod tests {
         assert!(Harness::ClaudeCode.supports_global_scope());
         assert!(Harness::OpenCode.supports_global_scope());
         assert!(Harness::Codex.supports_global_scope());
+        assert!(Harness::Pi.supports_global_scope());
+    }
+
+    #[test]
+    fn pi_id_round_trip() {
+        assert_eq!(Harness::Pi.id(), "pi");
+        assert_eq!(Harness::Pi.name(), "Pi");
+        assert_eq!(Harness::from_id("pi"), Some(Harness::Pi));
+    }
+
+    #[test]
+    fn pi_in_all() {
+        assert!(Harness::ALL.contains(&Harness::Pi));
+    }
+
+    #[test]
+    fn pi_agent_filename_uses_md() {
+        assert_eq!(Harness::Pi.agent_filename("rust"), "rust.md");
+    }
+
+    #[test]
+    fn pi_paths_use_pi_dir() {
+        // Project paths go under .pi/ — independent of any environment overrides
+        let proj_agents = Harness::Pi.agents_dir(false);
+        assert!(
+            proj_agents.ends_with(".pi/agents"),
+            "expected .pi/agents, got {proj_agents:?}"
+        );
+        let proj_root = Harness::Pi.install_root(false);
+        assert!(
+            proj_root.ends_with(".pi"),
+            "expected .pi, got {proj_root:?}"
+        );
+        // Project skills location is shared with Codex (.agents/skills) so Pi
+        // can pick them up via its `~/.agents/skills` discovery path too.
+        let proj_skills = Harness::Pi.skills_dir(false);
+        assert!(
+            proj_skills.ends_with(".agents/skills"),
+            "expected .agents/skills, got {proj_skills:?}"
+        );
+    }
+
+    #[test]
+    fn pi_global_paths_honor_env_override() {
+        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = ENV_LOCK.lock().unwrap();
+        let prev = std::env::var_os("PI_CODING_AGENT_DIR");
+        let sandbox = std::env::temp_dir().join(format!(
+            "vstack_pi_env_override_{}",
+            std::process::id()
+        ));
+        unsafe {
+            std::env::set_var("PI_CODING_AGENT_DIR", &sandbox);
+        }
+
+        let agents_dir = Harness::Pi.agents_dir(true);
+        let skills_dir = Harness::Pi.skills_dir(true);
+        let install_root = Harness::Pi.install_root(true);
+
+        assert!(
+            agents_dir.starts_with(&sandbox),
+            "expected agents under {sandbox:?}, got {agents_dir:?}"
+        );
+        assert!(
+            skills_dir.starts_with(&sandbox),
+            "expected skills under {sandbox:?}, got {skills_dir:?}"
+        );
+        assert_eq!(install_root, sandbox);
+
+        unsafe {
+            if let Some(prev) = prev {
+                std::env::set_var("PI_CODING_AGENT_DIR", prev);
+            } else {
+                std::env::remove_var("PI_CODING_AGENT_DIR");
+            }
+        }
     }
 }

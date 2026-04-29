@@ -139,6 +139,7 @@ pub fn run(
         selected_agents,
         selected_skills,
         selected_hooks,
+        selected_pi_extensions,
         harnesses,
         skipped_harnesses,
         global,
@@ -154,10 +155,13 @@ pub fn run(
         let agents_dir = source_dir.join("agents");
         let skills_dir = source_dir.join("skills");
         let hooks_dir = source_dir.join("hooks");
+        let pi_ext_dir = source_dir.join("pi-extensions");
 
         let agents = agent::discover_agents(&agents_dir)?;
         let all_skills = skill::discover_skills(&skills_dir)?;
         let hooks = hook::discover_hooks(&hooks_dir)?;
+        let pi_extensions =
+            crate::pi_extension::discover_pi_extensions(&pi_ext_dir).unwrap_or_default();
         let dep_graph = skill::build_dependency_graph(&all_skills);
 
         let skills = if let Some(ref filter) = skill_filter {
@@ -177,20 +181,22 @@ pub fn run(
             all_skills
         };
 
-        let total = agents.len() + skills.len() + hooks.len();
+        let total =
+            agents.len() + skills.len() + hooks.len() + pi_extensions.len();
         if total == 0 && (yes || all || harness_filter.is_some()) {
             eprintln!(
-                "No agents, skills, or hooks found in {}",
+                "No agents, skills, hooks, or pi-extensions found in {}",
                 source_dir.display()
             );
             return Ok(());
         }
 
         eprintln!(
-            "Found {} agent(s), {} skill(s), {} hook(s) in {}",
+            "Found {} agent(s), {} skill(s), {} hook(s), {} pi-extension(s) in {}",
             agents.len(),
             skills.len(),
             hooks.len(),
+            pi_extensions.len(),
             source_dir.display()
         );
 
@@ -200,6 +206,7 @@ pub fn run(
                 agents,
                 skills,
                 hooks,
+                pi_extensions,
                 Harness::ALL.to_vec(),
                 Vec::new(),
                 global,
@@ -226,11 +233,24 @@ pub fn run(
                 return Ok(());
             }
 
+            // In non-interactive mode, only auto-install Pi extensions when Pi
+            // is one of the chosen harnesses. The agents/skills/hooks loops
+            // run per-harness, but Pi extensions are scope-only — they go to
+            // ~/.pi/agent/packages/<name> regardless of which agent harness
+            // selection was requested.
+            let pi_selected = harnesses.iter().any(|h| matches!(h, Harness::Pi));
+            let chosen_pi_extensions = if pi_selected {
+                pi_extensions
+            } else {
+                Vec::new()
+            };
+
             break (
                 resolved,
                 agents,
                 skills,
                 hooks,
+                chosen_pi_extensions,
                 harnesses,
                 Vec::new(),
                 global,
@@ -250,6 +270,7 @@ pub fn run(
                 agents,
                 skills,
                 hooks,
+                pi_extensions,
             };
             match tui::run_install_flow(items, &selector)? {
                 tui::InstallFlowResult::Install(sel) => {
@@ -258,6 +279,7 @@ pub fn run(
                         sel.agents,
                         sel.skills,
                         sel.hooks,
+                        sel.pi_extensions,
                         sel.harnesses,
                         sel.skipped_harnesses,
                         sel.global,
@@ -464,7 +486,36 @@ pub fn run(
         }
     }
 
-
+    // Pi extensions install once per scope (not per harness). Records as
+    // ItemKind::PiExtension with harness id "pi" so list/remove can find them.
+    let pi_in_harnesses = harnesses.iter().any(|h| matches!(h, Harness::Pi));
+    if pi_in_harnesses {
+        for ext in &selected_pi_extensions {
+            match crate::pi_extension::install_pi_extension(ext, global) {
+                Ok(dest) => {
+                    let detail = format!(
+                        "{} → {} (Pi extension)",
+                        ext.name,
+                        dest.display()
+                    );
+                    log_lines.push(detail.clone());
+                    results.push(installer::InstallResult {
+                        name: ext.name.clone(),
+                        kind: config::ItemKind::PiExtension,
+                        harness: Harness::Pi,
+                        path: dest,
+                        detail,
+                    });
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Warning: failed to install Pi extension {}: {e}",
+                        ext.name
+                    );
+                }
+            }
+        }
+    }
 
     // Write computed agent→skill mappings to project vstack.toml.
     // Must happen BEFORE lock timestamps are captured so that the
@@ -541,6 +592,11 @@ pub fn run(
             updated_names.push(h.name.clone());
         }
     }
+    for ext in &selected_pi_extensions {
+        if previously_installed.contains(&ext.name) {
+            updated_names.push(ext.name.clone());
+        }
+    }
 
     let summary = tui::SummaryData {
         agents: selected_agents.iter().map(|a| a.name.clone()).collect(),
@@ -549,6 +605,11 @@ pub fn run(
             .iter()
             .map(|h| (h.name.clone(), h.event.clone()))
             .collect(),
+        pi_extensions: if pi_in_harnesses {
+            selected_pi_extensions.iter().map(|e| e.name.clone()).collect()
+        } else {
+            Vec::new()
+        },
         updated: updated_names,
         harnesses: harness_names.iter().map(|h| h.to_string()).collect(),
         notes: {

@@ -19,6 +19,7 @@ pub fn run(global: bool, agent_filter: Option<&str>) -> Result<()> {
     let mut agents = Vec::new();
     let mut skills = Vec::new();
     let mut hooks = Vec::new();
+    let mut pi_extensions = Vec::new();
 
     for entry in lock.entries.values() {
         // Apply harness filter
@@ -36,12 +37,18 @@ pub fn run(global: bool, agent_filter: Option<&str>) -> Result<()> {
             crate::config::ItemKind::Agent => agents.push(entry),
             crate::config::ItemKind::Skill => skills.push(entry),
             crate::config::ItemKind::Hook => hooks.push(entry),
+            crate::config::ItemKind::PiExtension => pi_extensions.push(entry),
         }
     }
 
     let mut printed = false;
 
-    for (label, items) in [("Agents", &agents), ("Skills", &skills), ("Hooks", &hooks)] {
+    for (label, items) in [
+        ("Agents", &agents),
+        ("Skills", &skills),
+        ("Hooks", &hooks),
+        ("Pi Extensions", &pi_extensions),
+    ] {
         if items.is_empty() {
             continue;
         }
@@ -57,10 +64,11 @@ pub fn run(global: bool, agent_filter: Option<&str>) -> Result<()> {
     }
 
     eprintln!(
-        "\n  Total: {} agent(s), {} skill(s), {} hook(s)",
+        "\n  Total: {} agent(s), {} skill(s), {} hook(s), {} pi-extension(s)",
         agents.len(),
         skills.len(),
-        hooks.len()
+        hooks.len(),
+        pi_extensions.len()
     );
     Ok(())
 }

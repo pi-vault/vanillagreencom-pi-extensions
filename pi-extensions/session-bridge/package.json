@@ -1,0 +1,25 @@
+{
+  "name": "pi-session-bridge",
+  "version": "0.1.0",
+  "description": "Pi extension and CLI for controlling visible interactive Pi sessions over a structured Unix-socket side channel.",
+  "license": "MIT",
+  "keywords": ["pi-package", "pi", "coding-agent", "session", "bridge"],
+  "bin": {
+    "pi-bridge": "./bin/pi-bridge.js"
+  },
+  "pi": {
+    "extensions": ["./extensions/session-bridge.ts"]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "scripts": {
+    "check": "node --check bin/pi-bridge.js"
+  },
+  "files": [
+    "bin/",
+    "extensions/",
+    "README.md",
+    "package.json"
+  ]
+}

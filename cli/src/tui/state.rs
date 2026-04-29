@@ -239,6 +239,42 @@ pub(super) fn build_item_tabs(
         });
     }
 
+    // ── Pi Extensions tab ────────────────────────────────────────────
+    if !items.pi_extensions.is_empty() {
+        let items_list: Vec<SelectItem> = items
+            .pi_extensions
+            .iter()
+            .map(|ext| {
+                let installed_info = installed.get(&ext.name);
+                let is_installed = installed_info.is_some();
+                let suffix = ext.version.clone().map(|v| format!("v{v}"));
+                SelectItem {
+                    label: ext.name.clone(),
+                    description: if ext.description.is_empty() {
+                        "Pi extension package".into()
+                    } else {
+                        ext.description.clone()
+                    },
+                    selected: false,
+                    tag: Some("pi".into()),
+                    suffix,
+                    locked: false,
+                    installed: is_installed,
+                    installed_scope: installed_info.map(|info| installed_scope_label(&info.scope)),
+                    outdated: installed_info.is_some_and(|info| is_item_outdated(info)),
+                }
+            })
+            .collect();
+
+        tabs.push(Tab {
+            name: "Pi Extensions".into(),
+            groups: vec![ItemGroup {
+                label: String::new(),
+                items: items_list,
+            }],
+        });
+    }
+
     // ── Installed tab ─────────────────────────────────────────
     if !installed.is_empty() {
         let mut project_agents = Vec::new();

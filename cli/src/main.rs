@@ -8,6 +8,7 @@ mod harness;
 mod hook;
 mod installer;
 mod mapping;
+mod pi_extension;
 mod project_config;
 mod resolve;
 mod skill;

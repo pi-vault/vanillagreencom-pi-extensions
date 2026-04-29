@@ -261,6 +261,26 @@ pub fn run(global: bool) -> Result<()> {
         skills_refreshed += 1;
     }
 
+    // Refresh Pi extensions — re-copy from source and re-register settings
+    let mut all_pi_extensions = Vec::new();
+    for dir in &source_dirs {
+        all_pi_extensions
+            .extend(crate::pi_extension::discover_pi_extensions(&dir.join("pi-extensions"))
+                .unwrap_or_default());
+    }
+    let pi_ext_entries: Vec<_> = lock
+        .entries
+        .iter()
+        .filter(|(_, e)| e.kind == ItemKind::PiExtension)
+        .collect();
+    let mut pi_extensions_refreshed = 0usize;
+    for (name, _) in &pi_ext_entries {
+        let Some(ext) = all_pi_extensions.iter().find(|e| &e.name == *name) else {
+            continue;
+        };
+        let _ = crate::pi_extension::install_pi_extension(ext, global);
+        pi_extensions_refreshed += 1;
+    }
 
     // Update lock file timestamps and content hashes
     let mut lock = config::LockFile::load(&lock_path)?;
@@ -272,8 +292,8 @@ pub fn run(global: bool) -> Result<()> {
     lock.save(&lock_path)?;
 
     eprintln!(
-        "Refreshed {} agent(s), {} skill(s)",
-        agents_refreshed, skills_refreshed
+        "Refreshed {} agent(s), {} skill(s), {} pi-extension(s)",
+        agents_refreshed, skills_refreshed, pi_extensions_refreshed
     );
     Ok(())
 }

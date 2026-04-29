@@ -13,8 +13,9 @@ pub fn run(names: &[String], global: bool) -> Result<()> {
     let mut lock = LockFile::load(&lock_path).unwrap_or_default();
 
     for name in names {
-        // Look up harnesses from lock file, or try all
-        let harnesses: Vec<Harness> = if let Some(entry) = lock.entries.get(name.as_str()) {
+        // Look up entry first to determine kind and harnesses
+        let lock_entry = lock.entries.get(name.as_str()).cloned();
+        let harnesses: Vec<Harness> = if let Some(ref entry) = lock_entry {
             entry
                 .harnesses
                 .iter()
@@ -24,7 +25,17 @@ pub fn run(names: &[String], global: bool) -> Result<()> {
             Harness::ALL.to_vec()
         };
 
-        let removed = installer::remove_item(name, &harnesses, global)?;
+        // Pi extensions live in a separate location and are removed via
+        // the dedicated helper.
+        let mut removed = Vec::new();
+        if matches!(
+            lock_entry.as_ref().map(|e| e.kind),
+            Some(crate::config::ItemKind::PiExtension)
+        ) {
+            removed.extend(crate::pi_extension::remove_pi_extension(name, global)?);
+        } else {
+            removed.extend(installer::remove_item(name, &harnesses, global)?);
+        }
 
         if removed.is_empty() {
             eprintln!("  {name}: not found");

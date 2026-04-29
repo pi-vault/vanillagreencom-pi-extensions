@@ -1,0 +1,19 @@
+{
+  "name": "pi-statusline",
+  "version": "0.1.2",
+  "description": "Claude-style compact status line and single-line prompt editor for Pi.",
+  "license": "MIT",
+  "keywords": ["pi-package", "pi", "coding-agent", "statusline", "theme"],
+  "pi": {
+    "extensions": ["./extensions/statusline.ts"]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*"
+  },
+  "files": [
+    "extensions/",
+    "README.md",
+    "package.json"
+  ]
+}

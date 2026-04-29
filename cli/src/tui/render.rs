@@ -729,9 +729,10 @@ pub fn draw_summary(frame: &mut Frame, data: &super::SummaryData, scroll: usize)
     frame.render_widget(sep, chunks[1]);
 
     // Summary info (what · how · where)
-    let total = data.agents.len() + data.skills.len() + data.hooks.len();
+    let total =
+        data.agents.len() + data.skills.len() + data.hooks.len() + data.pi_extensions.len();
     let n_updated = data.updated.len();
-    let n_new = total - n_updated;
+    let n_new = total.saturating_sub(n_updated);
 
     let mut count_spans: Vec<Span> = Vec::new();
     if n_new > 0 {
@@ -823,9 +824,27 @@ pub fn draw_summary(frame: &mut Frame, data: &super::SummaryData, scroll: usize)
         .cloned()
         .collect();
 
-    let has_updates =
-        !updated_agents.is_empty() || !updated_skills.is_empty() || !updated_hooks.is_empty();
-    let has_new = !new_agents.is_empty() || !new_skills.is_empty() || !new_hooks.is_empty();
+    let updated_pi: Vec<_> = data
+        .pi_extensions
+        .iter()
+        .filter(|n| updated_set.contains(n.as_str()))
+        .cloned()
+        .collect();
+    let new_pi: Vec<_> = data
+        .pi_extensions
+        .iter()
+        .filter(|n| !updated_set.contains(n.as_str()))
+        .cloned()
+        .collect();
+
+    let has_updates = !updated_agents.is_empty()
+        || !updated_skills.is_empty()
+        || !updated_hooks.is_empty()
+        || !updated_pi.is_empty();
+    let has_new = !new_agents.is_empty()
+        || !new_skills.is_empty()
+        || !new_hooks.is_empty()
+        || !new_pi.is_empty();
 
     if has_updates {
         all_lines.push(section_header("Updated", content_width));
@@ -833,6 +852,7 @@ pub fn draw_summary(frame: &mut Frame, data: &super::SummaryData, scroll: usize)
         all_updated.extend(updated_agents);
         all_updated.extend(updated_skills);
         all_updated.extend(updated_hooks.iter().map(|(n, _)| n.clone()));
+        all_updated.extend(updated_pi.clone());
         name_grid_color(&all_updated, content_width, Color::Yellow, &mut all_lines);
         all_lines.push(Line::from(""));
     }
@@ -859,6 +879,13 @@ pub fn draw_summary(frame: &mut Frame, data: &super::SummaryData, scroll: usize)
                     Span::styled(format!("  {event}"), Style::default().fg(Color::DarkGray)),
                 ]));
             }
+            all_lines.push(Line::from(""));
+        }
+
+        if !new_pi.is_empty() {
+            all_lines.push(section_header("Pi Extensions", content_width));
+            name_grid(&new_pi, content_width, &mut all_lines);
+            all_lines.push(Line::from(""));
         }
     } else if !has_updates {
         // Edge case: nothing at all (shouldn't happen but be safe)
@@ -881,6 +908,11 @@ pub fn draw_summary(frame: &mut Frame, data: &super::SummaryData, scroll: usize)
                     Span::styled(format!("  {event}"), Style::default().fg(Color::DarkGray)),
                 ]));
             }
+        }
+        if !data.pi_extensions.is_empty() {
+            all_lines.push(section_header("Pi Extensions", content_width));
+            name_grid(&data.pi_extensions, content_width, &mut all_lines);
+            all_lines.push(Line::from(""));
         }
     }
 
