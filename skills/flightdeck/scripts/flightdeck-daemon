@@ -1005,12 +1005,15 @@ run_loop() {
         if [[ -z "${FIRST_SEEN[$ev_pid]:-}" ]]; then
           FIRST_SEEN[$ev_pid]="$now"
         fi
-        local _ev_age=$(( now - ${FIRST_SEEN[$ev_pid]} ))
-        if (( _ev_age < GRACE_SEC )) && is_canonical_tag "$ev_tag"; then
-          log grace-skip "$ev_pid oc-event suppressed tag=$ev_tag (age=${_ev_age}s < ${GRACE_SEC}s)"
-          NOTIFIED_HASH[$ev_pid]="$ev_hash"
-          continue
-        fi
+        # No cold-start grace for OC adapter events: cold-start grace
+        # exists to suppress TUI banners that incidentally match
+        # classifier patterns in tmux capture buffers. Adapter input is
+        # structured assistant text only (no chrome) — there's no
+        # banner-flicker source for false positives. With grace on,
+        # canonical prompts emitted within the first GRACE_SEC seconds
+        # were dropped (NOTIFIED_HASH marked them "handled" but they
+        # were never routed; subscriber's hash dedup prevented
+        # re-emission once stable).
         if [[ "${NOTIFIED_HASH[$ev_pid]:-}" == "$ev_hash" ]]; then
           continue
         fi
@@ -1274,10 +1277,19 @@ case "$ACTION" in
     fi
 
     exec 200>"$PID_LOCK"
-    if ! flock -n 200; then
-      echo "daemon already running for session=$SESSION_NAME (lock held)" >&2
-      exit 1
-    fi
+    # Retry briefly: a recently-stopped daemon's flock takes a moment to
+    # release after SIGKILL (kernel FD cleanup is async). Without this
+    # retry, an immediate restart after `stop` raced and failed even
+    # though the prior daemon was fully gone.
+    _flock_attempts=0
+    while ! flock -n 200; do
+      _flock_attempts=$(( _flock_attempts + 1 ))
+      if (( _flock_attempts >= 10 )); then
+        echo "daemon already running for session=$SESSION_NAME (lock held after ${_flock_attempts} retries)" >&2
+        exit 1
+      fi
+      sleep 0.2
+    done
 
     if [[ -f "$PID_FILE" ]]; then
       old=$(cat "$PID_FILE" 2>/dev/null || echo "")
