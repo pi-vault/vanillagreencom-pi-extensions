@@ -107,7 +107,7 @@ Npm-shaped manifest. vstack discovers any subdirectory containing a `package.jso
   }
 }
 ```
-On install vstack copies `pi-extensions/<name>/` into `<scope>/packages/<name>/` and adds `./packages/<name>` to the `packages` array of Pi's `settings.json` (relative to the settings file dir). Existing entries and other settings keys are preserved; legacy absolute-path entries are replaced with the relative form. Catalog packages: `pi-background-tasks` (non-blocking background shell tasks + `/bg` dashboard + task tools), `pi-session-bridge` (Unix-socket JSONL side channel + `pi-bridge` CLI), `pi-statusline` (compact Claude-style status line + `π` prompt; TUI-only, safely no-ops in RPC/JSON/print).
+On install vstack copies `pi-extensions/<name>/` into `<scope>/packages/<name>/` and adds `./packages/<name>` to the `packages` array of Pi's `settings.json` (relative to the settings file dir). Existing entries and other settings keys are preserved; legacy absolute-path entries are replaced with the relative form. Catalog packages: `pi-background-tasks` (non-blocking background shell tasks + `/bg` dashboard + task tools), `prompt-stash` (project-local prompt stash history + Ctrl+S stash/pop popup), `pi-session-bridge` (Unix-socket JSONL side channel + `pi-bridge` CLI), `pi-statusline` (compact Claude-style status line + `π` prompt; TUI-only, safely no-ops in RPC/JSON/print).
 
 ### Mapping config (`vstack.toml`)
 ```toml

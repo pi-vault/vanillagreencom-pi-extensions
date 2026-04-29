@@ -1,0 +1,19 @@
+{
+  "name": "prompt-stash",
+  "version": "0.1.0",
+  "description": "Pi extension for project-local prompt stash history with Ctrl+S stash/pop workflow.",
+  "license": "MIT",
+  "keywords": ["pi-package", "pi", "coding-agent", "prompt", "stash"],
+  "pi": {
+    "extensions": ["./extensions/prompt-stash.ts"]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*"
+  },
+  "files": [
+    "extensions/",
+    "README.md",
+    "package.json"
+  ]
+}
