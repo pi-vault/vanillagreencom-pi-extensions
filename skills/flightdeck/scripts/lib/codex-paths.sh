@@ -169,15 +169,18 @@ cx_bridge_run() {
 
 # jq filter: extract last assistant text from `bridge turns` output.
 # Verified shape (codex 0.125.0):
-#   { data: [ { id, items: [ { type: "userMessage" | "agentMessage",
-#               content: [{type:"text", text:"..."}, ...] }, ... ],
-#             status, ... }, ... ] }
-# Walk all turns' items, find last agentMessage, join its text content.
+#   userMessage: { type:"userMessage", content: [{type:"text", text:"..."}] }
+#   agentMessage: { type:"agentMessage", text:"...", phase:"final_answer" }
+# agentMessage uses .text directly, NOT .content[].text — different
+# from userMessage. Filter tries .text first, falls back to .content
+# walk for resilience across versions.
 CX_LAST_ASSISTANT_JQ='
   ( [ ( .data // [] ) | .[]? | (.items // [])[] | select(.type == "agentMessage") ] | last )
   | if . == null then ""
     else
-      ( .content // [] )
-      | (if type == "array" then map(select(.type == "text") | .text // "") | join("") else . end)
+      ( .text
+        // ( ( .content // [] )
+             | (if type == "array" then map(select(.type == "text") | .text // "") | join("") else . end) )
+        // "" )
     end
 '
