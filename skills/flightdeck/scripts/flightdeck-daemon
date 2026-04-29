@@ -751,7 +751,10 @@ oc_subscriber_loop() {
         hash=$(printf '%s' "$last_text" | sha256sum | awk '{print substr($1,1,12)}')
         if [[ "$hash" != "$last_hash" ]]; then
           if [[ -n "${CLASSIFIER:-}" && -x "${CLASSIFIER:-}" ]]; then
-            tag=$(printf '%s' "$last_text" | "$CLASSIFIER" 2>/dev/null)
+            # Adapter input has no TUI footer — pass --no-footer-gate
+            # so the classifier doesn't gate option-list / merge / etc
+            # detection on a rendered footer that will never exist.
+            tag=$(printf '%s' "$last_text" | "$CLASSIFIER" --no-footer-gate 2>/dev/null)
             [[ -z "$tag" ]] && tag="rendering"
           else
             tag="rendering"

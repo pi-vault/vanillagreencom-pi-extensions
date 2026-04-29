@@ -37,11 +37,19 @@ set -euo pipefail
 
 DRY_RUN=0
 BUFFER_FILE=""
+NO_FOOTER_GATE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --buffer-file) BUFFER_FILE="$2"; shift 2 ;;
     --buffer-file=*) BUFFER_FILE="${1#--buffer-file=}"; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
+    # Skip the TUI-footer gate. Use this when the input is a structured
+    # assistant-text blob from a harness adapter (HTTP /message, MCP
+    # channel, WS events) — no rendered terminal chrome to look for.
+    # Without this flag, classifier returns `rendering` for adapter
+    # text since none of it ever has "Enter to select" / "↑↓ navigate"
+    # footers.
+    --no-footer-gate) NO_FOOTER_GATE=1; shift ;;
     *) echo "Unknown flag: $1" >&2; exit 2 ;;
   esac
 done
@@ -75,12 +83,21 @@ fi
 # Common terminators across opencode, claude code, codex:
 #   "Enter to select" / "↑↓ to navigate" / "esc dismiss" footers
 #   Final "❯ " cursor on its own line at buffer end
-if ! grep -qE '(Enter to (select|toggle|submit)|↑.*↓ (to )?navigate|esc.*dismiss|↑↓ select)' <<< "$buf"; then
-  # No prompt footer detected. Could be idle or rendering.
-  if grep -qE '(❯|>|■■■|⠋|⠙|⠸|⠴|⠦|⠧)\s*$' <<< "$buf"; then
-    emit idle
+#
+# Adapter callers pass --no-footer-gate. The input is structured
+# assistant text (HTTP /message extraction, channel JSONL, WS events)
+# with no rendered terminal chrome — no footer is possible. The
+# specific-shape matchers below handle the prompt detection on their
+# own; the footer gate is only a buffer-completeness signal for the
+# tmux-capture path.
+if (( NO_FOOTER_GATE == 0 )); then
+  if ! grep -qE '(Enter to (select|toggle|submit)|↑.*↓ (to )?navigate|esc.*dismiss|↑↓ select)' <<< "$buf"; then
+    # No prompt footer detected. Could be idle or rendering.
+    if grep -qE '(❯|>|■■■|⠋|⠙|⠸|⠴|⠦|⠧)\s*$' <<< "$buf"; then
+      emit idle
+    fi
+    emit rendering
   fi
-  emit rendering
 fi
 
 # Specific-shape sentinels in priority order. Most specific first.

@@ -133,7 +133,14 @@ if [[ $oc_used -eq 0 ]]; then
 fi
 
 capture_hash=$(printf '%s' "$buf" | sha256sum | awk '{print "sha256:"$1}')
-tag=$(printf '%s' "$buf" | "$SCRIPT_DIR/prompt-classify" 2>/dev/null || echo "idle")
+# Adapter-mode input has no TUI footer; skip the footer gate so option-list
+# / merge-now / etc. shapes classify correctly. Tmux-fallback path keeps
+# the footer gate as a buffer-completeness signal.
+if [[ $oc_used -eq 1 ]]; then
+  tag=$(printf '%s' "$buf" | "$SCRIPT_DIR/prompt-classify" --no-footer-gate 2>/dev/null || echo "idle")
+else
+  tag=$(printf '%s' "$buf" | "$SCRIPT_DIR/prompt-classify" 2>/dev/null || echo "idle")
+fi
 
 # Orphan cross-check — when caller passes --worktree and --pr, synthesize
 # terminal-state-reached if the worktree directory is gone AND the PR is
