@@ -1,9 +1,15 @@
-import type { ExtensionAPI, ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
+import {
+	CustomEditor,
+	type ExtensionAPI,
+	type ExtensionContext,
+	type KeybindingsManager,
+	type Theme,
+} from "@mariozechner/pi-coding-agent";
+import type { EditorTheme, TUI } from "@mariozechner/pi-tui";
 import { matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-const SHORTCUT = "ctrl+s";
 const STORE_FILE = "prompt-stash.json";
 const STORE_VERSION = 1;
 const POPUP_WIDTH = 92;
@@ -12,6 +18,9 @@ const LIST_ROWS = 10;
 const PADDING_X = 4;
 const PADDING_Y = 2;
 const INSTALL_SYMBOL = Symbol.for("vstack.prompt-stash.installed");
+const DIM = "\x1b[38;5;8m";
+const RESET = "\x1b[0m";
+const INPUT_BOTTOM_PADDING_LINES = 1;
 
 interface StashItem {
 	id: string;
@@ -110,6 +119,15 @@ function searchable(text: string): string {
 
 function isPrintable(data: string): boolean {
 	return data.length === 1 && data >= " " && data !== "\x7f";
+}
+
+function stripAnsi(text: string): string {
+	return text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "");
+}
+
+function isEditorBorderLine(line: string): boolean {
+	const visible = stripAnsi(line).trim();
+	return visible.length > 0 && /^[─━╭╮╰╯┌┐└┘]+$/.test(visible);
 }
 
 function panelLine(theme: Theme, content: string, width: number): string {
@@ -354,24 +372,84 @@ async function openStashPopup(ctx: ExtensionContext): Promise<void> {
 	}
 }
 
+class PromptStashEditor extends CustomEditor {
+	private stashOpen = false;
+
+	constructor(
+		tui: TUI,
+		theme: EditorTheme,
+		keybindings: KeybindingsManager,
+		private readonly ctx: ExtensionContext,
+	) {
+		super(tui, theme, keybindings, { paddingX: 0 });
+	}
+
+	handleInput(data: string): void {
+		if (matchesKey(data, "ctrl+s")) {
+			void this.toggleStash();
+			return;
+		}
+		super.handleInput(data);
+	}
+
+	render(width: number): string[] {
+		const prompt = this.borderColor("π");
+		const prefix = `${prompt} `;
+		const prefixWidth = visibleWidth("π ");
+		const continuationPrefix = " ".repeat(prefixWidth);
+		const innerWidth = Math.max(1, width - prefixWidth);
+		const rendered = super.render(innerWidth);
+
+		const inputLines: string[] = [];
+		let completionLines: string[] = [];
+		for (let index = 1; index < rendered.length; index += 1) {
+			const line = rendered[index] ?? "";
+			if (isEditorBorderLine(line)) {
+				completionLines = rendered.slice(index + 1);
+				break;
+			}
+			inputLines.push(line);
+		}
+
+		const lines = (inputLines.length > 0 ? inputLines : [""]).map((line, index) => {
+			const linePrefix = index === 0 ? prefix : continuationPrefix;
+			return truncateToWidth(linePrefix + line, width, "");
+		});
+		for (let index = 0; index < INPUT_BOTTOM_PADDING_LINES; index += 1) lines.push("");
+		for (const line of completionLines) {
+			lines.push(truncateToWidth(`${DIM}${continuationPrefix}${RESET}${line}`, width, ""));
+		}
+		return lines;
+	}
+
+	private async toggleStash(): Promise<void> {
+		if (this.stashOpen) return;
+		const text = this.getText();
+		if (text.trim().length > 0) {
+			const count = stashPrompt(this.ctx, text);
+			this.ctx.ui.setEditorText("");
+			this.ctx.ui.notify(`Stashed prompt (${count} total)`, "info");
+			this.tui.requestRender();
+			return;
+		}
+
+		this.stashOpen = true;
+		try {
+			await openStashPopup(this.ctx);
+		} finally {
+			this.stashOpen = false;
+			this.tui.requestRender();
+		}
+	}
+}
+
 export default function promptStash(pi: ExtensionAPI): void {
 	const guard = pi as unknown as Record<PropertyKey, unknown>;
 	if (guard[INSTALL_SYMBOL]) return;
 	guard[INSTALL_SYMBOL] = true;
 
-	pi.registerShortcut(SHORTCUT, {
-		description: "Stash current prompt, or pop a stashed prompt when the editor is empty",
-		handler: async (ctx) => {
-			const extensionCtx = ctx as ExtensionContext;
-			const text = extensionCtx.ui.getEditorText?.() ?? "";
-			if (text.trim().length > 0) {
-				const count = stashPrompt(extensionCtx, text);
-				extensionCtx.ui.setEditorText("");
-				extensionCtx.ui.notify(`Stashed prompt (${count} total)`, "info");
-				return;
-			}
-			await openStashPopup(extensionCtx);
-		},
+	pi.on("session_start", (_event, ctx) => {
+		ctx.ui.setEditorComponent((tui, theme, keybindings) => new PromptStashEditor(tui, theme, keybindings, ctx));
 	});
 
 	pi.registerCommand("prompt-stash", {
