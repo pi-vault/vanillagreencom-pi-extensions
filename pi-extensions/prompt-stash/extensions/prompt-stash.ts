@@ -130,12 +130,33 @@ function isEditorBorderLine(line: string): boolean {
 	return visible.length > 0 && /^[─━╭╮╰╯┌┐└┘]+$/.test(visible);
 }
 
-function panelLine(theme: Theme, content: string, width: number): string {
-	return theme.bg("customMessageBg", padAnsi(content, width));
+function panelLine(content: string, width: number): string {
+	return padAnsi(content, width);
 }
 
 function selectedLine(theme: Theme, content: string, width: number): string {
 	return theme.bg("selectedBg", padAnsi(theme.fg("text", content), width));
+}
+
+function popupContentWidth(width: number): number {
+	return Math.max(1, width - 2 - PADDING_X * 2);
+}
+
+function framePopup(lines: string[], width: number, theme: Theme): string[] {
+	if (width < 8) return lines.map((line) => truncateToWidth(line, width, ""));
+
+	const border = (text: string) => theme.fg("borderAccent", text);
+	const contentWidth = popupContentWidth(width);
+	const blank = `${border("│")}${" ".repeat(width - 2)}${border("│")}`;
+	const framed = [`${border("╭")}${border("─".repeat(width - 2))}${border("╮")}`];
+
+	for (let i = 0; i < PADDING_Y; i += 1) framed.push(blank);
+	for (const line of lines) {
+		framed.push(`${border("│")}${" ".repeat(PADDING_X)}${padAnsi(line, contentWidth)}${" ".repeat(PADDING_X)}${border("│")}`);
+	}
+	for (let i = 0; i < PADDING_Y; i += 1) framed.push(blank);
+	framed.push(`${border("╰")}${border("─".repeat(width - 2))}${border("╯")}`);
+	return framed.map((line) => truncateToWidth(line, width, ""));
 }
 
 function renderSearch(query: string, cursor: number, width: number, theme: Theme): string {
@@ -214,49 +235,46 @@ async function openStashPopup(ctx: ExtensionContext): Promise<void> {
 			};
 
 			const render = (width: number): string[] => {
-				const innerWidth = Math.max(20, width - PADDING_X * 2);
+				const innerWidth = popupContentWidth(width);
 				const results = filtered();
 				clampSelection();
 
 				const lines: string[] = [];
-				for (let i = 0; i < PADDING_Y; i += 1) lines.push(panelLine(theme, "", width));
-
-				const title = theme.fg("text", theme.bold("Stash"));
+				const title = `${theme.fg("accent", theme.bold("⚑ Prompt stash"))} ${theme.fg("muted", `${items.length} saved`)}`;
 				const esc = theme.fg("dim", "esc");
-				const titleGap = Math.max(1, innerWidth - visibleWidth("Stash") - visibleWidth("esc"));
-				lines.push(panelLine(theme, `${" ".repeat(PADDING_X)}${title}${" ".repeat(titleGap)}${esc}`, width));
-				lines.push(panelLine(theme, "", width));
-				lines.push(panelLine(theme, `${" ".repeat(PADDING_X)}${renderSearch(query, searchCursor, innerWidth, theme)}`, width));
-				lines.push(panelLine(theme, "", width));
+				const titleGap = Math.max(1, innerWidth - visibleWidth(`⚑ Prompt stash ${items.length} saved`) - visibleWidth("esc"));
+				lines.push(panelLine(`${title}${" ".repeat(titleGap)}${esc}`, innerWidth));
+				lines.push(panelLine(theme.fg("dim", "Type to search · ↑↓/jk select · enter pop · ctrl+d delete · ctrl+x delete all"), innerWidth));
+				lines.push(panelLine("", innerWidth));
+				lines.push(panelLine(`${theme.fg("muted", "Search")} ${renderSearch(query, searchCursor, Math.max(1, innerWidth - 7), theme)}`, innerWidth));
+				lines.push(panelLine("", innerWidth));
 
 				if (results.length === 0) {
-					lines.push(panelLine(theme, `${" ".repeat(PADDING_X)}${theme.fg("dim", "No matching stashed prompts")}`, width));
+					lines.push(panelLine(theme.fg("dim", "No matching stashed prompts"), innerWidth));
 				} else {
 					for (const [visibleIndex, item] of results.slice(scroll, scroll + LIST_ROWS).entries()) {
 						const index = scroll + visibleIndex;
 						const count = lineCount(item.text);
 						const countText = `~${count} ${count === 1 ? "line" : "lines"}`;
 						const countWidth = visibleWidth(countText);
-						const rowWidth = Math.max(1, innerWidth - PADDING_X);
+						const rowWidth = innerWidth;
 						const previewWidth = Math.max(1, rowWidth - countWidth - 2);
 						const preview = truncateToWidth(previewText(item.text), previewWidth, "");
-						const row = `${preview}${" ".repeat(Math.max(1, rowWidth - visibleWidth(preview) - countWidth))}${countText}`;
-						const content = `${" ".repeat(PADDING_X)}${row}`;
-						lines.push(index === selected ? selectedLine(theme, content, width) : panelLine(theme, content, width));
+						const row = `${preview}${" ".repeat(Math.max(1, rowWidth - visibleWidth(preview) - countWidth))}${theme.fg("dim", countText)}`;
+						lines.push(index === selected ? selectedLine(theme, row, innerWidth) : panelLine(row, innerWidth));
 					}
 				}
 
 				const emptyRows = Math.max(0, LIST_ROWS - Math.max(1, Math.min(results.length, LIST_ROWS)));
-				for (let i = 0; i < emptyRows; i += 1) lines.push(panelLine(theme, "", width));
+				for (let i = 0; i < emptyRows; i += 1) lines.push(panelLine("", innerWidth));
 
-				lines.push(panelLine(theme, "", width));
+				lines.push(panelLine("", innerWidth));
 				const status = confirmDeleteAll
 					? `${theme.fg("warning", "delete all stashed prompts?")} ${theme.fg("text", "y")} ${theme.fg("dim", "/ n")}`
 					: `${theme.fg("text", "enter")} ${theme.fg("dim", "pop")}  ${theme.fg("text", "delete")} ${theme.fg("dim", "ctrl+d")}  ${theme.fg("text", "delete all")} ${theme.fg("dim", "ctrl+x")}`;
-				lines.push(panelLine(theme, `${" ".repeat(PADDING_X)}${status}`, width));
+				lines.push(panelLine(status, innerWidth));
 
-				for (let i = 0; i < PADDING_Y - 1; i += 1) lines.push(panelLine(theme, "", width));
-				return lines.map((line) => truncateToWidth(line, width, ""));
+				return framePopup(lines, width, theme);
 			};
 
 			return {
