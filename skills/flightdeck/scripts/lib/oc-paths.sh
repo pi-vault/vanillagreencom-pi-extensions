@@ -148,21 +148,25 @@ oc_release_port() {
 }
 
 # jq filter that extracts the last assistant message text from
-# /session/<id>/message responses. Defensive across plausible shapes:
-# top-level array of messages, {messages:[...]}, or {data:[...]}.
-# Each message may use .role or .message.role; text may be in .text,
-# .content, .parts[].text, or .message.content[].text.
+# /session/<id>/message responses. Verified against opencode 1.14.26
+# shape: each message is `{info:{role:"..."}, parts:[{type:"text",
+# text:"..."}, ...]}`. Defensive across plausible top-level shapes
+# (top-level array, {messages:[...]}, {data:[...]}, {items:[...]})
+# and falls back through alternate role / text accessors so a future
+# minor opencode revision is less likely to silently regress this.
 OC_LAST_ASSISTANT_JQ='
   ( . // [] )
   | ( if type == "object" then (.messages // .data // .items // []) else . end )
-  | [ .[] | select(((.role // .message.role) // "") == "assistant") ]
+  | [ .[] | select(((.info.role // .role // .message.role) // "") == "assistant") ]
   | last
   | if . == null then ""
     else
-      (.text
-       // .content
-       // ((.parts // []) | map(.text // .content // "") | join(""))
-       // ((.message.content // []) | map(.text // "") | join(""))
-       // "")
+      (
+        ((.parts // []) | map(select(.type == "text") | .text // "") | join(""))
+        // .text
+        // .content
+        // ((.message.content // []) | map(.text // "") | join(""))
+        // ""
+      )
     end
 '

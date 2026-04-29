@@ -127,34 +127,31 @@ SESSION_ID=$(printf '%s\n' "$CREATE_OUT" \
 note "  session_id=$SESSION_ID"
 
 # --- Step 3: assert session permission denies the question tool -------------
+# Verified shape (opencode 1.14.26): /session/<id> returns
+# {... "permission":[{"permission":"question","pattern":"*","action":"deny"},
+#                    {"permission":"plan_enter", ..., "action":"deny"}, ...] ...}
+# The deny entry is what closes the modal-escape hatch — without it the
+# orchestration agent can render question prompts that run --attach
+# can't drive, breaking chat-text-only.
 note "step 3: verify session permission denies question tool"
-PERM_FOUND=0
 PERM_DENIES_QUESTION=0
 PERM_PROBE_OUT=""
-for path in "/session/$SESSION_ID" "/session/$SESSION_ID/permission" "/session/$SESSION_ID/permissions"; do
-  resp=$(curl -s --max-time 5 "$URL$path" 2>/dev/null || echo "")
-  [[ -z "$resp" ]] && continue
-  if jq -e . <<< "$resp" >/dev/null 2>&1; then
-    PERM_FOUND=1
-    PERM_PROBE_OUT="$resp"
-    if jq -e '
-      ( .. | objects | select(has("question") or has("plan_enter") or has("plan_exit")) ) as $perm
-      | ($perm.question // $perm.plan_enter // $perm.plan_exit) as $v
-      | ($v | tostring | ascii_downcase | contains("deny"))
-    ' <<< "$resp" >/dev/null 2>&1; then
-      PERM_DENIES_QUESTION=1
-      break
-    fi
+SESS_RESP=$(curl -s --max-time 5 "$URL/session/$SESSION_ID" 2>/dev/null || echo "")
+if [[ -n "$SESS_RESP" ]] && jq -e . <<< "$SESS_RESP" >/dev/null 2>&1; then
+  PERM_PROBE_OUT="$SESS_RESP"
+  if jq -e '
+    [(.permission // []) | .[]]
+    | any(.permission == "question" and (.action // "" | ascii_downcase) == "deny")
+  ' <<< "$SESS_RESP" >/dev/null 2>&1; then
+    PERM_DENIES_QUESTION=1
   fi
-done
-if (( PERM_FOUND == 0 )); then
-  warn "no permission JSON endpoint responded — could not verify question-tool deny"
-elif (( PERM_DENIES_QUESTION == 0 )); then
-  warn "permission JSON found but did not match {question|plan_enter|plan_exit}: deny"
-  warn "  probe: $(printf '%s' "$PERM_PROBE_OUT" | head -c 400)"
-else
-  note "  permission denies question (modal-escape closed)"
 fi
+if (( PERM_DENIES_QUESTION == 0 )); then
+  red "  permission JSON does not deny question tool — modal-escape OPEN"
+  red "  probe: $(printf '%s' "$PERM_PROBE_OUT" | head -c 400)"
+  fail "session permission missing {question, action: deny} — agent could render modal UI"
+fi
+note "  permission denies question (modal-escape closed)"
 
 # --- Step 4: open visible TUI in tmux window via opencode attach ------------
 note "step 4: open visible TUI in tmux via opencode attach"
@@ -193,12 +190,12 @@ MSG=$(curl -s --max-time 5 "$URL/session/$SESSION_ID/message" 2>/dev/null || ech
 USER_PRESENT=$(jq -r '
   ( . // [] )
   | ( if type == "object" then (.messages // .data // .items // []) else . end )
-  | map(select(((.role // .message.role) // "") == "user")) | length
+  | map(select(((.info.role // .role // .message.role) // "") == "user")) | length
 ' <<< "$MSG" 2>/dev/null || echo "0")
 ASSISTANT_PRESENT=$(jq -r '
   ( . // [] )
   | ( if type == "object" then (.messages // .data // .items // []) else . end )
-  | map(select(((.role // .message.role) // "") == "assistant")) | length
+  | map(select(((.info.role // .role // .message.role) // "") == "assistant")) | length
 ' <<< "$MSG" 2>/dev/null || echo "0")
 (( USER_PRESENT >= 1 ))      || fail "no user message in /message response"
 (( ASSISTANT_PRESENT >= 1 )) || fail "no assistant message in /message response"
