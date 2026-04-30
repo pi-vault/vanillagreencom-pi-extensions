@@ -15,6 +15,13 @@
 #   --keys k1,k2,...      Raw key sequence — sends each key name through tmux send-keys.
 #                         Use for multi-step forms (e.g., toggle then advance page then
 #                         submit). Recognized: Up Down Left Right Enter Tab Space Escape.
+#   --question <reqID> --answer <label>          Opencode question-tool reply via HTTP.
+#   --question <reqID> --answer-multi l1,l2,...  Multi-pick reply (when question.multiple).
+#   --question <reqID> --reject                  Cancel the question without answering.
+#                         Routes to POST <oc_url>/question/<reqID>/{reply,reject}. The
+#                         daemon's oc-subscriber emits an `oc-question` wake event with
+#                         the structured payload (header, options, multiple) — master
+#                         picks a label and calls back via this mode. No tmux send-keys.
 #
 # Always targets an explicit pane index. Harness-aware: option-pick mechanics differ
 # across harnesses. The --harness flag selects the adapter; default is claude.
@@ -103,6 +110,10 @@ SEND_ENTER=1
 CLEAR_BELL=1
 KEYS_ALLOW_TMUX=0
 CONFIRM_ADVANCED=0
+QUESTION_ID=""
+ANSWER_LABEL=""
+ANSWER_MULTI_CSV=""
+REJECT_QUESTION=0
 
 # Optional positional payload (must precede flags).
 if [[ $# -gt 0 && "$1" != --* ]]; then
@@ -126,6 +137,13 @@ while [[ $# -gt 0 ]]; do
     --no-clear) CLEAR_BELL=0; shift ;;
     --keys-allow-tmux) KEYS_ALLOW_TMUX=1; shift ;;
     --confirm-advanced) CONFIRM_ADVANCED=1; shift ;;
+    --question) MODE="question"; QUESTION_ID="$2"; shift 2 ;;
+    --question=*) MODE="question"; QUESTION_ID="${1#--question=}"; shift ;;
+    --answer) ANSWER_LABEL="$2"; shift 2 ;;
+    --answer=*) ANSWER_LABEL="${1#--answer=}"; shift ;;
+    --answer-multi) ANSWER_MULTI_CSV="$2"; shift 2 ;;
+    --answer-multi=*) ANSWER_MULTI_CSV="${1#--answer-multi=}"; shift ;;
+    --reject) REJECT_QUESTION=1; shift ;;
     *) echo "Unknown flag: $1" >&2; exit 2 ;;
   esac
 done
@@ -164,6 +182,22 @@ case "$MODE" in
     [[ -z "$PAYLOAD" ]] && {
       echo "Usage: pane-respond <pane-target> <payload>|--option N|--keys k1,k2,... [flags]" >&2
       exit 2; }
+    ;;
+  question)
+    [[ -z "$QUESTION_ID" ]] && {
+      echo "Error: --question requires a request_id (que_…)" >&2; exit 2; }
+    [[ -n "$PAYLOAD" ]] && {
+      echo "Error: --question is mutually exclusive with positional payload" >&2; exit 2; }
+    if [[ "$REJECT_QUESTION" -eq 0 && -z "$ANSWER_LABEL" && -z "$ANSWER_MULTI_CSV" ]]; then
+      echo "Error: --question requires --answer <label>, --answer-multi <l1,l2,...>, or --reject" >&2
+      exit 2
+    fi
+    if [[ -n "$ANSWER_LABEL" && -n "$ANSWER_MULTI_CSV" ]]; then
+      echo "Error: --answer and --answer-multi are mutually exclusive" >&2; exit 2
+    fi
+    if [[ "$HARNESS" != "opencode" ]]; then
+      echo "Error: --question is only supported for harness=opencode" >&2; exit 1
+    fi
     ;;
 esac
 
@@ -420,7 +454,57 @@ OC_ADAPTER_USED=0
 CC_ADAPTER_USED=0
 PI_ADAPTER_USED=0
 CX_ADAPTER_USED=0
-if [[ "$HARNESS" == "opencode" ]]; then
+
+# Opencode question-tool reply/reject. Routes via HTTP API:
+#   POST <oc_url>/question/<requestID>/reply  body {"answers":[[<label>,...]]}
+#   POST <oc_url>/question/<requestID>/reject
+# Resolves oc_url from registry oc-attach-args or the spawn file fallback.
+# The pane's opencode server returns ALL pending questions across parent
+# + sub-agent sessions, so the request_id alone disambiguates which
+# session is being answered.
+if [[ "$MODE" == "question" ]]; then
+  oc_issue=$("$SCRIPT_DIR/pane-registry" find-by-pane "$TARGET" 2>/dev/null || echo "")
+  oc_attach_args=""
+  if [[ -n "$oc_issue" ]]; then
+    oc_attach_args=$("$SCRIPT_DIR/pane-registry" oc-attach-args "$oc_issue" 2>/dev/null || echo "")
+  fi
+  if [[ -z "$oc_attach_args" ]]; then
+    derived_issue=$(oc_issue_from_pane_target "$TARGET")
+    if [[ -n "$derived_issue" ]]; then
+      oc_attach_args=$(oc_attach_args_from_spawn "$derived_issue" 2>/dev/null || echo "")
+    fi
+  fi
+  if [[ -z "$oc_attach_args" ]]; then
+    echo "Error: --question requires opencode adapter (no oc-attach metadata for $TARGET)" >&2
+    exit 5
+  fi
+  oc_url=$(awk '{for(i=1;i<=NF;i++)if($i=="--url"){print $(i+1);exit}}' <<< "$oc_attach_args")
+  if [[ -z "$oc_url" ]]; then
+    echo "Error: could not resolve opencode url for $TARGET" >&2; exit 5
+  fi
+  if (( REJECT_QUESTION == 1 )); then
+    if ! curl -sf -X POST -o /dev/null --max-time 10 "$oc_url/question/$QUESTION_ID/reject"; then
+      echo "Error: question reject failed (POST $oc_url/question/$QUESTION_ID/reject)" >&2
+      exit 5
+    fi
+    echo "  oc-question-rejected: $QUESTION_ID"
+  else
+    if [[ -n "$ANSWER_LABEL" ]]; then
+      payload=$(jq -nc --arg a "$ANSWER_LABEL" '{answers:[[$a]]}')
+    else
+      payload=$(jq -nc --arg c "$ANSWER_MULTI_CSV" '{answers:[($c | split(","))]}')
+    fi
+    resp=$(curl -sf -X POST -H 'Content-Type: application/json' -d "$payload" --max-time 10 "$oc_url/question/$QUESTION_ID/reply" 2>&1)
+    if [[ "$resp" != "true" ]]; then
+      echo "Error: question reply failed (POST $oc_url/question/$QUESTION_ID/reply): $resp" >&2
+      exit 5
+    fi
+    echo "  oc-question-answered: $QUESTION_ID payload=$payload"
+  fi
+  OC_ADAPTER_USED=1
+fi
+
+if [[ "$HARNESS" == "opencode" && $OC_ADAPTER_USED -eq 0 ]]; then
   oc_issue=$("$SCRIPT_DIR/pane-registry" find-by-pane "$TARGET" 2>/dev/null || echo "")
   oc_attach_args=""
   if [[ -n "$oc_issue" ]]; then

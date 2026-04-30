@@ -293,13 +293,31 @@ create_oc_session() {
 # user-visible `opencode attach` TUI in step 2 will display the turn
 # as it streams. setsid + log redirection so this survives open-terminal
 # exit and doesn't pollute the launcher's stdio.
+#
+# Env overrides (intended for tests / alt workflows):
+#   FLIGHTDECK_OC_FOLLOWUP_PROMPT — replace the default `/orchestration
+#       start <ISSUE>` prompt entirely. Use literal `__ISSUE__` in the
+#       value to substitute the issue id at fire time (multi-issue
+#       spawns share one env, but each issue gets its own substitution).
+#   FLIGHTDECK_OC_SKIP_FOLLOWUP=1 — skip the followup fire entirely;
+#       useful when callers will drive the session via run --attach
+#       themselves and want the spawn to bring up only the bridge.
 fire_orchestration_async() {
   local bin="$1" url="$2" sid="$3" issue="$4" wt_path="$5"
+  if [[ "${FLIGHTDECK_OC_SKIP_FOLLOWUP:-0}" == "1" ]]; then
+    return 0
+  fi
   local log; log=$(oc_server_log "${url##*:}")
+  local prompt
+  if [[ -n "${FLIGHTDECK_OC_FOLLOWUP_PROMPT:-}" ]]; then
+    prompt="${FLIGHTDECK_OC_FOLLOWUP_PROMPT//__ISSUE__/$issue}"
+  else
+    prompt="/orchestration start $issue"
+  fi
   # Outer redirect detaches the subshell's FDs from anything the caller
   # might be capturing — same hazard as start_oc_server.
   ( cd "$wt_path" && setsid nohup "$bin" run --attach "$url" \
-      --session "$sid" --format json "/orchestration start $issue" \
+      --session "$sid" --format json "$prompt" \
       </dev/null >>"$log".orch 2>&1 ) </dev/null >/dev/null 2>&1 &
   disown 2>/dev/null || true
 }
@@ -310,7 +328,7 @@ fire_orchestration_async() {
 # caller falls through to legacy spawn.
 spawn_oc_attach_tmux() {
   local issue="$1" wt_path="$2"
-  local bin port server_pid sid
+  local bin port server_pid sid pane_id
 
   if ! bin=$(resolve_opencode_bin); then
     echo "  oc-attach-unavailable: opencode binary not found (PATH or /usr/bin)" >&2

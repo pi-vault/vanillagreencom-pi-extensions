@@ -122,6 +122,7 @@ CANONICAL_TAGS=(
   external-fix-suggestions
   cycle-fix-suggestions
   descope-related
+  oc-question
 )
 
 is_canonical_tag() {
@@ -745,6 +746,13 @@ oc_subscriber_loop() {
   exec 200<&- 2>/dev/null || true
   local pane_id="$1" oc_url="$2" session_id="$3" parent_pid="$4"
   local last_hash=""
+  # Comma-bracketed list of question request_ids we've already emitted
+  # for this pane, e.g., ",que_abc,que_def,". Lookup uses substring
+  # match. Resets only on subscriber restart — once a question is
+  # emitted, we won't re-emit even if the master takes a while to
+  # answer; the daemon's NOTIFIED_HASH dedup handles wake-side
+  # idempotency.
+  local seen_qids=","
   local sub_log; sub_log="${LOG}.oc-sub-$(oc_pane_id_safe "$pane_id")"
   printf '%s [oc-sub-start] pane=%s url=%s session=%s parent=%s\n' \
     "$(date -Iseconds)" "$pane_id" "$oc_url" "$session_id" "$parent_pid" \
@@ -754,6 +762,44 @@ oc_subscriber_loop() {
       printf '%s [oc-sub-exit] parent gone\n' "$(date -Iseconds)" >> "$sub_log" 2>/dev/null || true
       exit 0
     fi
+
+    # --- Question-tool poll (always-on; cheap when no questions are
+    # pending). The opencode HTTP server is per-pane, so /question
+    # returns only this pane's pending questions across parent +
+    # sub-agent sessions. Emits one wake event per never-before-seen
+    # request_id with the full structured payload (header, question
+    # text, options, multiple) so master can answer via
+    # `pane-respond --question <id> --answer <label>`.
+    local qresp
+    qresp=$(curl -s --max-time 5 "$oc_url/question" 2>/dev/null)
+    if [[ -n "$qresp" && "$qresp" != "[]" ]]; then
+      while IFS= read -r qid; do
+        [[ -z "$qid" || "$qid" == "null" ]] && continue
+        if [[ "$seen_qids" != *",$qid,"* ]]; then
+          seen_qids="${seen_qids}${qid},"
+          local qpayload qhash
+          qpayload=$(jq -c --arg q "$qid" '.[] | select(.id == $q)' <<< "$qresp" 2>/dev/null)
+          [[ -z "$qpayload" ]] && continue
+          qhash=$(printf '%s' "$qid" | sha256sum | awk '{print substr($1,1,12)}')
+          printf '%s [oc-question-emit] pane=%s request_id=%s\n' \
+            "$(date -Iseconds)" "$pane_id" "$qid" \
+            >> "$sub_log" 2>/dev/null || true
+          ( exec 211>"$SESSION_LOCK"
+            flock 211
+            jq -nc --arg ts "$(date -Iseconds)" \
+                   --arg pid "$pane_id" \
+                   --arg harness "opencode" \
+                   --arg req "$qid" \
+                   --arg tag "oc-question" \
+                   --arg h "$qhash" \
+                   --argjson q "$qpayload" \
+                   '{ts:$ts, pane_id:$pid, harness:$harness, event_type:"question", request_id:$req, question:$q, classifier_tag:$tag, hash:$h}' \
+                   >> "$WAKE_EVENTS_LOG"
+          )
+        fi
+      done < <(jq -r '.[].id // empty' <<< "$qresp" 2>/dev/null)
+    fi
+
     local resp last_text hash tag text_excerpt
     resp=$(curl -s --max-time 5 "$oc_url/session/$session_id/message" 2>/dev/null)
     if [[ -n "$resp" ]]; then
@@ -1364,15 +1410,25 @@ run_loop() {
         if [[ "${NOTIFIED_HASH[$ev_pid]:-}" == "$ev_hash" ]]; then
           continue
         fi
+        # Distinguish question events from turn-end events in logs +
+        # daemon-events source field. Both are emitted by oc-subscriber,
+        # but "oc-event" historically meant turn-end; "oc-question-event"
+        # is the question-tool wake.
+        local _src
+        if [[ "$ev_tag" == "oc-question" ]]; then
+          _src="oc-question-event"
+        else
+          _src="oc-event"
+        fi
         if is_canonical_tag "$ev_tag"; then
-          log classify "$ev_pid oc-event tag=$ev_tag (canonical)"
+          log classify "$ev_pid $_src tag=$ev_tag (canonical)"
           tick_reasons+=("oc:$ev_pid:$ev_tag")
           tick_pending_ids+=("$ev_pid")
           tick_pending_hashes+=("$ev_hash")
           tick_pending_tags+=("$ev_tag")
-          append_event "$ev_pid" "$ev_hash" "$ev_tag" "oc-event" 0 false
+          append_event "$ev_pid" "$ev_hash" "$ev_tag" "$_src" 0 false
         else
-          (( VERBOSE == 1 )) && log classify "$ev_pid oc-event tag=$ev_tag (non-canonical)"
+          (( VERBOSE == 1 )) && log classify "$ev_pid $_src tag=$ev_tag (non-canonical)"
           NOTIFIED_HASH[$ev_pid]="$ev_hash"
         fi
       done <<< "$_wake_events"

@@ -94,6 +94,11 @@ Lessons distilled from real multi-issue session experience are grouped by domain
 - **PR/branch expansion bias** — prefer fixing additional findings inline in the current PR over deferring to new issues, UNLESS strong reason exists (different scope, different agent, requires measurement, blocked dependency, architectural decision needed). Strong reasons are concrete, not "tidiness".
 - **Merge-order tiebreakers**: (1) smallest scope first, (2) overlapping-files: smaller goes first, (3) otherwise: any order is fine.
 
+### Opencode questions (`patterns/opencode-questions.md`)
+
+- **Wake events** — `oc-question` is canonical. Daemon emits the structured payload (header, options[], multiple) with classifier_tag `oc-question` and source `oc-question-event`. Master answers via `pane-respond --question <reqID> --answer "<label>"` / `--answer-multi "<l1,l2>"` / `--reject` — routes to `POST <oc_url>/question/<reqID>/{reply,reject}`. No tmux send-keys involved.
+- **Never pass off-list labels** — the API silently accepts any string and the agent records it verbatim. Master MUST pick `--answer` values from the wake event's `question.options[].label` set. For free-form responses, `--reject` and follow up with `opencode run --attach --session <SID> "<text>"` instead.
+
 ## Scripts
 
 ```bash
