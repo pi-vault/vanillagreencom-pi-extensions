@@ -1,7 +1,7 @@
 import { complete, type Message } from "@mariozechner/pi-ai";
-import { BorderedLoader, convertToLlm, CustomEditor, serializeConversation, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, type KeybindingsManager, type SessionEntry, type SessionMessageEntry, type Theme } from "@mariozechner/pi-coding-agent";
+import { AssistantMessageComponent, BorderedLoader, convertToLlm, CustomEditor, serializeConversation, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, type KeybindingsManager, type SessionEntry, type SessionMessageEntry, type Theme } from "@mariozechner/pi-coding-agent";
 import type { EditorTheme, TUI } from "@mariozechner/pi-tui";
-import { matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
+import { matchesKey, Text, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { execFile, execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -16,6 +16,8 @@ const IMAGE_PATH_PATTERN = /(^|[\s(\[{<"'`])(@?(?:~|\.\.?|\/)[^\s)\]}>"'`]+?\.(?
 const IMAGE_ALIAS_SYMBOL = Symbol.for("vstack.pi-qol.image-path-aliases");
 const QUESTION_SERVICE_SYMBOL = Symbol.for("vstack.pi-questions.service");
 const QOL_NOTIFICATION_SERVICE_SYMBOL = Symbol.for("vstack.pi-qol.notification-service");
+const THINKING_TIMER_STORE_SYMBOL = Symbol.for("vstack.pi-qol.thinking-timer.store");
+const THINKING_TIMER_PATCH_SYMBOL = Symbol.for("vstack.pi-qol.thinking-timer.patch");
 const QUESTION_OPENED_EVENT = "vstack:pi-questions:opened";
 const QUESTION_NOTIFY_DEDUP_MS = 2000;
 const DEFAULT_NOTIFICATION_TITLE = "Pi";
@@ -140,6 +142,14 @@ interface QolNotificationService {
 	notifyQuestionOpened(ctx: ExtensionContext | undefined, event: QuestionOpenedEventLike): boolean;
 }
 
+interface ThinkingTimerStore {
+	enabled: boolean;
+	starts: Map<string, number>;
+	durations: Map<string, number>;
+	labels: Map<string, Text>;
+	theme?: ExtensionContext["ui"]["theme"];
+}
+
 interface PermissionGateMatcher {
 	label: string;
 	pattern: RegExp;
@@ -202,6 +212,78 @@ const lastQuestionNotificationAt = new Map<string, number>();
 let tmuxMarkedTarget: string | undefined;
 let tmuxOriginalWindowName: string | undefined;
 let tmuxWindowMarkTimer: ReturnType<typeof setTimeout> | undefined;
+
+function getThinkingTimerStore(): ThinkingTimerStore | undefined {
+	return (globalThis as unknown as Record<PropertyKey, unknown>)[THINKING_TIMER_STORE_SYMBOL] as ThinkingTimerStore | undefined;
+}
+
+function formatThinkingElapsed(ms: number): string {
+	const totalSeconds = ms / 1000;
+	if (totalSeconds < 60) return `${totalSeconds.toFixed(1)}s`;
+	const minutes = Math.floor(totalSeconds / 60);
+	const seconds = totalSeconds - minutes * 60;
+	return `${minutes}:${seconds.toFixed(1).padStart(4, "0")}`;
+}
+
+function thinkingTimerLabel(theme: ThinkingTimerStore["theme"], ms: number): string {
+	const base = "Thinking...";
+	const elapsed = ` ${formatThinkingElapsed(ms)}`;
+	if (!theme) return `${base}${elapsed}`;
+	return theme.italic(theme.fg("thinkingText", base) + theme.fg("dim", elapsed));
+}
+
+function thinkingTimerKey(timestamp: number, contentIndex: number): string {
+	return `${timestamp}:${contentIndex}`;
+}
+
+function installThinkingTimerPatch(): void {
+	const proto = AssistantMessageComponent.prototype as unknown as Record<PropertyKey, any>;
+	if (proto[THINKING_TIMER_PATCH_SYMBOL]) return;
+	const originalUpdateContent = proto.updateContent;
+	if (typeof originalUpdateContent !== "function") return;
+	proto[THINKING_TIMER_PATCH_SYMBOL] = true;
+	proto.updateContent = function patchedUpdateContent(this: any, message: any): void {
+		originalUpdateContent.call(this, message);
+		try {
+			const store = getThinkingTimerStore();
+			if (!store?.enabled) return;
+			if (!message || !Array.isArray(message.content) || typeof message.timestamp !== "number") return;
+			if (!this.hideThinkingBlock) return;
+			if (!this.contentContainer || !Array.isArray(this.contentContainer.children)) return;
+
+			const thinkingIndices: number[] = [];
+			for (let i = 0; i < message.content.length; i++) {
+				const content = message.content[i];
+				if (content?.type === "thinking" && typeof content.thinking === "string" && content.thinking.trim()) thinkingIndices.push(i);
+			}
+			if (thinkingIndices.length === 0) return;
+
+			const labelComponents: Text[] = [];
+			for (const child of this.contentContainer.children as any[]) {
+				if (!child || typeof child !== "object") continue;
+				if (typeof child.setText !== "function") continue;
+				if (typeof child.text !== "string") continue;
+				if (!child.text.includes("Thinking...")) continue;
+				labelComponents.push(child as Text);
+			}
+			if (labelComponents.length === 0) return;
+
+			const count = Math.min(thinkingIndices.length, labelComponents.length);
+			for (let i = 0; i < count; i++) {
+				const contentIndex = thinkingIndices[i]!;
+				const label = labelComponents[i]!;
+				const key = thinkingTimerKey(message.timestamp, contentIndex);
+				store.labels.set(key, label);
+				const duration = store.durations.get(key);
+				const start = store.starts.get(key);
+				const ms = duration ?? (start === undefined ? undefined : Date.now() - start);
+				if (ms !== undefined) label.setText(thinkingTimerLabel(store.theme, ms));
+			}
+		} catch {
+			// Rendering must never break because of this optional monkey-patch.
+		}
+	};
+}
 
 function sanitizeNotificationPart(input: string, maxChars = DEFAULT_NOTIFICATION_BODY_MAX_CHARS): string {
 	const cleaned = input
@@ -1114,7 +1196,6 @@ async function runHandoff(args: string, ctx: ExtensionCommandContext): Promise<v
 }
 
 function statusMessage(ctx: ExtensionContext): string {
-	const cfg = readVstackConfig(ctx.cwd);
 	const labels = attachmentLabels(currentEditorText(ctx), ctx.cwd);
 	return [
 		"Pi QOL status",
@@ -1130,7 +1211,7 @@ function statusMessage(ctx: ExtensionContext): string {
 		`Branch summary override: ${settingBoolean("compaction.branchSummaryEnabled", false, ctx.cwd) ? "enabled" : "disabled"}`,
 		`Notifications: ${settingBoolean("notification.enabled", true, ctx.cwd) ? `enabled (bell=${settingBoolean("notification.bell", true, ctx.cwd)}, native=${settingBoolean("notification.native", true, ctx.cwd)}, tmuxClientTty=${settingBoolean("notification.tmuxNativeClientTty", true, ctx.cwd)}, tmuxMessage=${settingBoolean("notification.tmux", false, ctx.cwd)})` : "disabled"}`,
 		`Permission gate: ${settingBoolean("permissionGate.enabled", true, ctx.cwd) ? `enabled (${permissionGateCommands(ctx.cwd).join(", ") || "none configured"})` : "disabled"}`,
-		`Hidden Thinking... placeholder setting: ${String(cfg.showHiddenThinkingPlaceholder ?? false)} (Pi API currently has no assistant-renderer hook, so this is a settings contract only.)`,
+		`Thinking timer: ${settingBoolean("thinkingTimer.enabled", true, ctx.cwd) ? "enabled" : "disabled"}`,
 		"If Shift+Enter still submits, configure your terminal/tmux to send a distinct Shift+Enter sequence or use the fallback key.",
 	].join("\n");
 }
@@ -1141,12 +1222,72 @@ export default function qol(pi: ExtensionAPI): void {
 	guard[INSTALL_SYMBOL] = true;
 	if (!settingBoolean("enabled", true)) return;
 
+	installThinkingTimerPatch();
+	const thinkingTimerStore: ThinkingTimerStore = {
+		enabled: false,
+		starts: new Map(),
+		durations: new Map(),
+		labels: new Map(),
+	};
+	(globalThis as unknown as Record<PropertyKey, unknown>)[THINKING_TIMER_STORE_SYMBOL] = thinkingTimerStore;
+
 	let editorPollTimer: ReturnType<typeof setInterval> | undefined;
 	let idleCompactionTimer: ReturnType<typeof setTimeout> | undefined;
 	let questionSubscribeTimer: ReturnType<typeof setInterval> | undefined;
+	let thinkingTimerTicker: ReturnType<typeof setInterval> | undefined;
 	let questionUnsubscribe: (() => void) | undefined;
 	let lastPolledDraft = "";
 	let lastTaskStats: { completed: number; remaining: number; total: number } | undefined;
+
+	const stopThinkingTimerTicker = () => {
+		if (thinkingTimerTicker) clearInterval(thinkingTimerTicker);
+		thinkingTimerTicker = undefined;
+	};
+
+	const tickThinkingTimer = () => {
+		if (!thinkingTimerStore.enabled || thinkingTimerStore.starts.size === 0) {
+			stopThinkingTimerTicker();
+			return;
+		}
+		for (const [key, start] of thinkingTimerStore.starts.entries()) {
+			const label = thinkingTimerStore.labels.get(key);
+			if (label) label.setText(thinkingTimerLabel(thinkingTimerStore.theme, Date.now() - start));
+		}
+	};
+
+	const startThinkingTimerTicker = () => {
+		if (thinkingTimerTicker) return;
+		thinkingTimerTicker = setInterval(tickThinkingTimer, 100);
+		thinkingTimerTicker.unref?.();
+	};
+
+	const resetThinkingTimer = (ctx?: ExtensionContext) => {
+		stopThinkingTimerTicker();
+		thinkingTimerStore.starts.clear();
+		thinkingTimerStore.durations.clear();
+		thinkingTimerStore.labels.clear();
+		thinkingTimerStore.theme = ctx?.ui.theme;
+		thinkingTimerStore.enabled = !!ctx?.hasUI && settingBoolean("thinkingTimer.enabled", true, ctx?.cwd);
+	};
+
+	const updateThinkingTimerEnabled = (ctx: ExtensionContext): boolean => {
+		thinkingTimerStore.theme = ctx.ui.theme;
+		const enabled = ctx.hasUI && settingBoolean("thinkingTimer.enabled", true, ctx.cwd);
+		if (thinkingTimerStore.enabled && !enabled) resetThinkingTimer(ctx);
+		thinkingTimerStore.enabled = enabled;
+		return enabled;
+	};
+
+	const finalizeThinkingBlock = (key: string, endTimeMs = Date.now()) => {
+		const start = thinkingTimerStore.starts.get(key);
+		if (start === undefined) return;
+		const duration = Math.max(0, endTimeMs - start);
+		thinkingTimerStore.starts.delete(key);
+		thinkingTimerStore.durations.set(key, duration);
+		const label = thinkingTimerStore.labels.get(key);
+		if (label) label.setText(thinkingTimerLabel(thinkingTimerStore.theme, duration));
+		if (thinkingTimerStore.starts.size === 0) stopThinkingTimerTicker();
+	};
 
 	const clearIdleCompactionTimer = () => {
 		if (idleCompactionTimer) clearTimeout(idleCompactionTimer);
@@ -1228,6 +1369,7 @@ export default function qol(pi: ExtensionAPI): void {
 
 	pi.on("session_start", (_event, ctx) => {
 		currentCtx = ctx;
+		resetThinkingTimer(ctx);
 		ctx.ui.setEditorComponent((tui, theme, keybindings) => new QolEditor(tui, theme, keybindings, ctx));
 		if (editorPollTimer) clearInterval(editorPollTimer);
 		lastPolledDraft = "";
@@ -1256,6 +1398,7 @@ export default function qol(pi: ExtensionAPI): void {
 		editorPollTimer = undefined;
 		clearIdleCompactionTimer();
 		clearQuestionSubscribeTimer();
+		resetThinkingTimer(undefined);
 		clearTmuxWindowMark();
 		questionUnsubscribe?.();
 		questionUnsubscribe = undefined;
@@ -1269,6 +1412,34 @@ export default function qol(pi: ExtensionAPI): void {
 	pi.on("agent_start", () => {
 		clearIdleCompactionTimer();
 		clearTmuxWindowMark();
+	});
+	pi.on("message_update", (event, ctx) => {
+		if (!updateThinkingTimerEnabled(ctx)) return;
+		const streamEvent = event.assistantMessageEvent as any;
+		if (!streamEvent || typeof streamEvent.type !== "string") return;
+		if (streamEvent.type === "thinking_start" || streamEvent.type === "thinking_delta") {
+			const partial = streamEvent.partial;
+			if (!partial || typeof partial.timestamp !== "number" || typeof streamEvent.contentIndex !== "number") return;
+			const key = thinkingTimerKey(partial.timestamp, streamEvent.contentIndex);
+			if (!thinkingTimerStore.starts.has(key) && !thinkingTimerStore.durations.has(key)) thinkingTimerStore.starts.set(key, Date.now());
+			startThinkingTimerTicker();
+			tickThinkingTimer();
+			return;
+		}
+		if (streamEvent.type === "thinking_end") {
+			const partial = streamEvent.partial;
+			if (!partial || typeof partial.timestamp !== "number" || typeof streamEvent.contentIndex !== "number") return;
+			finalizeThinkingBlock(thinkingTimerKey(partial.timestamp, streamEvent.contentIndex));
+		}
+	});
+	pi.on("message_end", (event, ctx) => {
+		if (!updateThinkingTimerEnabled(ctx)) return;
+		const message = event.message as any;
+		if (!message || message.role !== "assistant" || !Array.isArray(message.content)) return;
+		for (let i = 0; i < message.content.length; i++) {
+			if (message.content[i]?.type !== "thinking") continue;
+			finalizeThinkingBlock(thinkingTimerKey(message.timestamp, i));
+		}
 	});
 	pi.on("agent_end", (event, ctx) => {
 		scheduleIdleCompaction(ctx);

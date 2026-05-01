@@ -14,7 +14,7 @@ Features:
 - Sends external terminal/tmux notifications when Pi is ready for input, asks a structured question, appears to need direction, completes a full task list, or reports critical/blocked information. Channels include BEL, OSC 777/OSC 99, Windows Terminal toast, and optional tmux `display-message`.
 - Optionally overrides Pi compaction summaries with a custom summarizer modeled after Pi's `custom-compaction.ts` example. It can use a configured model (default `google/gemini-2.5-flash`) or a remote HTTP endpoint, supports concise/balanced/exhaustive summary profiles, and can also override requested `/tree` branch summaries.
 - Optionally triggers idle compaction after a configurable idle delay and token threshold, inspired by oh-my-pi's idle compaction settings. Pi's built-in compaction settings still control normal automatic overflow/threshold compaction.
-- Exposes a settings contract for hiding the collapsed `Thinking...` placeholder. Current Pi extension APIs do not expose assistant-message renderer replacement, so this setting is visible but cannot yet change built-in assistant rendering.
+- Shows a live elapsed timer next to collapsed `Thinking...` labels and leaves the final duration when thinking ends (toggle with `thinkingTimer.enabled`, default on). This uses a defensive internal renderer patch and fails back to Pi's default label if Pi internals change.
 
 Commands:
 
@@ -45,6 +45,12 @@ All are exposed through `pi-extension-manager` under **QOL**:
 
 - `permissionGate.enabled`: ask before matching bash tool calls. In non-interactive mode, matches are blocked.
 - `permissionGate.commands`: comma-separated command fragments to confirm before running. Default: `rm -Rf`. Literal entries are case-insensitive and whitespace-tolerant; regex entries may use `/pattern/flags`.
+
+## Thinking settings
+
+All are exposed through `pi-extension-manager` under **QOL**:
+
+- `thinkingTimer.enabled`: show live elapsed time next to collapsed `Thinking...` labels. Requires thinking blocks to be collapsed (`hideThinkingBlock` / Ctrl+T) and a model/thinking level that emits thinking blocks. Default on.
 
 ## Compaction settings
 

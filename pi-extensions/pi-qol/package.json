@@ -1,7 +1,7 @@
 {
   "name": "pi-qol",
   "version": "0.1.0",
-  "description": "Pi quality-of-life extension: reliable multiline input, styled pasted-image chips, session naming, handoff, permission prompts, notifications, custom compaction, and hidden-thinking placeholder settings contract.",
+  "description": "Pi quality-of-life extension: reliable multiline input, styled pasted-image chips, session naming, handoff, permission prompts, notifications, custom compaction, and a collapsed-thinking timer.",
   "license": "MIT",
   "keywords": [
     "pi-package",
@@ -464,13 +464,13 @@
           "apply": "live"
         },
         {
-          "key": "showHiddenThinkingPlaceholder",
-          "label": "Show hidden-thinking placeholder",
-          "description": "Settings contract for suppressing the collapsed Thinking... placeholder when Pi exposes a renderer hook. Current Pi API has no assistant-renderer override.",
+          "key": "thinkingTimer.enabled",
+          "label": "Show thinking timer",
+          "description": "Show live elapsed time next to collapsed Thinking... labels and leave the final duration after thinking ends. Uses a defensive internal renderer patch and fails back to Pi's default label if Pi internals change.",
           "type": "boolean",
-          "default": false,
+          "default": true,
           "category": "Thinking",
-          "apply": "restart"
+          "apply": "live"
         }
       ]
     }
