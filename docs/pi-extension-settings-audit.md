@@ -64,6 +64,12 @@ Settings persist under `vstack.extensionManager.config.<packageName>` in Pi `set
 - Useful settings: Shift+Enter newline, fallback newline key, image chip rendering, attachment count badge, session commands, terminal/tmux notification triggers/channels (including active-window bell suppression and tmux client-TTY native notifications for Ghostty), custom compaction model/profile/remote endpoint, branch summary override, idle compaction thresholds, hidden-thinking placeholder preference.
 - Apply semantics: image/status, notification, and compaction behavior settings are live; editor and command registration need reload. Hidden-thinking is a settings contract only until Pi exposes an assistant-message renderer hook.
 
+### `pi-session-manager`
+
+- Toggle: `enabled` registers/unregisters `/sessions`, `/session-manager`, the status badge, and the optional shortcut after reload.
+- Useful settings: shortcut key, default scope, default sort, visible rows, overlay width, named-session status badge, trash-before-unlink deletion.
+- Apply semantics: browse/render/delete settings are live; command and shortcut registration need reload.
+
 ### `pi-output-policy`
 
 - Toggle: `enabled` applies/skips tool-result minimization/truncation live.

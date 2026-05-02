@@ -420,6 +420,13 @@ All vstack Pi packages declare `vstack.extensionManager.settings` metadata, incl
 - **Settings:** Shift+Enter handling, fallback newline key, image chips/status, session commands, notification triggers/channels, custom/remote/idle compaction, branch summary override, hidden-thinking placeholder preference.
 - **More:** [pi-extensions/pi-qol/README.md](pi-extensions/pi-qol/README.md).
 
+#### `pi-session-manager`
+
+- **Purpose:** Polished Pi session browser for searching, threaded lineage review, resuming, renaming, and safely deleting sessions.
+- **Commands/UI:** `/sessions [current|all]`, `/session-manager`; configurable idle shortcut (`Ctrl+Shift+R` by default).
+- **Settings:** enablement, shortcut, default scope/sort, overlay width, visible rows, named-session status badge, trash-before-unlink deletion.
+- **More:** [pi-extensions/pi-session-manager/README.md](pi-extensions/pi-session-manager/README.md).
+
 #### `pi-output-policy`
 
 - **Purpose:** OMP-style large-output policy: shell minimization, head/tail truncation, spill-file preservation, UI-safe caps.

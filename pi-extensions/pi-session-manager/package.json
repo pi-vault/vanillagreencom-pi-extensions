@@ -1,0 +1,117 @@
+{
+  "name": "pi-session-manager",
+  "version": "0.1.0",
+  "description": "Polished Pi session manager overlay for browsing, searching, resuming, renaming, and safely deleting sessions.",
+  "license": "MIT",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "coding-agent",
+    "sessions",
+    "session-manager"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/session-manager.ts"
+    ]
+  },
+  "vstack": {
+    "extensionManager": {
+      "displayName": "Session Manager",
+      "settings": [
+        {
+          "key": "enabled",
+          "label": "Enable session manager",
+          "description": "Register the /sessions overlay, status badge, and optional shortcut. Disable and reload to leave Pi's built-in /resume unchanged.",
+          "type": "boolean",
+          "default": true,
+          "category": "General",
+          "apply": "reload",
+          "requiresReload": true
+        },
+        {
+          "key": "shortcutKey",
+          "label": "Manager shortcut",
+          "description": "Keyboard shortcut that opens /sessions when Pi is idle. Set to none to disable.",
+          "type": "string",
+          "default": "ctrl+shift+r",
+          "category": "General",
+          "apply": "reload",
+          "requiresReload": true
+        },
+        {
+          "key": "defaultScope",
+          "label": "Default scope",
+          "description": "Initial session scope for /sessions without arguments.",
+          "type": "enum",
+          "enumValues": [
+            "current",
+            "all"
+          ],
+          "default": "current",
+          "category": "Browse",
+          "apply": "live"
+        },
+        {
+          "key": "defaultSort",
+          "label": "Default sort",
+          "description": "Initial sort mode: threaded follows Pi /resume lineage, recent sorts by activity, relevance sorts search matches by score.",
+          "type": "enum",
+          "enumValues": [
+            "threaded",
+            "recent",
+            "relevance"
+          ],
+          "default": "threaded",
+          "category": "Browse",
+          "apply": "live"
+        },
+        {
+          "key": "visibleRows",
+          "label": "Visible rows",
+          "description": "Maximum session rows shown before scrolling.",
+          "type": "number",
+          "default": 12,
+          "category": "Browse",
+          "apply": "live"
+        },
+        {
+          "key": "overlayWidth",
+          "label": "Overlay width",
+          "description": "Preferred session manager overlay width in terminal columns.",
+          "type": "number",
+          "default": 112,
+          "category": "UI",
+          "apply": "live"
+        },
+        {
+          "key": "showStatus",
+          "label": "Show session status badge",
+          "description": "Show the active session name in Pi's footer/status area when the session has a friendly name.",
+          "type": "boolean",
+          "default": true,
+          "category": "UI",
+          "apply": "live"
+        },
+        {
+          "key": "deleteUsesTrash",
+          "label": "Use trash for delete",
+          "description": "Try the trash CLI before permanently unlinking a deleted session file.",
+          "type": "boolean",
+          "default": true,
+          "category": "Safety",
+          "apply": "live"
+        }
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*"
+  },
+  "files": [
+    "extensions/",
+    "README.md",
+    "package.json"
+  ]
+}
