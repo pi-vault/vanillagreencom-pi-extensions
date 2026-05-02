@@ -1087,11 +1087,6 @@ export default function sessionManagerExtension(pi: ExtensionAPI): void {
 		handler: async (args, ctx) => handleSessionsCommand(args, ctx, pi),
 	});
 
-	pi.registerCommand("session-manager", {
-		description: "Open the Pi session manager overlay",
-		handler: async (args, ctx) => handleSessionsCommand(args, ctx, pi),
-	});
-
 	const shortcut = configuredShortcut();
 	if (shortcut) {
 		pi.registerShortcut(shortcut, {

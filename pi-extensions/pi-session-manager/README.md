@@ -22,7 +22,6 @@ No SQLite, FTS, or native runtime dependencies are used; Pi's `SessionManager.li
 | `/sessions` | Open the manager using the configured default scope. |
 | `/sessions current` | Open current-project sessions. |
 | `/sessions all` | Open all sessions. |
-| `/session-manager` | Alias for `/sessions`. |
 
 ## Keys
 

@@ -423,7 +423,7 @@ All vstack Pi packages declare `vstack.extensionManager.settings` metadata, incl
 #### `pi-session-manager`
 
 - **Purpose:** Polished Pi session browser for searching, threaded lineage review, resuming, renaming, and safely deleting sessions.
-- **Commands/UI:** `/sessions [current|all]`, `/session-manager`; configurable idle shortcut (`Ctrl+Shift+R` by default).
+- **Commands/UI:** `/sessions [current|all]`; configurable idle shortcut (`Ctrl+Shift+R` by default).
 - **Settings:** enablement, shortcut, default scope/sort, overlay width, visible rows, named-session status badge, trash-before-unlink deletion.
 - **More:** [pi-extensions/pi-session-manager/README.md](pi-extensions/pi-session-manager/README.md).
 

@@ -66,7 +66,7 @@ Settings persist under `vstack.extensionManager.config.<packageName>` in Pi `set
 
 ### `pi-session-manager`
 
-- Toggle: `enabled` registers/unregisters `/sessions`, `/session-manager`, the status badge, and the optional shortcut after reload.
+- Toggle: `enabled` registers/unregisters `/sessions`, the status badge, and the optional shortcut after reload.
 - Useful settings: shortcut key, default scope, default sort, visible rows, overlay width, named-session status badge, trash-before-unlink deletion.
 - Apply semantics: browse/render/delete settings are live; command and shortcut registration need reload.
 
