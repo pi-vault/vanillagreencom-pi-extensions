@@ -35,15 +35,15 @@ cli/src/
 └── tui/
     ├── mod.rs           Re-exports and shared types (DiscoveredItems incl. pi_extensions)
     ├── install_flow.rs  Install wizard, event loop, inline update, tab mutation
-    ├── state.rs         Installed state, staleness detection, tab building (incl. Pi Extensions tab)
+    ├── state.rs         Installed state, staleness detection, tab building (incl. Pi Packages tab)
     ├── summary.rs       Post-install summary screen
     ├── multiselect.rs   Selection state, scroll, toggle, confirm dialog
     └── render.rs        Ratatui rendering (header, list, status, help bar, dialog overlay)
 
 vstack.toml              Skill/hook-to-agent mapping config (read by CLI at install time)
 agents/                  12 canonical agents — role field drives per-harness access control
-skills/                  29 skill packages — each has SKILL.md with optional dependencies
-hooks/                   6 safety hooks — bash scripts with YAML comment headers
+skills/                  31 skill packages — each has SKILL.md with optional dependencies
+hooks/                   4 safety hooks — bash scripts with YAML comment headers
 pi-extensions/           Pi extension packages (npm-shaped). Each package has package.json with `pi.extensions`.
 skill-templates/         Templates for new skills
 ```
@@ -183,6 +183,6 @@ All skill content lives in `skills/<name>/SKILL.md` — there are no separate `r
 
 ```bash
 cd cli && cargo build                    # build
-cd cli && cargo test                     # 55 unit tests
+cd cli && cargo test                     # 91 unit tests
 cd cli && cargo run -- add .. --all -y   # integration test against this repo
 ```
