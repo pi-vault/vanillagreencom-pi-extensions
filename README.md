@@ -317,7 +317,6 @@ Windows note:
 | `iced-shadcn` | shadcn Base UI component planning, family decomposition, and parity audits for Iced. | — |
 | `price-handling` | Price rounding, epsilon comparison, and market-price handling. | — |
 | `trading-design` | Dense, professional trading-style interface design guidance. | — |
-| `tui-screenshot` | Terminal/TUI static screenshots and animated GIF capture from tmux panes, windows, popups, and modal overlays. | <ul><li><code>/tui-screenshot static|gif|record [target] [output]</code></li></ul> |
 
 #### Workflow / Platform
 
