@@ -4,11 +4,16 @@
 
 Per-session prompt stash history for Pi.
 
-## Usage
+## Commands
+
+| Command | Action |
+| --- | --- |
+| `/prompt-stash` | Open the stash popup. |
+
+## Keys
 
 - `Alt+S` with editor text: stash the current prompt and clear the editor.
 - `Alt+S` with an empty editor: open the stash popup.
-- `/prompt-stash`: open the stash popup.
 
 Popup controls:
 

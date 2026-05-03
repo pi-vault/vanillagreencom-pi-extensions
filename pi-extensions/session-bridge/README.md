@@ -46,12 +46,12 @@ export PI_BRIDGE_DIR=/some/private/dir
 
 The bridge directory is created `0700`; instance files are `0600`.
 
-## Pi slash commands
+## Commands
 
-```text
-/bridge-status        # show socket and registry paths
-/bridge-ping [text]   # emit a bridge_pong event; default text is "pong"
-```
+| Command | Action |
+| --- | --- |
+| `/bridge-status` | Show socket and registry paths. |
+| `/bridge-ping [text]` | Emit a `bridge_pong` event; default text is `pong`. |
 
 ## `pi-bridge` CLI
 

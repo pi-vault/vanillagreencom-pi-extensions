@@ -351,7 +351,7 @@ All vstack Pi packages declare `vstack.extensionManager.settings` metadata, incl
 #### `pi-extension-manager`
 
 - **Purpose:** Pi-styled extension inventory, full settings shell, and quick inline settings editor.
-- **Commands:** `/extensions` for the full popup and `/extension-settings` for quick inline edits.
+- **Commands:** `/extensions` for the full popup and `/extensions settings` for quick inline edits.
 - **Notes:** Pi has no public native API for third-party `/settings` tabs or live module unloads; package/module toggles apply after `/reload` or restart.
 - **More:** [pi-extensions/pi-extension-manager/README.md](pi-extensions/pi-extension-manager/README.md).
 

@@ -1,6 +1,10 @@
 # pi-qol
 
-![QOL session search workflow](./assets/qol-session-search.gif)
+![QOL session search](./assets/qol-session-search.png)
+
+![QOL session prompt picker](./assets/qol-session-prompts.png)
+
+![QOL session actions](./assets/qol-session-actions.png)
 
 Quality-of-life extension for Pi.
 
@@ -8,7 +12,7 @@ Quality-of-life extension for Pi.
 
 - Reliable multiline input: `Shift+Enter` / `Shift+Return` inserts a newline when the terminal reports it distinctly; `ctrl+j` is the default fallback newline key. `Alt+Enter` is reserved for Pi follow-up messages.
 - Compact image placeholders: existing pasted image paths can collapse to `[Image #N]` aliases and are attached on submit.
-- Session naming: `/session-name [name]` sets or shows the friendly session name; automatic first-prompt naming is enabled by default.
+- Session naming: `/rename [name]` sets or shows the friendly session name; automatic first-prompt naming is enabled by default.
 - Context usage: `/context` prints an inline Claude-style context-window visualization with estimated Pi/model category breakdowns.
 - Previous-session search: `/search` and optional `F3` overlay search prior sessions, preview snippets, resume, inject summarized context, or start a new session with summarized context.
 - Handoff: `/handoff <goal>` drafts a focused prompt for a new session, preserving the latest compaction summary plus retained branch entries.
@@ -23,18 +27,12 @@ Quality-of-life extension for Pi.
 | --- | --- |
 | `/qol status` | Show QOL status and key settings. |
 | `/qol notify-test` | Send a test notification. |
-| `/qol attachments` | List image placeholders and existing image paths in the current draft. |
-| `/qol collapse` | Collapse existing image paths in the editor to `[Image #N]` aliases. |
-| `/qol reset` | Clear QOL attachment status and tmux window mark. |
 | `/qol rename` | Regenerate the current session name from the first user prompt. |
-| `/qol rename status` | Show auto-rename settings and current session name. |
 | `/qol rename full` | Regenerate the session name from the full conversation. |
-| `/session-name [name]` | Set or show the current session's friendly name. |
+| `/rename [name]` | Set or show the current session's friendly name. |
 | `/context` | Show inline context-window usage, model/context limit, and estimated category breakdowns. |
 | `/search [query]` | Open previous-session search, optionally prefilled with a query. |
-| `/search resume <sessionPath>` | Resume a session by path. |
 | `/search refresh` | Refresh the session search cache. |
-| `/search stats` | Show session search cache stats. |
 | `/handoff <goal>` | Draft a focused handoff prompt for a new session. |
 
 `/qol` and `/search` arguments support autocomplete.
@@ -59,7 +57,7 @@ Settings are exposed through `pi-extension-manager` under **QOL**.
 - Result/layout knobs: `resultLimit`, `maxVisible`, `messageMaxVisible`, `previewSnippets`, `overlayWidth`, `cacheTtlSeconds`.
 - Summary knobs: `summaryModel`, `summaryMaxTokens`, `summaryInputMaxChars`.
 
-Search rows use Pi's `/resume`-style title: explicit session name, otherwise first user prompt, otherwise filename.
+Search rows use Pi's `/resume`-style title: explicit session name, otherwise first user prompt, otherwise filename. The session cache is warmed on session start/first use and, by default, kept until `/search refresh`; set `cacheTtlSeconds` above `0` if you want automatic time-based refreshes.
 
 ### Context usage
 

@@ -15,15 +15,15 @@ Pi package for explicit, non-blocking background shell tasks.
 
 ## Commands
 
-```text
-/bg                    # open the dashboard
-/bg run <command>      # spawn a background shell task
-/bg list               # show tracked tasks
-/bg log <id|pid>       # show task log tail
-/bg watch <id|pid>     # open the dashboard focused on a task
-/bg stop <id|pid>      # terminate a running task
-/bg clear              # remove finished tasks
-```
+| Command | Action |
+| --- | --- |
+| `/bg` | Open the dashboard. |
+| `/bg run <command>` | Spawn a background shell task. |
+| `/bg list` | Show tracked tasks. |
+| `/bg log <id\|pid>` | Show a task log tail. |
+| `/bg watch <id\|pid>` | Open the dashboard focused on a task. |
+| `/bg stop <id\|pid>` | Terminate a running task. |
+| `/bg clear` | Remove finished tasks. |
 
 Arguments support autocomplete, including task IDs for `log`, `watch`, and `stop`.
 

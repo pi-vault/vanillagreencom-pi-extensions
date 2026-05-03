@@ -13,9 +13,19 @@ Implemented features:
 - Generated image saving under `imageOutputDir` with `latest.<ext>` mirrors.
 - Optional direct OpenAI Images API fallback when `directImageApiFallback` is enabled and `OPENAI_API_KEY` is set.
 
+## Commands
+
+| Command | Action |
+| --- | --- |
+| `/codex-minimal-tools` | Show current status and diagnostics. |
+| `/codex-minimal-tools doctor` | Run lightweight self-checks. |
+| `/codex-minimal-tools settings` | Show where extension-manager settings live. |
+
+Arguments support autocomplete.
+
 ## Settings
 
-When `pi-extension-manager` is installed, settings appear under **Codex Minimal Tools** in `/extensions` and `/extension-settings`. Values are read from:
+When `pi-extension-manager` is installed, settings appear under **Codex Minimal Tools** in `/extensions` and `/extensions settings`. Values are read from:
 
 ```json
 {

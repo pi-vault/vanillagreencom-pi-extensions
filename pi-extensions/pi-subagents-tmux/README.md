@@ -1,5 +1,13 @@
 # pi-subagents-tmux
 
+![Agents browser](./assets/subagents-browser.png)
+
+![Inline one-shot subagent and dashboard](./assets/subagents-inline.png)
+
+![Persistent pane dashboard](./assets/subagents-dashboard.png)
+
+![Persistent subagent pane](./assets/subagents-pane.png)
+
 Pi package for delegating work to specialized agents from a running Pi session.
 
 ## What it provides
@@ -51,11 +59,23 @@ Useful options:
 
 Persistent pane delegations return a `taskId`. Keep it if you need to retrieve or steer the task later.
 
-## `/agents` browser
+## Commands
 
-Run `/agents` to open the interactive browser.
+| Command | Action |
+| --- | --- |
+| `/agents` | Open the browser using project scope. |
+| `/agents project\|user\|both` | Open the browser with an explicit scope. |
+| `/agents show <name> [scope]` | Inspect an agent. |
+| `/agents start <name>` | Start or reuse a persistent pane. |
+| `/agents send <name> <task>` | Queue a task for a persistent pane. |
+| `/agents attach <name>` | Focus an existing pane. |
+| `/agents stop <name>` | Stop a persistent pane. |
+| `/agents status` | Show pane status. |
+| `/agents collect` | Collect completed pane results. |
 
-Keys:
+Arguments support autocomplete, including known agent names for `show`, `start`, `send`, `attach`, and `stop`.
+
+## Browser keys
 
 - Type to search by name, description, source, path, model, tools, or pane status.
 - `Tab` / `Shift+Tab` switches scope tabs: project, user, both.
@@ -67,21 +87,7 @@ Keys:
 
 Status legend: `●` live pane, `○` pane-ready/startable, `×` stale pane, `·` one-shot.
 
-Non-interactive mode emits inline list/show output. Management commands remain available:
-
-```text
-/agents                         # open browser using project scope
-/agents project|user|both       # open browser with an explicit scope
-/agents show <name> [scope]     # inspect an agent
-/agents start <name>            # start/reuse a persistent pane
-/agents send <name> <task>      # queue a task for a persistent pane
-/agents attach <name>           # focus an existing pane
-/agents stop <name>             # stop a persistent pane
-/agents status                  # show pane status
-/agents collect                 # collect completed pane results
-```
-
-Arguments support autocomplete, including known agent names for `show`, `start`, `send`, `attach`, and `stop`.
+Non-interactive mode emits inline list/show output. Management commands remain available.
 
 ## Persistent pane agents
 

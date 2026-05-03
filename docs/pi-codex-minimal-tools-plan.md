@@ -421,7 +421,7 @@ Register `/codex-minimal-tools` command:
   - whether native provider shim is active;
   - whether image output dir is writable;
   - whether `OPENAI_API_KEY` exists for direct image fallback.
-- `settings`: open or explain `pi-extension-manager` / `/extension-settings` for this package rather than creating a duplicate settings UI.
+- `settings`: open or explain `pi-extension-manager` / `/extensions settings` for this package rather than creating a duplicate settings UI.
 
 Extension-manager requirements:
 
@@ -429,7 +429,7 @@ Extension-manager requirements:
 - Add settings metadata in `package.json` for every user-facing option above.
 - Use categories: `General`, `Provider`, `Images`, `Web`, `Patch`.
 - Mark provider-shim toggles as `apply: "reload"` / `requiresReload: true`; pure behavior toggles can be `apply: "live"`.
-- README must document that settings appear under `/extensions` and `/extension-settings` when `pi-extension-manager` is installed.
+- README must document that settings appear under `/extensions` and `/extensions settings` when `pi-extension-manager` is installed.
 
 ## Testing plan
 
@@ -461,7 +461,7 @@ Integration tests:
 
 - Package installs with `pi install ./pi-extensions/pi-codex-minimal-tools -l`.
 - `pi -e ./pi-extensions/pi-codex-minimal-tools` starts without replacing core tools.
-- `pi-extension-manager` shows **Codex Minimal Tools** and all settings under `/extensions` and `/extension-settings`.
+- `pi-extension-manager` shows **Codex Minimal Tools** and all settings under `/extensions` and `/extensions settings`.
 - With `pi-tool-renderer` installed, `apply_patch` uses the existing apply_patch renderer; with it disabled/absent, raw fallback output is still readable.
 - In a temp repo:
   - `apply_patch` edits files correctly;

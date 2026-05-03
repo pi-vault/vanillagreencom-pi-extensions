@@ -21,6 +21,7 @@ Capture terminal/TUI screens as static images or animated GIFs. Prefer this skil
 - Do not emit a preliminary "What should I capture?" message when the request is already specified; go straight to the capture command.
 - Use `--pad 0` for cropped popup/documentation assets unless the user asks for padding outside the crop.
 - Outputs are scaled down to a maximum width/height of 2000 px by default. Keep this default for README/docs assets; use `--max-dimension 0` only if the user explicitly wants full native resolution.
+- For README/demo assets of an existing TUI, capture the real app/extension in a temporary/mock project. Do not hand-recreate UI with custom ANSI unless the user explicitly asks for illustrative mockups.
 
 Bundled helper:
 
@@ -135,6 +136,28 @@ Useful tmux targets:
 
 For a full pane screenshot, use `--crop none`. For a popup/modal, use `--crop popup`.
 
+## README/demo asset workflow
+
+When documenting an existing TUI or extension:
+
+1. Launch the real app in a safe temporary/mock project with representative data.
+2. Exercise real UI states with keys/commands/tools, then capture those states.
+3. Prefer up to 4 vertically stacked PNG/GIF assets over one overloaded animation when showing different UI modes.
+4. Keep each asset focused: one popup, one dashboard, one pane, or one result state.
+5. Avoid shipping synthetic UI mockups unless the user explicitly requests them.
+
+For Pi package/extension screenshots, create the temp Pi home so settings can resolve packages and themes:
+
+```bash
+TMP_PI_HOME=/tmp/pi-demo-home
+mkdir -p "$TMP_PI_HOME"
+cp ~/.pi/agent/settings.json "$TMP_PI_HOME/settings.json"
+ln -s ~/.pi/agent/themes "$TMP_PI_HOME/themes"     # required when settings.json names a theme
+ln -s ~/.pi/agent/packages "$TMP_PI_HOME/packages" # or symlink/copy the package under test
+```
+
+If testing a local package version, point only that package symlink at the working tree and keep other packages from the current Pi home so the capture matches the user's session.
+
 ## GIF workflow: scripted states
 
 Use this when demonstrating discrete states: tabs, dialogs, settings panes, validation errors, etc.
@@ -209,10 +232,12 @@ For tmux ANSI render:
   `--terminal-config ~/.config/ghostty/config`
 - Pass Pi settings for Pi screenshots:
   `--pi-settings ~/.pi/agent/settings.json`
+- Ensure `--pi-settings` can resolve its active theme. If `settings.json` has `"theme": "name"`, then `themes/name.json` must exist relative to that settings file. In temp homes, symlink/copy `~/.pi/agent/themes`; otherwise rendering may silently fall back to built-in colors.
 - Override font if needed:
   `--font-family "JetBrainsMono Nerd Font" --font-size 17`
 - If the generated image has too much area outside the popup, use `--crop popup --pad 0`.
 - If exact text antialiasing matters, use an OS/window pixel screenshot instead of ANSI rendering.
+- If text appears unreadable, inspect whether an ANSI background span ended before wrapped lines. Re-capture a better state/crop or omit the problematic message block; do not ship low-contrast screenshots.
 
 ## Common recipes
 
@@ -266,5 +291,7 @@ Before finalizing:
 - Confirm the output path is linked correctly if adding it to docs.
 - For popup crops, ensure the border touches or nearly touches the image edge when `--pad 0` is used.
 - For GIFs, verify frame count, dimensions, and loop behavior.
+- For themed Pi captures, compare rendered colors against the active theme, especially `borderAccent`, `accent`, `selectedBg`, `text`, `muted`, `dim`, and `userMessageBg`.
+- Check readability of wrapped/continued lines; background-color spans can render incorrectly in ANSI captures.
 - Remove temporary ANSI/PNG frames unless the user wants them kept.
 - Mention whether the result is an exact pixel screenshot or an ANSI-rendered approximation.

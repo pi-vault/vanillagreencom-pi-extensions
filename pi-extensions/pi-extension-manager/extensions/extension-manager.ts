@@ -3,8 +3,8 @@
  *
  * Provides a Pi-styled settings shell with package tabs. Pi does not yet
  * expose a public API for third-party extensions to inject native built-in
- * /settings tabs, so this extension exposes its own /extensions and
- * /extension-settings entrypoints.
+ * /settings tabs, so this extension exposes /extensions and the
+ * /extensions settings subcommand.
  */
 
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
@@ -2003,14 +2003,20 @@ export default function extensionManager(pi: ExtensionAPI): void {
 		return;
 	}
 
-	pi.registerCommand("extension-settings", {
-		description: "Quick inline settings editor for vstack Pi extension settings.",
-		handler: async (_args, ctx) => openQuickSettings(pi, ctx),
-	});
-
 	pi.registerCommand("extensions", {
 		description: "Browse, toggle, inspect, and configure Pi extension-like resources.",
-		handler: async (_args, ctx) => openManager(pi, ctx, TAB_ALL),
+		getArgumentCompletions: (prefix) => {
+			const query = prefix.trimStart().toLowerCase();
+			return "settings".startsWith(query) ? [{ value: "settings", label: "settings", description: "Open the quick extension settings editor" }] : null;
+		},
+		handler: async (args, ctx) => {
+			const trimmed = args.trim().toLowerCase();
+			if (trimmed === "settings") {
+				await openQuickSettings(pi, ctx);
+				return;
+			}
+			await openManager(pi, ctx, TAB_ALL);
+		},
 	});
 
 

@@ -109,8 +109,8 @@
         },
         {
           "key": "enableSessionNameCommand",
-          "label": "Enable /session-name command",
-          "description": "Register the session-name command for the current session's friendly name in Pi's session selector.",
+          "label": "Enable /rename command",
+          "description": "Register the /rename command for setting or viewing the current session's friendly name in Pi's session selector.",
           "type": "boolean",
           "default": true,
           "category": "Session",
@@ -340,9 +340,9 @@
         {
           "key": "sessionSearch.cacheTtlSeconds",
           "label": "Session cache TTL",
-          "description": "Seconds before the in-memory session list is refreshed. Use /search refresh to force a refresh.",
+          "description": "Seconds before the in-memory session list is refreshed. Default 0 keeps the cache until you explicitly run /search refresh.",
           "type": "number",
-          "default": 45,
+          "default": 0,
           "category": "Session Search",
           "apply": "live"
         },

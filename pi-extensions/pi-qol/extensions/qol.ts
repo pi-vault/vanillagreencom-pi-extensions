@@ -41,7 +41,7 @@ const DEFAULT_SESSION_SEARCH_PREVIEW_SNIPPETS = 6;
 const DEFAULT_SESSION_SEARCH_SHORTCUT = "f3";
 const DEFAULT_SESSION_SEARCH_SUMMARY_INPUT_CHARS = 180_000;
 const DEFAULT_SESSION_SEARCH_SUMMARY_MAX_TOKENS = 4096;
-const DEFAULT_SESSION_SEARCH_CACHE_TTL_SECONDS = 45;
+const DEFAULT_SESSION_SEARCH_CACHE_TTL_SECONDS = 0;
 const DEFAULT_AUTO_RENAME_MODEL = "openai-codex/gpt-5.4-mini";
 const DEFAULT_AUTO_RENAME_FALLBACK_MODEL = "current";
 const DEFAULT_AUTO_RENAME_INPUT_CHARS = 2000;
@@ -209,14 +209,10 @@ function installAutocompleteHintStyling(ctx: ExtensionContext): void {
 const QOL_ARGUMENT_COMPLETIONS: AutocompleteItem[] = [
 	{ value: "status", label: "status", description: "Show QOL status and current settings" },
 	{ value: "rename", label: "rename", description: "Generate a session name from the first user message" },
-	{ value: "attachments", label: "attachments", description: "List image placeholders and paths in the current draft" },
-	{ value: "collapse", label: "collapse", description: "Collapse image paths in the editor to [Image #N] aliases" },
 	{ value: "notify-test", label: "notify-test", description: "Send a test QOL notification" },
-	{ value: "reset", label: "reset", description: "Clear QOL attachment status and tmux window mark" },
 ];
 
 const QOL_RENAME_ARGUMENT_COMPLETIONS: AutocompleteItem[] = [
-	{ value: "rename status", label: "rename status", description: "Show auto-rename status and model settings" },
 	{ value: "rename full", label: "rename full", description: "Generate a session name from the full conversation" },
 ];
 
@@ -229,13 +225,10 @@ function getQolArgumentCompletions(prefix: string): AutocompleteItem[] | null {
 
 const SESSION_SEARCH_ARGUMENT_COMPLETIONS: AutocompleteItem[] = [
 	{ value: "refresh", label: "refresh", description: "Refresh the session search index" },
-	{ value: "stats", label: "stats", description: "Show session search cache stats" },
-	{ value: "resume ", label: "resume <sessionPath>", description: "Resume a session by path" },
 ];
 
 function getSessionSearchArgumentCompletions(prefix: string): AutocompleteItem[] | null {
 	const query = prefix.trimStart().toLowerCase();
-	if (query.startsWith("resume ")) return null;
 	const filtered = SESSION_SEARCH_ARGUMENT_COMPLETIONS.filter((item) => item.value.toLowerCase().startsWith(query) || (item.label ?? item.value).toLowerCase().startsWith(query));
 	return filtered.length > 0 ? filtered : null;
 }
@@ -1943,7 +1936,7 @@ function statusMessage(ctx: ExtensionContext): string {
 		`Fallback newline key: ${newlineFallbackKey(ctx.cwd)}`,
 		`Image chips: ${settingBoolean("showImageChips", true, ctx.cwd) ? "filled (placeholders and existing image paths)" : "off"}`,
 		`Image placeholders/paths in draft: ${labels.length ? labels.join(", ") : "none"}`,
-		`Session-name command: ${settingBoolean("enableSessionNameCommand", true, ctx.cwd) ? "enabled" : "disabled"}`,
+		`Rename command: ${settingBoolean("enableSessionNameCommand", true, ctx.cwd) ? "enabled (/rename)" : "disabled"}`,
 		`Auto session rename: ${autoRenameEnabled(ctx.cwd) ? `enabled (${settingString("sessionAutoRename.model", DEFAULT_AUTO_RENAME_MODEL, ctx.cwd)})` : "disabled"}`,
 		`Handoff command: ${settingBoolean("enableHandoffCommand", true, ctx.cwd) ? "enabled" : "disabled"}`,
 		`Handoff prompt review: ${settingBoolean("handoffReviewPrompt", true, ctx.cwd) ? "enabled" : "disabled"}`,
@@ -3338,7 +3331,7 @@ async function openQolSessionSearch(pi: ExtensionAPI, ctx: ExtensionContext, ini
 			}
 			return;
 		}
-		ctx.ui.setEditorText(`/search resume ${quoteSessionSearchArg(action.result.path)}`);
+		ctx.ui.setEditorText(`/resume ${quoteSessionSearchArg(action.result.path)}`);
 		ctx.ui.notify(`${sessionDisplayName(action.result)} — press Enter to resume`, "info");
 		return;
 	}
@@ -3369,15 +3362,6 @@ async function openQolSessionSearch(pi: ExtensionAPI, ctx: ExtensionContext, ini
 
 function quoteSessionSearchArg(value: string): string {
 	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
-function parseSessionSearchResumeArg(args: string): string | undefined | null {
-	const trimmed = args.trim();
-	if (!/^resume(?:\s+|$)/.test(trimmed)) return null;
-	const rest = trimmed.slice("resume".length).trim();
-	if (!rest) return undefined;
-	if ((rest.startsWith('"') && rest.endsWith('"')) || (rest.startsWith("'") && rest.endsWith("'"))) return rest.slice(1, -1);
-	return rest;
 }
 
 function renderSessionSearchContextMessage(message: any, options: any, theme: Theme): Text {
@@ -3743,7 +3727,7 @@ export default function qol(pi: ExtensionAPI): void {
 	});
 
 	if (settingBoolean("enableSessionNameCommand", true)) {
-		pi.registerCommand("session-name", {
+		pi.registerCommand("rename", {
 			description: "Current session friendly-name editor.",
 			handler: async (args, ctx) => {
 				const name = args.trim();
@@ -3786,20 +3770,6 @@ export default function qol(pi: ExtensionAPI): void {
 
 		const handleSearchCommand = async (args: string, ctx: ExtensionCommandContext) => {
 			const trimmed = args.trim();
-			const resumePath = parseSessionSearchResumeArg(trimmed);
-			if (resumePath !== null) {
-				if (!resumePath) {
-					ctx.ui.notify("Usage: /search resume <sessionPath>", "warning");
-					return;
-				}
-				try {
-					const result = await ctx.switchSession(resumePath);
-					if (!result.cancelled) ctx.ui.notify(`Resumed: ${resumePath}`, "info");
-				} catch (error) {
-					ctx.ui.notify(`Resume failed: ${stringifyError(error)}`, "error");
-				}
-				return;
-			}
 			if (trimmed === "refresh") {
 				try {
 					const sessions = await refreshQolSessionSearchCache(ctx, { force: true });
@@ -3807,12 +3777,6 @@ export default function qol(pi: ExtensionAPI): void {
 				} catch (error) {
 					ctx.ui.notify(`Session search refresh failed: ${stringifyError(error)}`, "error");
 				}
-				return;
-			}
-			if (trimmed === "stats") {
-				const sessions = await refreshQolSessionSearchCache(ctx);
-				const loaded = qolSessionSearchLoadedAt ? new Date(qolSessionSearchLoadedAt).toLocaleString() : "never";
-				ctx.ui.notify(`Sessions: ${sessions.length} | Loaded: ${loaded}`, "info");
 				return;
 			}
 			await openQolSessionSearch(pi, ctx, trimmed);
@@ -3850,24 +3814,11 @@ export default function qol(pi: ExtensionAPI): void {
 					await attemptAutoRename(ctx, { force: true, notify: true });
 					return;
 				}
-				if (restLower === "status") {
-					ctx.ui.notify(`Auto rename: ${autoRenameEnabled(ctx.cwd) ? "enabled" : "disabled"}\nModel: ${settingString("sessionAutoRename.model", DEFAULT_AUTO_RENAME_MODEL, ctx.cwd)}\nFallback model: ${settingStringAllowEmpty("sessionAutoRename.fallbackModel", DEFAULT_AUTO_RENAME_FALLBACK_MODEL, ctx.cwd) || "none"}\nDeterministic fallback: ${autoRenameFallbackMode(ctx.cwd)}\nCurrent session name: ${pi.getSessionName() || "(none)"}`, "info");
-					return;
-				}
 				if (restLower === "full") {
 					await attemptAutoRename(ctx, { force: true, fullConversation: true, notify: true });
 					return;
 				}
-				ctx.ui.notify("Unknown /qol rename mode. Try /qol rename, /qol rename status, or /qol rename full.", "warning");
-				return;
-			}
-			if (sub === "attachments") {
-				const labels = attachmentLabels(currentEditorText(ctx), ctx.cwd);
-				ctx.ui.notify(labels.length ? labels.join("\n") : "No image placeholders or existing image paths in the current draft.", "info");
-				return;
-			}
-			if (sub === "collapse") {
-				ctx.ui.notify(collapseEditorImagePaths(ctx) ? "Collapsed image paths in the editor." : "No existing image paths found in the editor.", "info");
+				ctx.ui.notify("Unknown /qol rename mode. Try /qol rename or /qol rename full.", "warning");
 				return;
 			}
 			if (sub === "notify-test") {
@@ -3875,13 +3826,7 @@ export default function qol(pi: ExtensionAPI): void {
 				ctx.ui.notify("Sent QOL notification test.", "info");
 				return;
 			}
-			if (sub === "reset") {
-				clearTmuxWindowMark();
-				ctx.ui.setStatus(STATUS_KEY, undefined);
-				ctx.ui.notify("Cleared QOL attachment status. Pi-owned pending images are unchanged.", "info");
-				return;
-			}
-			ctx.ui.notify("Unknown /qol action. Try /qol status, /qol rename, /qol rename status, /qol rename full, /qol notify-test, /qol attachments, /qol collapse, or /qol reset.", "warning");
+			ctx.ui.notify("Unknown /qol action. Try /qol status, /qol rename, /qol rename full, or /qol notify-test.", "warning");
 		},
 	});
 }

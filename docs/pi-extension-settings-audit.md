@@ -4,7 +4,7 @@ This audit covers every local vstack Pi package under `pi-extensions/`. Each pac
 
 ## Runtime constraints
 
-Pi's public extension API does not currently expose a native API to inject a third-party tab into the built-in `/settings` UI or to unload already-loaded extension modules. `pi-extension-manager` therefore provides a full Pi-styled settings shell through `/extensions`, quick inline settings through `/extension-settings`, plus a best-effort `/settings` wrapper when explicitly enabled.
+Pi's public extension API does not currently expose a native API to inject a third-party tab into the built-in `/settings` UI or to unload already-loaded extension modules. `pi-extension-manager` therefore provides a full Pi-styled settings shell through `/extensions`, quick inline settings through `/extensions settings`, plus a best-effort `/settings` wrapper when explicitly enabled.
 
 Settings persist under `vstack.extensionManager.config.<packageName>` in Pi `settings.json` files to avoid colliding with Pi's own top-level `extensions` resource array.
 

@@ -177,7 +177,7 @@ function registerDiagnosticCommand(pi: ExtensionAPI): void {
 		handler: async (args: string, ctx) => {
 			const subcommand = args.trim().split(/\s+/, 1)[0]?.toLowerCase();
 			if (subcommand === "settings") {
-				ctx.ui.notify("Codex Minimal Tools settings are under /extensions or /extension-settings when pi-extension-manager is installed. Config key: vstack.extensionManager.config[\"pi-codex-minimal-tools\"].", "info");
+				ctx.ui.notify("Codex Minimal Tools settings are under /extensions or /extensions settings when pi-extension-manager is installed. Config key: vstack.extensionManager.config[\"pi-codex-minimal-tools\"].", "info");
 				return;
 			}
 			if (subcommand === "doctor") {

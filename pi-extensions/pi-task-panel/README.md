@@ -1,10 +1,14 @@
 # pi-task-panel
 
-![Task panel workflow](./assets/task-panel-workflow.gif)
+![Compact task panel](./assets/task-panel-compact.png)
+
+![Expanded task panel](./assets/task-panel-expanded.png)
+
+![Task manager popup](./assets/task-panel-manager.png)
 
 Persistent structured task panel above the Pi status line/editor.
 
-## Human commands
+## Commands
 
 | Command | Action |
 | --- | --- |
