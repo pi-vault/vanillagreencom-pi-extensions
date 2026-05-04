@@ -606,10 +606,7 @@ mod tests {
             relative_settings_entry("pi-session-bridge"),
             "./packages/pi-session-bridge"
         );
-        assert_eq!(
-            relative_settings_entry("pi-statusline"),
-            "./packages/pi-statusline"
-        );
+        assert_eq!(relative_settings_entry("pi-qol"), "./packages/pi-qol");
     }
 
     #[test]
@@ -640,7 +637,7 @@ mod tests {
         let other = serde_json::Value::String("npm:@foo/bar".into());
         assert!(!entry_matches_package(&other, "pi-session-bridge", dest));
 
-        let other_pkg = serde_json::Value::String("./packages/pi-statusline".into());
+        let other_pkg = serde_json::Value::String("./packages/pi-qol".into());
         assert!(!entry_matches_package(
             &other_pkg,
             "pi-session-bridge",
@@ -876,9 +873,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&sandbox);
         std::fs::create_dir_all(&sandbox).unwrap();
         let bridge_src = sandbox.join("src").join("pi-session-bridge");
-        let stat_src = sandbox.join("src").join("pi-statusline");
+        let qol_src = sandbox.join("src").join("pi-qol");
         write_mini_source(&bridge_src, "pi-session-bridge");
-        write_mini_source(&stat_src, "pi-statusline");
+        write_mini_source(&qol_src, "pi-qol");
 
         let pi_dir = sandbox.join("agent");
 
@@ -898,12 +895,12 @@ mod tests {
 
             // Install both vstack-managed packages
             let bridge = PiExtension::from_dir(&bridge_src).unwrap();
-            let stat = PiExtension::from_dir(&stat_src).unwrap();
+            let qol = PiExtension::from_dir(&qol_src).unwrap();
             install_pi_extension(&bridge, true).unwrap().unwrap();
-            install_pi_extension(&stat, true).unwrap().unwrap();
+            install_pi_extension(&qol, true).unwrap().unwrap();
 
             // Re-install one to verify dedupe (no duplicate entries)
-            install_pi_extension(&stat, true).unwrap().unwrap();
+            install_pi_extension(&qol, true).unwrap().unwrap();
 
             let settings: serde_json::Value =
                 serde_json::from_str(&std::fs::read_to_string(&settings_path).unwrap()).unwrap();
@@ -916,14 +913,12 @@ mod tests {
                 .collect();
             assert!(pkgs.contains(&"npm:@foo/bar"), "third-party preserved");
             assert!(pkgs.contains(&"./packages/pi-session-bridge"));
-            assert!(pkgs.contains(&"./packages/pi-statusline"));
-            // Dedupe: pi-statusline appears exactly once
+            assert!(pkgs.contains(&"./packages/pi-qol"));
+            // Dedupe: pi-qol appears exactly once
             assert_eq!(
-                pkgs.iter()
-                    .filter(|s| **s == "./packages/pi-statusline")
-                    .count(),
+                pkgs.iter().filter(|s| **s == "./packages/pi-qol").count(),
                 1,
-                "expected pi-statusline once, got {pkgs:?}"
+                "expected pi-qol once, got {pkgs:?}"
             );
             assert_eq!(settings.get("theme").and_then(|t| t.as_str()), Some("dark"));
         });
@@ -956,12 +951,12 @@ mod tests {
                 &settings_path,
                 serde_json::to_string_pretty(&serde_json::json!({
                     "theme": "dark",
-                    "packages": ["npm:@foo/bar", "./packages/pi-qol", "./packages/pi-statusline"],
+                    "packages": ["npm:@foo/bar", "./packages/pi-qol", "./packages/pi-tool-renderer"],
                     "vstack": {
                         "extensionManager": {
                             "config": {
                                 "pi-qol": user_config,
-                                "pi-statusline": { "compactPrompt": false }
+                                "pi-tool-renderer": { "enabled": false }
                             },
                             "disabledItems": ["tool:example"],
                             "disabledProviders": ["provider:example"]
@@ -993,8 +988,8 @@ mod tests {
             assert_eq!(
                 manager
                     .get("config")
-                    .and_then(|c| c.get("pi-statusline"))
-                    .and_then(|c| c.get("compactPrompt"))
+                    .and_then(|c| c.get("pi-tool-renderer"))
+                    .and_then(|c| c.get("enabled"))
                     .and_then(|v| v.as_bool()),
                 Some(false),
                 "other extension settings must also be preserved"
@@ -1023,7 +1018,7 @@ mod tests {
             );
             assert_eq!(
                 pkgs,
-                vec!["npm:@foo/bar", "./packages/pi-qol", "./packages/pi-statusline"],
+                vec!["npm:@foo/bar", "./packages/pi-qol", "./packages/pi-tool-renderer"],
                 "reinstall should preserve package load order: {pkgs:?}"
             );
         });
@@ -1075,18 +1070,17 @@ mod tests {
     }
 
     #[test]
-    fn parse_pi_statusline_package() {
-        let dir =
-            std::env::temp_dir().join(format!("vstack_pi_statusline_parse_{}", std::process::id()));
+    fn parse_pi_qol_package() {
+        let dir = std::env::temp_dir().join(format!("vstack_pi_qol_parse_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         write_pkg(
             &dir,
             r#"{
-                "name": "pi-statusline",
-                "version": "0.1.2",
-                "description": "Claude-style compact status line.",
-                "keywords": ["pi-package", "pi", "statusline"],
-                "pi": { "extensions": ["./extensions/statusline.ts"] },
+                "name": "pi-qol",
+                "version": "0.1.0",
+                "description": "Pi quality-of-life helpers.",
+                "keywords": ["pi-package", "pi", "qol"],
+                "pi": { "extensions": ["./extensions/qol.ts"] },
                 "peerDependencies": {
                     "@mariozechner/pi-coding-agent": "*",
                     "@mariozechner/pi-tui": "*"
@@ -1094,12 +1088,9 @@ mod tests {
             }"#,
         );
         let ext = PiExtension::from_dir(&dir).unwrap();
-        assert_eq!(ext.name, "pi-statusline");
-        assert!(ext.bin.is_empty(), "statusline has no CLI bin");
-        assert_eq!(
-            ext.pi_extensions,
-            vec!["./extensions/statusline.ts".to_string()]
-        );
+        assert_eq!(ext.name, "pi-qol");
+        assert!(ext.bin.is_empty(), "qol has no CLI bin");
+        assert_eq!(ext.pi_extensions, vec!["./extensions/qol.ts".to_string()]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1176,14 +1167,7 @@ mod tests {
                 !combined.contains("extension_error"),
                 "pi reported extension_error: {combined}"
             );
-            for forbidden in [
-                "Failed to load extension",
-                "pi-session-bridge",
-                "pi-statusline",
-            ]
-            .iter()
-            .filter(|s| **s == "Failed to load extension")
-            {
+            for forbidden in ["Failed to load extension"] {
                 assert!(
                     !combined.contains(forbidden),
                     "pi reported `{forbidden}`: {combined}"

@@ -46,12 +46,6 @@ Settings persist under `vstack.extensionManager.config.<packageName>` in Pi `set
 - Useful settings: max parallel tasks, max one-shot concurrency, collapsed result size, result truncation/full-output preservation, parent/child poll intervals.
 - Apply semantics: execution/render/output limits are live; polling interval changes need reload/session restart.
 
-### `pi-statusline`
-
-- Toggle: `enabled` installs/removes the status line UI after reload/session start.
-- Useful settings: footer replacement, compact prompt, input padding, git refresh timeout, dirty marker display.
-- Apply semantics: git/dirty settings are live-ish; editor/footer changes need reload/session restart.
-
 ### `pi-prompt-stash`
 
 - Toggle: `enabled` registers/unregisters `/prompt-stash` and the stash/pop shortcut after reload.
@@ -60,9 +54,9 @@ Settings persist under `vstack.extensionManager.config.<packageName>` in Pi `set
 
 ### `pi-qol`
 
-- Toggle: `enabled` installs/removes QOL editor helpers, `/qol`, and QOL compaction hooks after reload.
-- Useful settings: Shift+Enter newline, fallback newline key, image chip rendering, attachment count badge, session commands, terminal/tmux notification triggers/channels (including active-window bell suppression and tmux client-TTY native notifications for Ghostty), custom compaction model/profile/remote endpoint, branch summary override, idle compaction thresholds, hidden-thinking placeholder preference.
-- Apply semantics: image/status, notification, and compaction behavior settings are live; editor and command registration need reload. Hidden-thinking is a settings contract only until Pi exposes an assistant-message renderer hook.
+- Toggle: `enabled` installs/removes QOL statusline/editor helpers, `/qol`, and QOL compaction hooks after reload.
+- Useful settings: footer replacement, compact `π` prompt, input padding, git/dirty marker display, Shift+Enter newline, fallback newline key, image chip rendering, attachment count badge, session commands, terminal/tmux notification triggers/channels (including active-window bell suppression and tmux client-TTY native notifications for Ghostty), custom compaction model/profile/remote endpoint, branch summary override, idle compaction thresholds, hidden-thinking placeholder preference.
+- Apply semantics: git/dirty, image/status, notification, and compaction behavior settings are live; editor/footer and command registration need reload. Hidden-thinking is a settings contract only until Pi exposes an assistant-message renderer hook.
 
 ### `pi-session-manager`
 

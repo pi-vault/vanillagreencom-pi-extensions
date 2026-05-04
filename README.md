@@ -393,13 +393,6 @@ All vstack Pi packages declare `vstack.extensionManager.settings` metadata, incl
 - **Settings:** parallel task limit, concurrency, collapsed result size, result truncation/full-output preservation, pane polling intervals, forced session-bridge loading for panes.
 - **More:** [pi-extensions/pi-subagents-tmux/README.md](pi-extensions/pi-subagents-tmux/README.md).
 
-#### `pi-statusline`
-
-- **Purpose:** Replaces Pi's default footer/editor chrome with a compact Claude-style status line and `π` prompt.
-- **Shows:** repo/project, branch with worktree dirty state, model, thinking level, context window size, remaining context percent.
-- **Settings:** enablement, footer replacement, compact prompt, input padding, git refresh timeout, dirty marker.
-- **More:** [pi-extensions/pi-statusline/README.md](pi-extensions/pi-statusline/README.md).
-
 #### `pi-prompt-stash`
 
 - **Purpose:** Per-session prompt stash history with a stash/pop editor workflow.
@@ -409,9 +402,9 @@ All vstack Pi packages declare `vstack.extensionManager.settings` metadata, incl
 
 #### `pi-qol`
 
-- **Purpose:** Reliable multiline input, styled image placeholder chips, manual/auto session naming, session search/context import, handoff, permission prompts, terminal/tmux notifications, custom compaction, and collapsed-thinking timer.
+- **Purpose:** Compact statusline/`π` prompt, reliable multiline input, styled image placeholder chips, manual/auto session naming, session search/context import, handoff, permission prompts, terminal/tmux notifications, custom compaction, and collapsed-thinking timer.
 - **Commands:** `/qol status`, `/qol rename`, `/qol rename status`, `/qol rename full`, `/qol notify-test`, `/qol attachments`, `/qol collapse`, `/qol reset`, `/session-name`, `/search`, `/handoff`.
-- **Settings:** Shift+Enter handling, fallback newline key, image chips/status, auto session rename, session search/import, handoff, permission gate, notification triggers/channels, custom/remote/idle compaction, branch summary override, thinking timer.
+- **Settings:** statusline/footer replacement, compact prompt, git/dirty marker display, Shift+Enter handling, fallback newline key, image chips/status, auto session rename, session search/import, handoff, permission gate, notification triggers/channels, custom/remote/idle compaction, branch summary override, thinking timer.
 - **More:** [pi-extensions/pi-qol/README.md](pi-extensions/pi-qol/README.md).
 
 #### `pi-session-manager`
@@ -473,7 +466,7 @@ vstack writes Pi's `packages` array using the relative form Pi resolves against 
 {
   "packages": [
     "./packages/pi-session-bridge",
-    "./packages/pi-statusline"
+    "./packages/pi-qol"
   ]
 }
 ```

@@ -2,14 +2,13 @@
 
 ![QOL session search](./assets/qol-session-search.png)
 
-![QOL session prompt picker](./assets/qol-session-prompts.png)
-
-![QOL session actions](./assets/qol-session-actions.png)
+![QOL context display](./assets/qol-context.png)
 
 Quality-of-life extension for Pi.
 
 ## What it provides
 
+- Compact statusline and `π` prompt editor: shows repo/project, branch/dirty state, model, thinking level, context window size, and remaining context percent while replacing Pi's default footer/editor chrome.
 - Reliable multiline input: `Shift+Enter` / `Shift+Return` inserts a newline when the terminal reports it distinctly; `ctrl+j` is the default fallback newline key. `Alt+Enter` is reserved for Pi follow-up messages.
 - Compact image placeholders: existing pasted image paths can collapse to `[Image #N]` aliases and are attached on submit.
 - Session naming: `/rename [name]` sets or shows the friendly session name; automatic first-prompt naming is enabled by default.
@@ -40,6 +39,14 @@ Quality-of-life extension for Pi.
 ## Settings
 
 Settings are exposed through `pi-extension-manager` under **QOL**.
+
+### Statusline and prompt
+
+- `replaceFooter`: hide Pi's default footer while QOL's compact statusline is active; default on.
+- `compactPrompt`: use the compact `π` prompt editor; default on.
+- `showSessionNameTitle`: show the named session above the prompt, or in tmux's pane title/border; default on.
+- `inputBottomPaddingLines`: blank lines below the compact prompt; default `0`.
+- Git display knobs: `gitRefreshTimeoutMs`, `showDirtyMarker`.
 
 ### Session auto-rename
 

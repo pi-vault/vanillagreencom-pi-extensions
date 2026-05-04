@@ -13,6 +13,7 @@ const STATUS_KEY = "qol-attachments";
 const SESSION_SEARCH_STATUS_KEY = "qol-session-search";
 const SESSION_SEARCH_CONTEXT_TYPE = "qol-session-context";
 const CONTEXT_USAGE_MESSAGE_TYPE = "qol-context-usage";
+const SESSION_MANAGER_STATUS_KEY = "session-manager";
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif"]);
 const IMAGE_PATH_PATTERN = /(^|[\s(\[{<"'`])(@?(?:~|\.\.?|\/)[^\s)\]}>"'`]+?\.(?:png|jpe?g|gif|webp|bmp|tiff?|heic|heif))(?=$|[\s)\]}>"'`,.;:!?])/gi;
 const IMAGE_ALIAS_SYMBOL = Symbol.for("vstack.pi-qol.image-path-aliases");
@@ -48,6 +49,12 @@ const DEFAULT_AUTO_RENAME_INPUT_CHARS = 2000;
 const DEFAULT_AUTO_RENAME_NAME_CHARS = 80;
 const DEFAULT_AUTO_RENAME_MAX_TOKENS = 96;
 const DEFAULT_AUTO_RENAME_TIMEOUT_MS = 12_000;
+const DEFAULT_INPUT_BOTTOM_PADDING_LINES = 0;
+const SESSION_TITLE_SYNC_INTERVAL_MS = 1000;
+// tmux trims plain leading/trailing spaces from pane-border-format output, so
+// use NBSP padding. Terminals render it as a space, but tmux keeps it visible.
+const TMUX_SESSION_TITLE_PAD = "\u00a0";
+const TMUX_SESSION_TITLE_BORDER_FORMAT = `${TMUX_SESSION_TITLE_PAD}#{pane_title}${TMUX_SESSION_TITLE_PAD}`;
 
 const AUTO_RENAME_SYSTEM_PROMPT = "You create short, descriptive session names for coding-agent chats. Use 2-6 words in Title Case. Respond with only the name, no quotes, explanations, markdown, emoji, or trailing punctuation.";
 
@@ -86,6 +93,13 @@ Files involved:
 [Clear description of what to do next based on user's goal]`;
 
 type VstackConfig = Record<string, unknown>;
+
+interface GitState {
+	projectName: string;
+	branch?: string;
+	dirty: boolean;
+	inLinkedWorktree: boolean;
+}
 
 interface ImageAliasState {
 	next: number;
@@ -950,6 +964,23 @@ function statusText(ctx: ExtensionContext, text: string): string | undefined {
 	return count > 0 ? `images:${count}` : undefined;
 }
 
+function handleQolEditorInput(editor: CustomEditor, ctx: ExtensionContext, data: string): void {
+	const fallback = newlineFallbackKey(ctx.cwd);
+	const newlineEnabled = settingBoolean("newlineOnShiftEnter", true, ctx.cwd);
+	const isShiftEnter = matchesKey(data, "shift+enter") || matchesKey(data, "shift+return");
+	const isFallback = fallback !== "none" && matchesKey(data, fallback);
+	CustomEditor.prototype.handleInput.call(editor, newlineEnabled && (isShiftEnter || isFallback) ? "\n" : data);
+	collapseEditorImagePathsFor(editor, ctx);
+	ctx.ui.setStatus(STATUS_KEY, statusText(ctx, editor.getText()));
+}
+
+function collapseEditorImagePathsFor(editor: CustomEditor, ctx: ExtensionContext): void {
+	if (!settingBoolean("showImageChips", true, ctx.cwd)) return;
+	const text = editor.getText();
+	const collapsed = collapseImagePathsInText(text, ctx.cwd);
+	if (collapsed !== text) editor.setText(collapsed);
+}
+
 class QolEditor extends CustomEditor {
 	constructor(
 		tui: TUI,
@@ -961,35 +992,61 @@ class QolEditor extends CustomEditor {
 	}
 
 	handleInput(data: string): void {
-		const fallback = newlineFallbackKey(this.ctx.cwd);
-		const newlineEnabled = settingBoolean("newlineOnShiftEnter", true, this.ctx.cwd);
-		const isShiftEnter = matchesKey(data, "shift+enter") || matchesKey(data, "shift+return");
-		const isFallback = fallback !== "none" && matchesKey(data, fallback);
-		if (newlineEnabled && (isShiftEnter || isFallback)) {
-			super.handleInput("\n");
-			this.collapseImagePaths();
-			this.refreshAttachmentStatus();
-			return;
-		}
-		super.handleInput(data);
-		this.collapseImagePaths();
-		this.refreshAttachmentStatus();
+		handleQolEditorInput(this, this.ctx, data);
 	}
 
 	render(width: number): string[] {
 		return super.render(width).map((line) => truncateToWidth(styleImageChips(line, this.ctx.cwd, this.ctx.ui.theme), width, ""));
 	}
+}
 
-	private collapseImagePaths(): void {
-		if (!settingBoolean("showImageChips", true, this.ctx.cwd)) return;
-		const text = this.getText();
-		const collapsed = collapseImagePathsInText(text, this.ctx.cwd);
-		if (collapsed !== text) this.setText(collapsed);
+function isEditorBorderLine(line: string): boolean {
+	const visible = stripAnsi(line).trim();
+	return visible.length > 0 && /^[─━╭╮╰╯┌┐└┘]+$/.test(visible);
+}
+
+class QolCompactPromptEditor extends CustomEditor {
+	constructor(
+		tui: TUI,
+		editorTheme: EditorTheme,
+		keybindings: KeybindingsManager,
+		private readonly inputBottomPaddingLines: number,
+		private readonly ctx: ExtensionContext,
+	) {
+		super(tui, editorTheme, keybindings, { paddingX: 0 });
 	}
 
-	private refreshAttachmentStatus(): void {
-		const text = this.getText();
-		this.ctx.ui.setStatus(STATUS_KEY, statusText(this.ctx, text));
+	handleInput(data: string): void {
+		handleQolEditorInput(this, this.ctx, data);
+	}
+
+	render(width: number): string[] {
+		const prompt = this.borderColor("π");
+		const prefix = `${prompt} `;
+		const prefixWidth = visibleWidth("π ");
+		const continuationPrefix = " ".repeat(prefixWidth);
+		const innerWidth = Math.max(1, width - prefixWidth);
+		const rendered = super.render(innerWidth);
+
+		const inputLines: string[] = [];
+		let completionLines: string[] = [];
+		for (let index = 1; index < rendered.length; index++) {
+			const line = rendered[index] ?? "";
+			if (isEditorBorderLine(line)) {
+				completionLines = rendered.slice(index + 1);
+				break;
+			}
+			inputLines.push(line);
+		}
+
+		const lines = (inputLines.length > 0 ? inputLines : [""]).map((line, index) => {
+			const linePrefix = index === 0 ? prefix : continuationPrefix;
+			const content = styleImageChips(line, this.ctx.cwd, this.ctx.ui.theme);
+			return truncateToWidth(linePrefix + content, width, "");
+		});
+		for (let index = 0; index < this.inputBottomPaddingLines; index++) lines.push("");
+		for (const line of completionLines) lines.push(truncateToWidth(`${this.ctx.ui.theme.fg("dim", continuationPrefix)}${line}`, width, ""));
+		return lines;
 	}
 }
 
@@ -1010,6 +1067,150 @@ function collapseEditorImagePaths(ctx: ExtensionContext): boolean {
 	ctx.ui.setEditorText(collapsed);
 	ctx.ui.setStatus(STATUS_KEY, statusText(ctx, collapsed));
 	return true;
+}
+
+function repoNameFromRemote(remote: string): string | undefined {
+	const trimmed = remote.trim().replace(/\.git$/, "");
+	const match = trimmed.match(/([^/:]+)$/);
+	return match?.[1];
+}
+
+function formatModel(ctx: ExtensionContext, pi: ExtensionAPI): string {
+	const model = ctx.model;
+	if (!model) return `no model / ${pi.getThinkingLevel()}`;
+	let name = model.name || model.id;
+	name = name.replace(/^Claude\s+/i, "");
+	name = name.replace(/^claude[-_]/i, "");
+	name = name.replace(/[-_](20\d{6}|latest)$/i, "");
+	name = name.replace(/^gpt[-_]/i, "GPT ");
+	name = name.replace(/[-_]/g, " ");
+	name = name.replace(/\bopus\b/i, "Opus");
+	name = name.replace(/\bsonnet\b/i, "Sonnet");
+	name = name.replace(/\bhaiku\b/i, "Haiku");
+	name = name.replace(/\s+/g, " ").trim();
+	name = name.replace(/\b(Opus|Sonnet|Haiku) (\d) (\d)\b/, "$1 $2.$3");
+	return `${name} / ${pi.getThinkingLevel()}`;
+}
+
+function formatWindow(tokens: number | undefined): string {
+	if (!tokens || tokens <= 0) return "?";
+	if (tokens >= 1_000_000) {
+		const value = tokens / 1_000_000;
+		return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}M`;
+	}
+	if (tokens >= 1_000) {
+		const value = tokens / 1_000;
+		return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}k`;
+	}
+	return `${tokens}`;
+}
+
+function statuslineContextInfo(ctx: ExtensionContext): { label: string; percent: number | null } {
+	const usage = ctx.getContextUsage();
+	const contextWindow = usage?.contextWindow ?? ctx.model?.contextWindow ?? 0;
+	if (typeof usage?.percent !== "number") return { label: formatWindow(contextWindow), percent: null };
+	const usedPercent = Math.max(0, Math.min(100, Math.round(usage.percent)));
+	return { label: formatWindow(contextWindow), percent: 100 - usedPercent };
+}
+
+function gitBadge(state: GitState, showDirtyMarker: boolean): string {
+	if (!state.branch) return "";
+	const icon = state.inLinkedWorktree || state.branch !== "main" ? `🌳 ${state.branch}` : "🦀";
+	return ` (${icon}${state.dirty && showDirtyMarker ? "*" : ""})`;
+}
+
+function makeFallbackGitState(cwd: string): GitState {
+	return { projectName: basename(cwd), dirty: false, inLinkedWorktree: false };
+}
+
+async function runGit(pi: ExtensionAPI, cwd: string, args: string[]): Promise<string | undefined> {
+	try {
+		const result = await pi.exec("git", ["-C", cwd, ...args], { timeout: settingNumber("gitRefreshTimeoutMs", 1500, cwd) });
+		if (result.code !== 0) return undefined;
+		const stdout = result.stdout.trim();
+		return stdout.length > 0 ? stdout : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+async function refreshGitState(pi: ExtensionAPI, ctx: ExtensionContext): Promise<GitState> {
+	const cwd = ctx.cwd;
+	const topLevel = await runGit(pi, cwd, ["rev-parse", "--show-toplevel"]);
+	if (!topLevel) return makeFallbackGitState(cwd);
+	const [remote, worktreesRaw, branchRaw, shortHead, diffExit] = await Promise.all([
+		runGit(pi, cwd, ["remote", "get-url", "origin"]),
+		runGit(pi, cwd, ["worktree", "list", "--porcelain"]),
+		runGit(pi, cwd, ["branch", "--show-current"]),
+		runGit(pi, cwd, ["rev-parse", "--short", "HEAD"]),
+		pi.exec("git", ["-C", cwd, "diff-index", "--quiet", "HEAD", "--"], { timeout: settingNumber("gitRefreshTimeoutMs", 1500, cwd) })
+			.then((result) => result.code)
+			.catch(() => 0),
+	]);
+	const firstWorktreeLine = worktreesRaw?.split("\n").find((line) => line.startsWith("worktree "));
+	const mainWorktree = firstWorktreeLine?.slice("worktree ".length).trim();
+	const inLinkedWorktree = Boolean(mainWorktree && mainWorktree !== topLevel);
+	const projectName = repoNameFromRemote(remote ?? "") ?? basename(mainWorktree || topLevel);
+	const branch = branchRaw || shortHead;
+	return { projectName, branch, dirty: diffExit === 1, inLinkedWorktree };
+}
+
+function normalizedSessionName(pi: ExtensionAPI): string | undefined {
+	const name = pi.getSessionName();
+	if (!name) return undefined;
+	const normalized = stripAnsi(name).replace(/[\x00-\x1f\x7f]/g, " ").replace(/\s+/g, " ").trim();
+	return normalized || undefined;
+}
+
+function sessionNameHeader(width: number, pi: ExtensionAPI, theme: Pick<Theme, "fg" | "bg">): string[] {
+	const name = normalizedSessionName(pi);
+	if (!name || width < 4) return [];
+	const prefixPlain = "Session ";
+	const prefix = theme.fg("muted", prefixPlain);
+	const innerWidth = Math.max(1, width - visibleWidth(prefixPlain) - 2);
+	const inner = truncateToWidth(name, innerWidth, "…");
+	const plain = ` ${inner} `;
+	const badge = theme.bg("selectedBg", theme.fg("text", plain));
+	return [truncateToWidth(`${prefix}${badge}`, width, "")];
+}
+
+function formatTmuxSessionTitle(sessionName: string): string {
+	return `π ${sessionName}`;
+}
+
+function tmuxPaneTarget(): string | undefined {
+	return process.env.TMUX && process.env.TMUX_PANE ? process.env.TMUX_PANE : undefined;
+}
+
+function readTmuxPaneTitle(target: string, callback: (title: string | undefined) => void): void {
+	execFile("tmux", ["display-message", "-p", "-t", target, "#{pane_title}"], { timeout: 1000 }, (error, stdout) => callback(error ? undefined : stdout.replace(/\r?\n$/, "")));
+}
+
+function readTmuxWindowOption(target: string, option: string, callback: (value: string | undefined) => void): void {
+	execFile("tmux", ["show-options", "-wqv", "-t", target, option], { timeout: 1000 }, (error, stdout) => callback(error ? undefined : stdout.replace(/\r?\n$/, "")));
+}
+
+function setTmuxPaneTitle(target: string, title: string): void {
+	execFile("tmux", ["select-pane", "-t", target, "-T", title], { timeout: 1000 }, () => undefined);
+}
+
+function setTmuxWindowOption(target: string, option: string, value: string): void {
+	execFile("tmux", ["set-option", "-wq", "-t", target, option, value], { timeout: 1000 }, () => undefined);
+}
+
+function renderStatusLine(width: number, ctx: ExtensionContext, git: GitState, pi: ExtensionAPI, theme: Pick<Theme, "fg">): string {
+	const { label: contextLabel, percent } = statuslineContextInfo(ctx);
+	const leftPlain = `${git.projectName}${gitBadge(git, settingBoolean("showDirtyMarker", true, ctx.cwd))} ${formatModel(ctx, pi)} (${contextLabel})`;
+	const rightPlain = percent === null ? "…%" : `${percent}%`;
+	const percentColor = percent === null ? "muted" : percent <= 15 ? "error" : percent <= 30 ? "warning" : "success";
+	const left = theme.fg("accent", leftPlain);
+	const right = theme.fg(percentColor, rightPlain);
+	const minimumGap = 1;
+	const gapWidth = Math.max(minimumGap, width - visibleWidth(leftPlain) - visibleWidth(rightPlain) - 2);
+	const filled = percent === null ? 0 : Math.round(gapWidth * (percent / 100));
+	const empty = Math.max(0, gapWidth - filled);
+	const bar = " ".repeat(empty) + theme.fg("warning", "─".repeat(filled));
+	return truncateToWidth(`${left} ${bar} ${right}`, width, "");
 }
 
 type QolSummaryProfile = "concise" | "balanced" | "exhaustive";
@@ -1932,6 +2133,7 @@ function statusMessage(ctx: ExtensionContext): string {
 	const searchShortcut = sessionSearchShortcut(ctx.cwd);
 	return [
 		"Pi QOL status",
+		`Statusline: ${settingBoolean("replaceFooter", true, ctx.cwd) ? "replaces footer" : "footer preserved"}; prompt=${settingBoolean("compactPrompt", true, ctx.cwd) ? "π compact" : "default chrome"}`,
 		`Shift+Enter newline: ${settingBoolean("newlineOnShiftEnter", true, ctx.cwd) ? "enabled" : "disabled"}`,
 		`Fallback newline key: ${newlineFallbackKey(ctx.cwd)}`,
 		`Image chips: ${settingBoolean("showImageChips", true, ctx.cwd) ? "filled (placeholders and existing image paths)" : "off"}`,
@@ -2148,6 +2350,17 @@ function formatSessionSearchDate(date: Date): string {
 }
 
 const ANSI_ESCAPE_RE = /\x1b\[[0-?]*[ -/]*[@-~]/g;
+const ANSI_GREEN_FG = "\x1b[32m";
+const ANSI_YELLOW_FG = "\x1b[33m";
+const ANSI_FG_RESET = "\x1b[39m";
+
+function ansiGreen(text: string): string {
+	return `${ANSI_GREEN_FG}${text}${ANSI_FG_RESET}`;
+}
+
+function ansiYellow(text: string): string {
+	return `${ANSI_YELLOW_FG}${text}${ANSI_FG_RESET}`;
+}
 
 function oneLine(text: string): string {
 	return text
@@ -2721,28 +2934,35 @@ function styleSessionSnippet(snippet: string, query: string, theme: Theme): stri
 
 function boxParts(width: number, theme: Theme) {
 	const safeWidth = Math.max(24, width);
-	const inner = Math.max(10, safeWidth - 2);
+	const paddingX = 2;
+	const frameInner = Math.max(10, safeWidth - 2);
+	const inner = Math.max(1, frameInner - paddingX * 2);
 	const border = (s: string) => theme.fg("borderAccent", s);
-	const row = (content = "") => {
+	const fixed = (content = "", rowWidth = inner) => {
 		// A single accidental newline in a session name/prompt can tear the box apart.
 		// Preserve ANSI styling, but collapse hard line breaks before measuring.
 		const safeContent = content.replace(/[\r\n\t]+/g, " ");
-		const clipped = truncateToWidth(safeContent, inner - 1, "");
-		const pad = Math.max(0, inner - visibleWidth(clipped) - 1);
-		return `${border("┃")} ${clipped}${" ".repeat(pad)}${border("┃")}`;
+		const clipped = truncateToWidth(safeContent, rowWidth, "");
+		return clipped + " ".repeat(Math.max(0, rowWidth - visibleWidth(clipped)));
 	};
-	const empty = () => `${border("┃")}${" ".repeat(inner)}${border("┃")}`;
-	const divider = () => border(`┣${"━".repeat(inner)}┫`);
-	const top = (title: string) => {
-		const label = ` ${title} `;
-		const labelWidth = visibleWidth(label);
-		const remaining = Math.max(0, inner - labelWidth);
-		const left = Math.floor(remaining / 2);
-		const right = remaining - left;
-		return `${border(`┏${"━".repeat(left)}`)}${theme.fg("accent", label)}${border(`${"━".repeat(right)}┓`)}`;
+	const row = (content = "", selected = false) => {
+		const body = fixed(content);
+		return `${border("┃")}${" ".repeat(paddingX)}${selected ? theme.bg("selectedBg", body) : body}${" ".repeat(paddingX)}${border("┃")}`;
 	};
-	const bottom = () => border(`┗${"━".repeat(inner)}┛`);
-	return { bottom, divider, empty, inner, row, top };
+	const selectedRow = (content = "") => row(content, true);
+	const empty = () => `${border("┃")}${" ".repeat(frameInner)}${border("┃")}`;
+	const divider = () => row(theme.fg("muted", "━".repeat(inner)));
+	const top = (label = "", right = "") => {
+		if (!label) return border(`┏${"━".repeat(frameInner)}┓`);
+		const rightPlain = right ? ` ${right} ` : "";
+		const titleBudget = Math.max(1, frameInner - visibleWidth(rightPlain) - 1);
+		const titlePlain = ` ${truncateToWidth(label, Math.max(1, titleBudget - 2), "…")} `;
+		const fill = Math.max(1, frameInner - visibleWidth(titlePlain) - visibleWidth(rightPlain));
+		const rightText = right ? theme.fg("dim", rightPlain) : "";
+		return `${border("┏")}${ansiGreen(titlePlain)}${border("━".repeat(fill))}${rightText}${border("┓")}`;
+	};
+	const bottom = () => border(`┗${"━".repeat(frameInner)}┛`);
+	return { bottom, divider, empty, inner, row, selectedRow, top };
 }
 
 function isPrintableInput(data: string): boolean {
@@ -3028,64 +3248,72 @@ class QolSessionSearchComponent {
 	}
 
 	private renderSearch(width: number): string[] {
-		const { bottom, divider, empty, inner, row, top } = boxParts(width, this.theme);
+		const { bottom, divider, empty, inner, row, selectedRow, top } = boxParts(width, this.theme);
 		const state = this.searchState;
-		const lines: string[] = [top("Session Search"), empty()];
+		const lines: string[] = [top("Session Search", `${state.results.length}/${state.total} shown`), empty()];
 		const accent = (s: string) => this.theme.fg("accent", s);
 		const dim = (s: string) => this.theme.fg("dim", s);
 		const muted = (s: string) => this.theme.fg("muted", s);
+		const pair = (left: string, right: string) => {
+			const leftWidth = Math.max(1, inner - visibleWidth(right) - 1);
+			const clippedLeft = truncateToWidth(left, leftWidth, "…");
+			const gap = Math.max(1, inner - visibleWidth(clippedLeft) - visibleWidth(right));
+			return `${clippedLeft}${" ".repeat(gap)}${right}`;
+		};
 		const cursor = accent("│");
 		const queryDisplay = state.query
 			? `${state.query.slice(0, state.cursor)}${cursor}${state.query.slice(state.cursor)}`
 			: `${cursor}${muted("type to search sessions...")}`;
-		lines.push(row(`  ${dim("◎")} ${queryDisplay}`));
-		lines.push(row(dim(`    ${state.total} sessions · re:<pattern> regex · "phrase" exact`)));
+		lines.push(row(`${this.theme.bold("Search")} ${queryDisplay}`));
+		lines.push(row(dim(`${state.total} sessions · re:<pattern> regex · "phrase" exact`)));
 		lines.push(empty(), divider(), empty());
 		if (state.results.length === 0) {
-			lines.push(row(muted(state.query.trim() ? "  No sessions match your search" : "  No sessions found")), empty());
+			lines.push(row(muted(state.query.trim() ? "No sessions match your search" : "No sessions found")), empty());
 		} else {
 			const maxVisible = Math.max(3, Math.floor(settingNumber("sessionSearch.maxVisible", 8, this.cwd)));
 			const start = Math.max(0, Math.min(state.selected - Math.floor(maxVisible / 2), state.results.length - maxVisible));
 			const end = Math.min(start + maxVisible, state.results.length);
-			const rowBudget = Math.max(10, inner - 1); // box row reserves one leading pad column
+			const rowBudget = Math.max(10, inner);
 			for (let i = start; i < end; i++) {
 				const result = state.results[i]!;
 				const selected = i === state.selected;
 				const prefix = selected ? accent("▸") : dim("·");
 				const title = sessionResumeTitle(result);
 				const right = dim(`${promptCountLabel(sessionUserPromptCount(result))} · ${formatSessionSearchDate(result.modified)}`);
-				const prefixText = ` ${prefix} `;
+				const prefixText = `${prefix} `;
 				const titleBudget = Math.max(12, rowBudget - visibleWidth(prefixText) - visibleWidth(right) - 1);
 				const titleText = truncateToWidth(title, titleBudget, "…");
 				const left = `${prefixText}${selected ? this.theme.bold(accent(titleText)) : this.theme.bold(titleText)}`;
-				const gap = Math.max(1, rowBudget - visibleWidth(left) - visibleWidth(right));
-				lines.push(row(`${left}${" ".repeat(gap)}${right}`));
+				const titleRow = pair(left, right);
+				lines.push(selected ? selectedRow(titleRow) : row(titleRow));
 
 				const folder = shortPathForUi(result.cwd || dirname(result.path));
 				const project = sessionDisplayName(result);
-				lines.push(row(`    ${muted(truncateToWidth(`${project} · ${folder}`, inner - 8, "…"))}`));
+				const detailIndent = " ".repeat(visibleWidth(prefixText));
+				lines.push(row(`${detailIndent}${muted(truncateToWidth(`${project} · ${folder}`, inner - visibleWidth(detailIndent), "…"))}`));
 
 				const snippet = state.query.trim() ? (result.snippets[0] || lastUserMessageSnippet(result)) : lastUserMessageSnippet(result);
 				const label = state.query.trim() ? "match" : "last";
-				lines.push(row(`    ${dim(`${label}:`)} ${truncateToWidth(styleSessionSnippet(snippet, state.query, this.theme), inner - 12, "…")}`));
-				if (i < end - 1) lines.push(row(dim(`  ${"─".repeat(Math.max(8, inner - 4))}`)));
+				const snippetPrefix = `${detailIndent}${dim(`${label}:`)} `;
+				lines.push(row(`${snippetPrefix}${truncateToWidth(styleSessionSnippet(snippet, state.query, this.theme), inner - visibleWidth(snippetPrefix), "…")}`));
+				if (i < end - 1) lines.push(row(dim("─".repeat(Math.max(8, inner)))));
 			}
-			if (state.results.length > maxVisible) lines.push(empty(), row(dim(`  ${state.selected + 1}/${state.results.length} ${state.query.trim() ? "matches" : "recent sessions"}`)));
+			if (state.results.length > maxVisible) lines.push(empty(), row(dim(`${state.selected + 1}/${state.results.length} ${state.query.trim() ? "matches" : "recent sessions"}`)));
 		}
 		lines.push(divider());
-		lines.push(row(`${accent("↑↓")} ${dim("sessions")}  ${accent("enter")} ${dim("prompts")}  ${accent("ctrl+u")} ${dim("clear")}  ${accent("esc")} ${dim("close")}`));
+		lines.push(row(`${ansiYellow("↑↓")} ${dim("sessions")}  ${ansiYellow("enter")} ${dim("prompts")}  ${ansiYellow("ctrl+u")} ${dim("clear")}  ${ansiYellow("esc")} ${dim("close")}`));
 		lines.push(bottom());
 		return lines;
 	}
 
 	private renderMessages(width: number, state: QolSessionMessagesState): string[] {
-		const { bottom, divider, empty, inner, row, top } = boxParts(width, this.theme);
+		const { bottom, divider, empty, inner, row, selectedRow, top } = boxParts(width, this.theme);
 		const accent = (s: string) => this.theme.fg("accent", s);
 		const dim = (s: string) => this.theme.fg("dim", s);
 		const muted = (s: string) => this.theme.fg("muted", s);
 		const result = state.result;
-		const lines: string[] = [top("Your Prompts"), empty()];
-		const headerBudget = Math.max(10, inner - 1);
+		const lines: string[] = [top("Your Prompts", `${state.selected + 1}/${state.messages.length}`), empty()];
+		const headerBudget = Math.max(10, inner);
 		const right = dim(`${promptCountLabel(state.messages.length)} · ${formatSessionSearchDate(result.modified)}`);
 		const title = truncateToWidth(sessionResumeTitle(result), Math.max(12, headerBudget - visibleWidth(right) - 3), "…");
 		const left = `  ${this.theme.bold(accent(title))}`;
@@ -3105,11 +3333,12 @@ class QolSessionSearchComponent {
 			const number = dim(`#${message.index}`.padStart(4));
 			const textWidth = Math.max(12, inner - visibleWidth(prefix) - visibleWidth(number) - 8);
 			const text = truncateToWidth(message.text, textWidth, "…");
-			lines.push(row(` ${prefix} ${number} ${selected ? this.theme.bold(accent(text)) : text}`));
+			const messageRow = ` ${prefix} ${number} ${selected ? this.theme.bold(accent(text)) : text}`;
+			lines.push(selected ? selectedRow(messageRow) : row(messageRow));
 		}
 		if (state.messages.length > maxVisible) lines.push(empty(), row(dim(`  ${state.selected + 1}/${state.messages.length} user prompts`)));
 		lines.push(divider());
-		lines.push(row(`${accent("↑↓")} ${dim("prompts")}  ${accent("enter")} ${dim("actions")}  ${accent("esc")} ${dim("sessions")}`));
+		lines.push(row(`${ansiYellow("↑↓")} ${dim("prompts")}  ${ansiYellow("enter")} ${dim("actions")}  ${ansiYellow("esc")} ${dim("sessions")}`));
 		lines.push(bottom());
 		return lines;
 	}
@@ -3134,7 +3363,7 @@ class QolSessionSearchComponent {
 			return index === state.actionIndex ? this.theme.bold(accent(`[${label}]`)) : dim(`[${label}]`);
 		});
 		lines.push(row(`  ${actions.join(" ")}`));
-		lines.push(row(`${accent("tab")}/${accent("←→")} ${dim("cycle")}  ${accent("enter")} ${dim("choose")}  ${accent("esc")} ${dim("prompts")}`));
+		lines.push(row(`${ansiYellow("tab")}/${ansiYellow("←→")} ${dim("cycle")}  ${ansiYellow("enter")} ${dim("choose")}  ${ansiYellow("esc")} ${dim("prompts")}`));
 		lines.push(bottom());
 		return lines;
 	}
@@ -3145,7 +3374,7 @@ class QolSessionSearchComponent {
 		const dim = (s: string) => this.theme.fg("dim", s);
 		const muted = (s: string) => this.theme.fg("muted", s);
 		const action = state.type === "newSession" ? "New + Context" : "Inject Summary";
-		const lines: string[] = [top("Summary Focus"), empty()];
+		const lines: string[] = [top("Summary Focus", action), empty()];
 		lines.push(row(`  ${accent(sessionResumeTitle(state.result))}  ${dim(`→ ${action}`)}`));
 		lines.push(row(`  ${muted(truncateToWidth(`Default focus: #${state.message.index} ${state.message.text}`, inner - 4, "…"))}`));
 		lines.push(empty(), divider(), empty());
@@ -3160,7 +3389,7 @@ class QolSessionSearchComponent {
 			for (let i = 0; i < wrapped.length; i++) lines.push(row(`${i === 0 ? prefix : " ".repeat(visibleWidth(prefix))}${wrapped[i]}`));
 		}
 		lines.push(empty(), divider());
-		lines.push(row(`${accent("enter")} ${dim("summarize")}  ${accent("esc")} ${dim("actions")}`));
+		lines.push(row(`${ansiYellow("enter")} ${dim("summarize")}  ${ansiYellow("esc")} ${dim("actions")}`));
 		lines.push(bottom());
 		return lines;
 	}
@@ -3547,6 +3776,114 @@ export default function qol(pi: ExtensionAPI): void {
 	};
 
 	let pendingTaskCompleteNotification: string | undefined;
+	let activeTui: TUI | undefined;
+	let gitState: GitState | undefined;
+	let refreshInFlight: Promise<void> | undefined;
+	let sessionTitleTimer: ReturnType<typeof setInterval> | undefined;
+	let tmuxPaneTitleTarget: string | undefined;
+	let tmuxOriginalPaneTitle: string | undefined;
+	let tmuxOriginalPaneBorderStatus: string | undefined;
+	let tmuxOriginalPaneBorderFormat: string | undefined;
+	let tmuxChangedPaneBorderStatus = false;
+	let tmuxChangedPaneBorderFormat = false;
+	let tmuxLastPaneTitle: string | undefined;
+	let lastSessionTitle: string | undefined;
+
+	const requestRender = () => activeTui?.requestRender();
+	const refreshStatusline = (ctx: ExtensionContext) => {
+		if (refreshInFlight) return refreshInFlight;
+		refreshInFlight = refreshGitState(pi, ctx)
+			.then((next) => {
+				gitState = next;
+				requestRender();
+			})
+			.finally(() => {
+				refreshInFlight = undefined;
+			});
+		return refreshInFlight;
+	};
+
+	const syncSessionTitle = (ctx: ExtensionContext) => {
+		const sessionTitle = normalizedSessionName(pi);
+		if (sessionTitle !== lastSessionTitle) {
+			lastSessionTitle = sessionTitle;
+			requestRender();
+		}
+		ctx.ui.setStatus(SESSION_MANAGER_STATUS_KEY, undefined);
+		const target = tmuxPaneTitleTarget;
+		if (!target) return;
+		const nextTitle = sessionTitle ? formatTmuxSessionTitle(sessionTitle) : tmuxOriginalPaneTitle;
+		if (nextTitle === undefined || nextTitle === tmuxLastPaneTitle) return;
+		tmuxLastPaneTitle = nextTitle;
+		setTmuxPaneTitle(target, nextTitle);
+	};
+
+	const installSessionTitle = (ctx: ExtensionContext) => {
+		if (!settingBoolean("showSessionNameTitle", true, ctx.cwd)) return;
+		const tmuxTarget = tmuxPaneTarget();
+		if (tmuxTarget) {
+			tmuxPaneTitleTarget = tmuxTarget;
+			readTmuxPaneTitle(tmuxTarget, (title) => {
+				if (tmuxPaneTitleTarget !== tmuxTarget) return;
+				tmuxOriginalPaneTitle = title;
+				syncSessionTitle(ctx);
+			});
+			readTmuxWindowOption(tmuxTarget, "pane-border-status", (value) => {
+				if (tmuxPaneTitleTarget !== tmuxTarget) return;
+				tmuxOriginalPaneBorderStatus = value;
+				if (!value || value === "off") {
+					tmuxChangedPaneBorderStatus = true;
+					setTmuxWindowOption(tmuxTarget, "pane-border-status", "top");
+				}
+			});
+			readTmuxWindowOption(tmuxTarget, "pane-border-format", (value) => {
+				if (tmuxPaneTitleTarget !== tmuxTarget) return;
+				tmuxOriginalPaneBorderFormat = value;
+				if (value !== TMUX_SESSION_TITLE_BORDER_FORMAT) {
+					tmuxChangedPaneBorderFormat = true;
+					setTmuxWindowOption(tmuxTarget, "pane-border-format", TMUX_SESSION_TITLE_BORDER_FORMAT);
+				}
+			});
+			return;
+		}
+		ctx.ui.setHeader((tui, theme) => {
+			activeTui = tui;
+			return {
+				invalidate() {},
+				render(width: number): string[] {
+					return sessionNameHeader(width, pi, theme);
+				},
+			};
+		});
+	};
+
+	const installSessionTitleSync = (ctx: ExtensionContext) => {
+		syncSessionTitle(ctx);
+		sessionTitleTimer = setInterval(() => syncSessionTitle(ctx), SESSION_TITLE_SYNC_INTERVAL_MS);
+		sessionTitleTimer.unref?.();
+	};
+
+	const resetStatuslineUi = (ctx: ExtensionContext) => {
+		if (sessionTitleTimer) clearInterval(sessionTitleTimer);
+		sessionTitleTimer = undefined;
+		if (tmuxPaneTitleTarget && tmuxOriginalPaneTitle !== undefined) setTmuxPaneTitle(tmuxPaneTitleTarget, tmuxOriginalPaneTitle);
+		if (tmuxPaneTitleTarget && tmuxChangedPaneBorderStatus && tmuxOriginalPaneBorderStatus !== undefined) setTmuxWindowOption(tmuxPaneTitleTarget, "pane-border-status", tmuxOriginalPaneBorderStatus);
+		if (tmuxPaneTitleTarget && tmuxChangedPaneBorderFormat && tmuxOriginalPaneBorderFormat !== undefined) setTmuxWindowOption(tmuxPaneTitleTarget, "pane-border-format", tmuxOriginalPaneBorderFormat);
+		tmuxPaneTitleTarget = undefined;
+		tmuxOriginalPaneTitle = undefined;
+		tmuxOriginalPaneBorderStatus = undefined;
+		tmuxOriginalPaneBorderFormat = undefined;
+		tmuxChangedPaneBorderStatus = false;
+		tmuxChangedPaneBorderFormat = false;
+		tmuxLastPaneTitle = undefined;
+		lastSessionTitle = undefined;
+		ctx.ui.setStatus(SESSION_MANAGER_STATUS_KEY, undefined);
+		ctx.ui.setWidget("statusline", undefined);
+		ctx.ui.setHeader(undefined);
+		ctx.ui.setFooter(undefined);
+		activeTui = undefined;
+	};
+
 	const maybeNotifyTaskCompletion = (_ctx: ExtensionContext, state: any) => {
 		const stats = taskStats(state);
 		if (!stats) return;
@@ -3583,7 +3920,40 @@ export default function qol(pi: ExtensionAPI): void {
 		resetThinkingTimer(ctx);
 		void consumePendingSessionSearchContext(pi, ctx, event.reason);
 		installAutocompleteHintStyling(ctx);
-		ctx.ui.setEditorComponent((tui, theme, keybindings) => new QolEditor(tui, theme, keybindings, ctx));
+		if (ctx.hasUI) {
+			gitState = makeFallbackGitState(ctx.cwd);
+			void refreshStatusline(ctx);
+			installSessionTitle(ctx);
+			installSessionTitleSync(ctx);
+			ctx.ui.setEditorComponent((tui, theme, keybindings) => {
+				activeTui = tui;
+				return settingBoolean("compactPrompt", true, ctx.cwd)
+					? new QolCompactPromptEditor(tui, theme, keybindings, Math.max(0, Math.floor(settingNumber("inputBottomPaddingLines", DEFAULT_INPUT_BOTTOM_PADDING_LINES, ctx.cwd))), ctx)
+					: new QolEditor(tui, theme, keybindings, ctx);
+			});
+			const statusWidgetTimer = setTimeout(() => {
+				ctx.ui.setWidget("statusline", (tui, theme) => {
+					activeTui = tui;
+					return {
+						invalidate() {},
+						render(width: number): string[] {
+							return [renderStatusLine(width, ctx, gitState ?? makeFallbackGitState(ctx.cwd), pi, theme)];
+						},
+					};
+				});
+			}, 0);
+			statusWidgetTimer.unref?.();
+			if (settingBoolean("replaceFooter", true, ctx.cwd)) {
+				ctx.ui.setFooter((tui, _theme, footerData) => {
+					activeTui = tui;
+					const unsubscribe = footerData.onBranchChange(() => {
+						void refreshStatusline(ctx);
+						requestRender();
+					});
+					return { dispose: unsubscribe, invalidate() {}, render: () => [] };
+				});
+			}
+		}
 		if (editorPollTimer) clearInterval(editorPollTimer);
 		lastPolledDraft = "";
 		if (ctx.hasUI) {
@@ -3598,10 +3968,6 @@ export default function qol(pi: ExtensionAPI): void {
 				}
 			}, 250);
 			editorPollTimer.unref?.();
-		}
-		const fallback = newlineFallbackKey(ctx.cwd);
-		if (ctx.hasUI && fallback !== "none") {
-			ctx.ui.notify(`QOL multiline input active. Shift+Enter inserts newline when your terminal reports it; fallback: ${fallback}.`, "info");
 		}
 		startQuestionSubscription(ctx);
 		void attemptAutoRename(ctx);
@@ -3636,14 +4002,28 @@ export default function qol(pi: ExtensionAPI): void {
 		if (host[QOL_NOTIFICATION_SERVICE_SYMBOL] === notificationService) delete host[QOL_NOTIFICATION_SERVICE_SYMBOL];
 		ctx.ui.setStatus(STATUS_KEY, undefined);
 		ctx.ui.setStatus(SESSION_SEARCH_STATUS_KEY, undefined);
+		resetStatuslineUi(ctx);
 		ctx.ui.setEditorComponent(undefined);
 	});
 
-	pi.on("agent_start", () => {
+	pi.on("model_select", (_event, ctx) => {
+		if (!ctx.hasUI) return;
+		void refreshStatusline(ctx);
+		requestRender();
+	});
+	pi.on("thinking_level_select", (_event, ctx) => {
+		if (ctx.hasUI) requestRender();
+	});
+	pi.on("agent_start", (_event, ctx) => {
 		clearIdleCompactionTimer();
 		clearTmuxWindowMark();
+		if (ctx.hasUI) {
+			void refreshStatusline(ctx);
+			requestRender();
+		}
 	});
 	pi.on("message_update", (event, ctx) => {
+		if (ctx.hasUI) requestRender();
 		if (!updateThinkingTimerEnabled(ctx)) return;
 		const streamEvent = event.assistantMessageEvent as any;
 		if (!streamEvent || typeof streamEvent.type !== "string") return;
@@ -3672,6 +4052,10 @@ export default function qol(pi: ExtensionAPI): void {
 		}
 	});
 	pi.on("agent_end", (event, ctx) => {
+		if (ctx.hasUI) {
+			void refreshStatusline(ctx);
+			requestRender();
+		}
 		scheduleIdleCompaction(ctx);
 		void attemptAutoRename(ctx);
 		const text = lastAssistantTextFromAgentEnd(event, ctx);
@@ -3693,6 +4077,11 @@ export default function qol(pi: ExtensionAPI): void {
 			return;
 		}
 		sendQolNotification(ctx, "ready", settingString("notification.readyMessage", "Ready for input", ctx.cwd), "info", "ready");
+	});
+	pi.on("session_compact", (_event, ctx) => {
+		if (!ctx.hasUI) return;
+		void refreshStatusline(ctx);
+		requestRender();
 	});
 	pi.on("session_before_compact", (event, ctx) => handleQolCompaction(event, ctx));
 	pi.on("session_before_tree", (event, ctx) => handleQolBranchSummary(event, ctx));

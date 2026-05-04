@@ -245,7 +245,7 @@ export default function sessionBridge(pi: ExtensionAPI) {
 
 		if (ctx.hasUI) {
 			if (settingBoolean("showStatus", true, ctx.cwd)) ctx.ui.setStatus(STATUS_KEY, `bridge:${process.pid}`);
-			if (settingBoolean("notifyOnStart", true, ctx.cwd)) ctx.ui.notify(`Session bridge listening at ${socketPath}`, "info");
+			if (settingBoolean("notifyOnStart", false, ctx.cwd)) ctx.ui.notify(`Session bridge listening at ${socketPath}`, "info");
 		}
 
 		ensureQuestionSubscription();

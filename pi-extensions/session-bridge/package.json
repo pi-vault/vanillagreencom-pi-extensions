@@ -89,7 +89,7 @@
           "label": "Notify on start",
           "description": "Show an in-TUI notification when the bridge starts.",
           "type": "boolean",
-          "default": true,
+          "default": false,
           "category": "UI",
           "apply": "live"
         },

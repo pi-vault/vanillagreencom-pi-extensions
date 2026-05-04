@@ -97,9 +97,9 @@ dependencies:
 Npm-shaped manifest. vstack discovers any subdirectory containing a `package.json`.
 ```json
 {
-  "name": "pi-statusline",
+  "name": "pi-qol",
   "keywords": ["pi-package"],
-  "pi": { "extensions": ["./extensions/statusline.ts"] },
+  "pi": { "extensions": ["./extensions/qol.ts"] },
   "bin": { "pi-bridge": "./bin/pi-bridge.js" },
   "peerDependencies": {
     "@mariozechner/pi-coding-agent": "*",
@@ -107,7 +107,7 @@ Npm-shaped manifest. vstack discovers any subdirectory containing a `package.jso
   }
 }
 ```
-On install vstack copies `pi-extensions/<name>/` into `<scope>/packages/<name>` and adds `./packages/<name>` to the `packages` array of Pi's `settings.json` (relative to the settings file dir). Existing entries and other settings keys are preserved; legacy absolute-path entries are replaced with the relative form. Catalog packages: `pi-extension-manager` (extension inventory/settings UI), `pi-skills-manager` (dedicated `/skills` menu for browsing/creating/editing/toggling skills), `pi-background-tasks` (non-blocking background shell tasks + `/bg` dashboard + task tools), `pi-questions` (structured multi-tab popup questions + `pi-bridge` list/answer/reject integration), `pi-prompt-stash` (per-session prompt stash history + Alt+S stash/pop popup), `pi-session-bridge` (Unix-socket JSONL side channel + `pi-bridge` CLI), `pi-statusline` (compact Claude-style status line + `π` prompt; TUI-only, safely no-ops in RPC/JSON/print), `pi-subagents-tmux` (delegation tool + persistent tmux subagent panes with grid layout and automatic completion pickup), `pi-qol`, `pi-output-policy`, `pi-tool-renderer`, `pi-task-panel`, and `pi-caveman`.
+On install vstack copies `pi-extensions/<name>/` into `<scope>/packages/<name>` and adds `./packages/<name>` to the `packages` array of Pi's `settings.json` (relative to the settings file dir). Existing entries and other settings keys are preserved; legacy absolute-path entries are replaced with the relative form. Catalog packages: `pi-extension-manager` (extension inventory/settings UI), `pi-skills-manager` (dedicated `/skills` menu for browsing/creating/editing/toggling skills), `pi-background-tasks` (non-blocking background shell tasks + `/bg` dashboard + task tools), `pi-questions` (structured multi-tab popup questions + `pi-bridge` list/answer/reject integration), `pi-prompt-stash` (per-session prompt stash history + Alt+S stash/pop popup), `pi-session-bridge` (Unix-socket JSONL side channel + `pi-bridge` CLI), `pi-subagents-tmux` (delegation tool + persistent tmux subagent panes with grid layout and automatic completion pickup), `pi-qol`, `pi-output-policy`, `pi-tool-renderer`, `pi-task-panel`, and `pi-caveman`.
 
 ### Mapping config (`vstack.toml`)
 ```toml

@@ -1,7 +1,7 @@
 {
   "name": "pi-qol",
   "version": "0.1.0",
-  "description": "Pi quality-of-life extension: reliable multiline input, styled pasted-image chips, manual/auto session naming, session search/context import, handoff, permission prompts, notifications, custom compaction, and a collapsed-thinking timer.",
+  "description": "Pi quality-of-life extension: compact statusline/\u03c0 prompt, reliable multiline input, styled pasted-image chips, session naming/search/context import, handoff, permission prompts, notifications, custom compaction, and a collapsed-thinking timer.",
   "license": "MIT",
   "keywords": [
     "pi-package",
@@ -28,6 +28,64 @@
           "category": "General",
           "apply": "reload",
           "requiresReload": true
+        },
+        {
+          "key": "replaceFooter",
+          "label": "Replace built-in footer",
+          "description": "Hide Pi default footer while the compact QOL statusline is active.",
+          "type": "boolean",
+          "default": true,
+          "category": "Statusline",
+          "apply": "reload",
+          "requiresReload": true
+        },
+        {
+          "key": "compactPrompt",
+          "label": "Use \u03c0 prompt editor",
+          "description": "Replace the main editor with the compact \u03c0 prompt editor. Disable to use QOL newline/image helpers with Pi default editor chrome.",
+          "type": "boolean",
+          "default": true,
+          "category": "Statusline",
+          "apply": "reload",
+          "requiresReload": true
+        },
+        {
+          "key": "showSessionNameTitle",
+          "label": "Show session name title",
+          "description": "Show the named session above the prompt. In tmux, update the current pane title to \"\u03c0 <session>\" and enable a pane border title padded with non-breaking spaces so tmux does not trim it.",
+          "type": "boolean",
+          "default": true,
+          "category": "Statusline",
+          "apply": "reload",
+          "requiresReload": true
+        },
+        {
+          "key": "inputBottomPaddingLines",
+          "label": "Input bottom padding",
+          "description": "Blank lines below the compact prompt. Default is 0 for no extra space.",
+          "type": "number",
+          "default": 0,
+          "category": "Statusline",
+          "apply": "reload",
+          "requiresReload": true
+        },
+        {
+          "key": "gitRefreshTimeoutMs",
+          "label": "Git refresh timeout",
+          "description": "Timeout for each git metadata command used by the statusline.",
+          "type": "number",
+          "default": 1500,
+          "category": "Statusline Git",
+          "apply": "live"
+        },
+        {
+          "key": "showDirtyMarker",
+          "label": "Show dirty marker",
+          "description": "Append * to the branch badge when the worktree is dirty.",
+          "type": "boolean",
+          "default": true,
+          "category": "Statusline Git",
+          "apply": "live"
         },
         {
           "key": "permissionGate.enabled",
