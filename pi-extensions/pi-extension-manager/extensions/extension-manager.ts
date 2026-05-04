@@ -1243,13 +1243,15 @@ function createManagerComponent(
 			return;
 		}
 		if (matchesKey(data, "pageup")) {
-			ui.selected -= getLayout().listRows;
+			if (ui.pane === "settings") ui.settingSelected -= getLayout().settingsRows;
+			else ui.selected -= getLayout().listRows;
 			clamp();
 			requestRender();
 			return;
 		}
 		if (matchesKey(data, "pagedown")) {
-			ui.selected += getLayout().listRows;
+			if (ui.pane === "settings") ui.settingSelected += getLayout().settingsRows;
+			else ui.selected += getLayout().listRows;
 			clamp();
 			requestRender();
 			return;
@@ -1385,33 +1387,24 @@ function managerMutedForSelection(theme: Theme, text: string, selected: boolean)
 }
 
 function renderTabBar(tabs: ManagerTab[], active: TopTab, width: number, theme: Theme): string {
+	const safeWidth = Math.max(1, width);
+	if (tabs.length === 0) return " ".repeat(safeWidth);
 	const activeIndex = Math.max(0, tabs.findIndex((tab) => tab.id === active));
-	const partFor = (tab: ManagerTab): string => {
-		const maxLabelWidth = 18;
-		// Keep the pill background contiguous: avoid truncateToWidth appending an
-		// ellipsis after style resets on some terminals/themes.
-		const labelText = truncateToWidth(tab.label, maxLabelWidth, "");
-		const label = ` ${labelText}${" ".repeat(Math.max(0, maxLabelWidth - visibleWidth(labelText)))} `;
-		if (tab.id === active) return managerActivePill(theme, label);
-		return managerInactivePill(theme, label);
-	};
-	const renderWindow = (start: number, end: number): string => {
-		const parts = tabs.slice(start, end).map(partFor);
-		if (start > 0) parts.unshift(theme.fg("dim", "‹"));
-		if (end < tabs.length) parts.push(theme.fg("dim", "›"));
-		return parts.join(" ");
-	};
+	const minCellWidth = 5;
+	const naturalCellWidth = (tab: ManagerTab): number => Math.max(minCellWidth, Math.min(24, visibleWidth(tab.label) + 2));
+	const indicatorWidth = (start: number, end: number): number => (start > 0 ? 1 : 0) + (end < tabs.length ? 1 : 0);
+	const gapWidth = (start: number, end: number): number => Math.max(0, end - start - 1) + (start > 0 ? 1 : 0) + (end < tabs.length ? 1 : 0);
+	const minimumWindowWidth = (start: number, end: number): number => (end - start) * minCellWidth + indicatorWidth(start, end) + gapWidth(start, end);
+
 	let start = activeIndex;
 	let end = activeIndex + 1;
-	let current = renderWindow(start, end);
 	let preferRight = true;
 	while (start > 0 || end < tabs.length) {
 		const addRight = end < tabs.length && (preferRight || start === 0);
 		const addLeft = !addRight && start > 0;
 		const nextStart = addLeft ? start - 1 : start;
 		const nextEnd = addRight ? end + 1 : end;
-		const candidate = renderWindow(nextStart, nextEnd);
-		if (visibleWidth(candidate) > width) {
+		if (minimumWindowWidth(nextStart, nextEnd) > safeWidth) {
 			if (addRight && start > 0) {
 				preferRight = false;
 				continue;
@@ -1420,10 +1413,38 @@ function renderTabBar(tabs: ManagerTab[], active: TopTab, width: number, theme: 
 		}
 		start = nextStart;
 		end = nextEnd;
-		current = candidate;
 		preferRight = !preferRight;
 	}
-	return truncateToWidth(current, width, "");
+
+	const visibleTabs = tabs.slice(start, end);
+	const separators = gapWidth(start, end);
+	const tabBudget = Math.max(visibleTabs.length * minCellWidth, safeWidth - indicatorWidth(start, end) - separators);
+	const widths = visibleTabs.map(naturalCellWidth);
+	let widthDelta = tabBudget - widths.reduce((sum, value) => sum + value, 0);
+	for (let i = 0; widthDelta > 0 && widths.length > 0; i = (i + 1) % widths.length) {
+		widths[i]! += 1;
+		widthDelta -= 1;
+	}
+	for (let i = widths.length - 1; widthDelta < 0 && i >= 0; i = i <= 0 ? widths.length - 1 : i - 1) {
+		if (widths[i]! <= minCellWidth) {
+			if (widths.every((value) => value <= minCellWidth)) break;
+			continue;
+		}
+		widths[i]! -= 1;
+		widthDelta += 1;
+	}
+
+	const cells = visibleTabs.map((tab, index) => {
+		const cellWidth = Math.max(1, widths[index]!);
+		const labelWidth = Math.max(1, cellWidth - 2);
+		// Style after truncation so ANSI resets cannot leak outside the cell.
+		const labelText = truncateToWidth(tab.label, labelWidth, "…");
+		const label = ` ${labelText}${" ".repeat(Math.max(0, labelWidth - visibleWidth(labelText)))} `;
+		return tab.id === active ? managerActivePill(theme, label) : managerInactivePill(theme, label);
+	});
+	if (start > 0) cells.unshift(theme.fg("dim", "‹"));
+	if (end < tabs.length) cells.push(theme.fg("dim", "›"));
+	return pad(cells.join(" "), safeWidth);
 }
 
 function renderDiagnosticsViewport(inventory: Inventory, ui: ManagerUiState, width: number, theme: Theme, viewportRows: number): string[] {
@@ -1471,8 +1492,8 @@ function renderExtensions(inventory: Inventory, ui: ManagerUiState, width: numbe
 	const leftWidth = Math.max(Math.min(LEFT_MIN_WIDTH, Math.floor(width * 0.45)), Math.min(LEFT_MAX_WIDTH, Math.floor(width * 0.38)));
 	const rightWidth = Math.max(20, width - leftWidth - 3);
 	const left = renderList(list, ui, leftWidth, theme, layout.listRows);
-	const right = renderInspector(inventory, selected, ui, rightWidth, theme, layout.settingsRows);
 	const rows = layout.bodyRows;
+	const right = renderInspector(inventory, selected, ui, rightWidth, theme, layout.settingsRows, rows);
 	const view = ui.topTab === TAB_ALL ? (ui.showResources ? "raw resources" : "packages") : "package";
 	const searchText = ` > ${ui.search}${theme.inverse(" ")}`;
 	const searchLine = theme.bg("toolPendingBg", pad(searchText, width));
@@ -1542,9 +1563,9 @@ function packageResourceLines(inventory: Inventory, item: InventoryItem, width: 
 	return lines;
 }
 
-function renderInspector(inventory: Inventory, item: InventoryItem | undefined, ui: ManagerUiState, width: number, theme: Theme, settingsRows: number): string[] {
+function renderInspector(inventory: Inventory, item: InventoryItem | undefined, ui: ManagerUiState, width: number, theme: Theme, settingsRows: number, viewportRows: number): string[] {
 	if (!item) return [theme.fg("dim", "Select an item to inspect it.")];
-	const lines = [
+	const detailLines = [
 		`${managerEntityTitle(theme, item.displayName)} ${theme.fg(stateColor(item.state), item.state)}`,
 		item.description ? truncateToWidth(item.description, width, "…") : theme.fg("dim", "No description."),
 		"",
@@ -1553,19 +1574,39 @@ function renderInspector(inventory: Inventory, item: InventoryItem | undefined, 
 		`${theme.fg("muted", "Source")}: ${compactPath(item.sourcePath)}`,
 		`${theme.fg("muted", "State")}: ${item.stateReason}`,
 	];
-	if (item.trigger) lines.push(`${theme.fg("muted", "Trigger")}: ${item.trigger}`);
-	if (item.shadowedBy) lines.push(`${theme.fg("muted", "Shadowed by")}: ${item.shadowedBy}`);
-	if (item.brokenError) lines.push(`${theme.fg("error", "Error")}: ${item.brokenError}`);
-	lines.push(...packageResourceLines(inventory, item, width, theme));
-	lines.push("", managerPaneTitle(theme, "Settings", ui.pane === "settings"));
+	if (item.trigger) detailLines.push(`${theme.fg("muted", "Trigger")}: ${item.trigger}`);
+	if (item.shadowedBy) detailLines.push(`${theme.fg("muted", "Shadowed by")}: ${item.shadowedBy}`);
+	if (item.brokenError) detailLines.push(`${theme.fg("error", "Error")}: ${item.brokenError}`);
+	detailLines.push(...packageResourceLines(inventory, item, width, theme));
+
 	const schemas = item.settingsSchema ?? [];
+	const settingsHeader = ["", managerPaneTitle(theme, "Settings", ui.pane === "settings")];
+	const safeViewportRows = Math.max(1, viewportRows);
+	const minimumSettingsRows = schemas.length > 0 ? Math.min(safeViewportRows, ui.pane === "settings" ? 6 : 3) : 1;
+	const maxDetailRows = Math.max(0, safeViewportRows - settingsHeader.length - minimumSettingsRows);
+	const clippedDetails = detailLines.length > maxDetailRows
+		? [...detailLines.slice(0, Math.max(0, maxDetailRows - 1)), theme.fg("dim", "… details clipped")]
+		: detailLines;
+	const lines = [...clippedDetails, ...settingsHeader];
+
 	if (schemas.length === 0) {
 		lines.push(theme.fg("dim", "No declared settings schema for this item."));
-		return lines.flatMap((line) => wrapLine(line, width));
+		return lines.flatMap((line) => wrapLine(line, width)).slice(0, safeViewportRows);
 	}
+
 	const extensionId = selectedPackageForSetting(item) ?? item.displayName;
-	if (ui.settingScroll > 0) lines.push(theme.fg("dim", `↑ ${ui.settingScroll} earlier setting(s)`));
-	for (const [visibleIndex, schema] of schemas.slice(ui.settingScroll, ui.settingScroll + settingsRows).entries()) {
+	const settingViewportRows = Math.max(1, safeViewportRows - lines.length);
+	ui.settingSelected = Math.max(0, Math.min(ui.settingSelected, Math.max(0, schemas.length - 1)));
+	const selectedSchema = schemas[ui.settingSelected];
+	const hasSelectedDescription = Boolean(selectedSchema?.description);
+	const maxVisibleSettings = Math.max(1, Math.min(settingsRows, settingViewportRows - 2 - (hasSelectedDescription ? 1 : 0)));
+	if (ui.settingSelected < ui.settingScroll) ui.settingScroll = ui.settingSelected;
+	if (ui.settingSelected >= ui.settingScroll + maxVisibleSettings) ui.settingScroll = ui.settingSelected - maxVisibleSettings + 1;
+	ui.settingScroll = Math.max(0, Math.min(ui.settingScroll, Math.max(0, schemas.length - maxVisibleSettings)));
+
+	const settingLines: string[] = [];
+	if (ui.settingScroll > 0) settingLines.push(theme.fg("dim", `↑ ${ui.settingScroll} earlier setting(s)`));
+	for (const [visibleIndex, schema] of schemas.slice(ui.settingScroll, ui.settingScroll + maxVisibleSettings).entries()) {
 		const index = ui.settingScroll + visibleIndex;
 		const selected = index === ui.settingSelected;
 		const config = getConfigValue(inventory, extensionId, schema);
@@ -1577,12 +1618,13 @@ function renderInspector(inventory: Inventory, item: InventoryItem | undefined, 
 		const meta = managerMutedForSelection(theme, `(${schema.type}, ${scope}, ${apply})`, selected);
 		const label = selected ? theme.fg("text", schema.label ?? schema.key) : schema.label ?? schema.key;
 		const row = truncateToWidth(`${marker}${label}: ${valueText} ${meta}`, width, "…");
-		lines.push(selected ? managerSelectedLine(theme, row, width) : row);
-		if (selected && schema.description) lines.push(`  ${theme.fg("muted", schema.description)}`);
+		settingLines.push(selected ? managerSelectedLine(theme, row, width) : row);
+		if (selected && schema.description) settingLines.push(`  ${theme.fg("muted", truncateToWidth(schema.description, Math.max(1, width - 2), "…"))}`);
 	}
-	const hidden = Math.max(0, schemas.length - (ui.settingScroll + settingsRows));
-	if (hidden > 0) lines.push(theme.fg("dim", `↓ ${hidden} more setting(s)`));
-	return lines.flatMap((line) => wrapLine(line, width));
+	const hidden = Math.max(0, schemas.length - (ui.settingScroll + maxVisibleSettings));
+	if (hidden > 0) settingLines.push(theme.fg("dim", `↓ ${hidden} more setting(s)`));
+	lines.push(...settingLines.slice(0, settingViewportRows));
+	return lines.flatMap((line) => wrapLine(line, width)).slice(0, safeViewportRows);
 }
 
 function stateColor(state: ExtensionState): string {
