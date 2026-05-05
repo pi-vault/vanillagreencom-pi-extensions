@@ -3347,8 +3347,11 @@ export default function (pi: ExtensionAPI) {
 		}), { placement: "aboveEditor" });
 	};
 
+	// Caller is responsible for forcing dashboardState.visible = true when the
+	// update represents a new lifecycle event the user should see (queued /
+	// started / completed). Patches from the live transcript poller go through
+	// the same helper and must NOT resurrect the widget the user just hid.
 	const updateDashboard = (item: SubagentDashboardItem) => {
-		dashboardState.visible = true;
 		dashboardState.items[item.taskId] = item;
 		const maxKeep = Math.max(10, dashboardMaxItems(dashboardCtx?.cwd) * 3);
 		const sorted = Object.values(dashboardState.items).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -3449,6 +3452,7 @@ export default function (pi: ExtensionAPI) {
 		const taskId = typeof event.taskId === "string" ? event.taskId : undefined;
 		const agent = typeof event.agent === "string" ? event.agent : undefined;
 		if (!taskId || !agent) return;
+		dashboardState.visible = true;
 		updateDashboard({
 			agent,
 			artifacts: true,
@@ -3470,6 +3474,7 @@ export default function (pi: ExtensionAPI) {
 		const taskId = typeof event.taskId === "string" ? event.taskId : undefined;
 		const agent = typeof event.agent === "string" ? event.agent : undefined;
 		if (!taskId || !agent) return;
+		dashboardState.visible = true;
 		updateDashboard({
 			agent,
 			kind: event.mode === "pane" ? "pane" : "oneshot",
@@ -3490,6 +3495,7 @@ export default function (pi: ExtensionAPI) {
 		const taskId = typeof event.taskId === "string" ? event.taskId : undefined;
 		const agent = typeof event.agent === "string" ? event.agent : undefined;
 		if (!taskId || !agent) return;
+		dashboardState.visible = true;
 		const existing = dashboardState.items[taskId];
 		const transcriptPath = typeof event.transcriptPath === "string" ? event.transcriptPath : existing?.transcriptPath;
 		const eventUsage = (event.usage as UsageStats | undefined) ?? undefined;
