@@ -48,6 +48,20 @@ const DEFAULT_RESULT_MAX_LINES = 4_000;
 const TRACE_VIEWER_WIDTH = "92%";
 const TRACE_VIEWER_MAX_HEIGHT = "88%";
 
+// Nerd Font glyphs (Font Awesome subset). All terminal output uses these
+// instead of unicode geometric/emoji shapes so rendering is consistent
+// regardless of font fallback behavior.
+const ICONS = {
+	check: "\uf00c",        // nf-fa-check
+	times: "\uf00d",        // nf-fa-times
+	circleFilled: "\uf111", // nf-fa-circle
+	circleOpen: "\uf10c",   // nf-fa-circle_o
+	clock: "\uf017",        // nf-fa-clock_o (queued / waiting)
+	hourglass: "\uf252",    // nf-fa-hourglass_half (running)
+	warning: "\uf071",      // nf-fa-exclamation_triangle (blocked)
+	dotSmall: "\uf444",     // nf-fa-circle (smaller filled circle)
+} as const;
+
 type VstackConfig = Record<string, unknown>;
 
 function expandHome(input: string): string {
@@ -472,9 +486,9 @@ function agentStatusColor(status: ReturnType<typeof agentStatus>): "success" | "
 }
 
 function agentStatusIcon(status: ReturnType<typeof agentStatus>, theme: Theme): string {
-	if (status === "live") return theme.fg("success", "●");
-	if (status === "dead") return theme.fg("warning", "×");
-	if (status === "pane") return theme.fg("warning", "○");
+	if (status === "live") return theme.fg("success", ICONS.circleFilled);
+	if (status === "dead") return theme.fg("warning", ICONS.times);
+	if (status === "pane") return theme.fg("warning", ICONS.circleOpen);
 	return theme.fg("dim", "·");
 }
 
@@ -487,7 +501,7 @@ function agentStatusLabel(agent: AgentConfig, status: AgentPaneStatus | undefine
 }
 
 function agentLegend(theme: Theme): string {
-	return `${theme.fg("muted", "Legend")}: ${theme.fg("success", "●")} live pane · ${theme.fg("warning", "○")} pane-ready/startable · ${theme.fg("warning", "×")} stale pane · ${theme.fg("dim", "·")} one-shot`;
+	return `${theme.fg("muted", "Legend")}: ${theme.fg("success", ICONS.circleFilled)} live pane · ${theme.fg("warning", ICONS.circleOpen)} pane-ready/startable · ${theme.fg("warning", ICONS.times)} stale pane · ${theme.fg("dim", "·")} one-shot`;
 }
 
 function renderAgentList(agents: AgentConfig[], statuses: Map<string, AgentPaneStatus>, ui: AgentBrowserUiState, width: number, theme: Theme, listRows: number): string[] {
@@ -1731,11 +1745,12 @@ function emitSubagentEvent(pi: ExtensionAPI, event: string, payload: Record<stri
 }
 
 function dashboardStatusIcon(status: SubagentDashboardItem["status"], theme: Theme): string {
-	if (status === "completed") return theme.fg("success", "✓");
-	if (status === "failed") return theme.fg("error", "✗");
-	if (status === "blocked") return theme.fg("warning", "◐");
-	if (status === "running") return theme.fg("warning", "●");
-	return theme.fg("accent", "●");
+	if (status === "completed") return theme.fg("success", ICONS.check);
+	if (status === "failed") return theme.fg("error", ICONS.times);
+	if (status === "blocked") return theme.fg("warning", ICONS.warning);
+	if (status === "running") return theme.fg("warning", ICONS.hourglass);
+	if (status === "queued") return theme.fg("warning", ICONS.clock);
+	return theme.fg("accent", ICONS.circleFilled);
 }
 
 function dashboardStatusText(item: SubagentDashboardItem, theme: Theme): string {
@@ -2679,10 +2694,11 @@ const CompleteSubagentParams = Type.Object({
 });
 
 function paneCompletionIcon(status: PaneTaskStatus, theme: Theme): string {
-	if (status === "completed") return theme.fg("success", "✓");
-	if (status === "blocked") return theme.fg("warning", "◐");
-	if (status === "failed") return theme.fg("error", "✗");
-	return theme.fg("muted", "•");
+	if (status === "completed") return theme.fg("success", ICONS.check);
+	if (status === "blocked") return theme.fg("warning", ICONS.warning);
+	if (status === "failed") return theme.fg("error", ICONS.times);
+	if (status === "queued") return theme.fg("warning", ICONS.clock);
+	return theme.fg("muted", ICONS.dotSmall);
 }
 
 function paneCompletionStatus(status: PaneTaskStatus, theme: Theme): string {
@@ -3225,7 +3241,7 @@ export default function (pi: ExtensionAPI) {
 				const status = paneCompletionStatus(detail.status, theme);
 				return framedMessage(`${paneCompletionIcon(detail.status, theme)} ${theme.fg("accent", theme.bold(detail.agent))} ${status}`, theme);
 			}
-			if (completions.length > 1) return framedMessage(`${theme.fg("success", "✓")} ${theme.fg("toolTitle", theme.bold(`${completions.length} subagents completed`))}`, theme);
+			if (completions.length > 1) return framedMessage(`${theme.fg("success", ICONS.check)} ${theme.fg("toolTitle", theme.bold(`${completions.length} subagents completed`))}`, theme);
 		}
 		return renderPaneCompletionMessage(message as { content: string; details?: unknown }, options as { expanded?: boolean } | undefined, theme);
 	});
@@ -3341,9 +3357,9 @@ export default function (pi: ExtensionAPI) {
 		renderResult(result, { expanded }, theme, context) {
 			const raw = result.content?.find?.((part: any) => part?.type === "text")?.text ?? "";
 			const details = result.details as { agent?: string; taskId?: string; status?: string; outboxFile?: string } | undefined;
-			if (context?.isError) return new Text(`${theme.fg("error", "✗")} ${theme.fg("toolTitle", "Subagent completion failed")}\n${theme.fg("muted", raw)}`, 0, 0);
+			if (context?.isError) return new Text(`${theme.fg("error", ICONS.times)} ${theme.fg("toolTitle", "Subagent completion failed")}\n${theme.fg("muted", raw)}`, 0, 0);
 			const agentLabel = details?.agent ? `${details.agent.charAt(0).toUpperCase()}${details.agent.slice(1)}` : "Subagent";
-			const headline = `${theme.fg("success", "✓")} ${theme.fg("toolTitle", theme.bold(`${agentLabel} complete`))}${theme.fg("muted", " · now waiting")}`;
+			const headline = `${theme.fg("success", ICONS.check)} ${theme.fg("toolTitle", theme.bold(`${agentLabel} complete`))}${theme.fg("muted", " · now waiting")}`;
 			if (expanded && details?.outboxFile) return new Text(`${headline}\n${theme.fg("dim", `Outbox: ${compactPath(details.outboxFile)}`)}`, 0, 0);
 			return new Text(headline, 0, 0);
 		},
@@ -3711,24 +3727,21 @@ export default function (pi: ExtensionAPI) {
 				details: { agent: record.agent, paneId: record.paneId, summary: record.summary, status: record.status, taskId: record.taskId, notes: record.notes } satisfies GetSubagentResultDetails,
 			};
 		},
-		renderCall(args, theme, context) {
-			const label = getSubagentTargetLabel(args ?? {});
-			const wait = args?.wait ? theme.fg("muted", " · waiting") : "";
-			const prefix = !context?.executionStarted || context?.isPartial ? theme.fg("accent", "● ") : theme.fg(context?.isError ? "error" : "success", "● ");
-			return new Text(`${prefix}${theme.fg("toolTitle", theme.bold("Get "))}${renderToolTarget(label, theme)}${wait}`, 0, 0);
+		renderCall(_args, _theme, _context) {
+			return new Container();
 		},
 		renderResult(result, { expanded }, theme, context) {
 			const raw = result.content?.find?.((part: any) => part?.type === "text")?.text ?? "";
 			const details = result.details as GetSubagentResultDetails | undefined;
 			const status = details?.status ? theme.fg(details.status === "completed" ? "success" : details.status === "failed" ? "error" : "warning", details.status) : undefined;
-			if (context?.isError) return new Text(`${theme.fg("error", "✗")} ${theme.fg("toolTitle", "Subagent result lookup failed")}\n${theme.fg("muted", raw)}`, 0, 0);
+			if (context?.isError) return new Text(`${theme.fg("error", ICONS.times)} ${theme.fg("toolTitle", "Subagent result lookup failed")}\n${theme.fg("muted", raw)}`, 0, 0);
 			if (expanded && raw.trim()) return new Markdown(raw, 0, 0, getMarkdownTheme());
 			const target = details?.agent ? details.agent : "subagent";
 			const suffix = status;
 			if (quietInline(context?.cwd) && dashboardEnabled(context?.cwd)) {
-				return new Text(`${theme.fg("success", "✓")} ${theme.fg("toolTitle", theme.bold(`result ${target}`))}${suffix ? ` ${theme.fg("dim", "·")} ${suffix}` : ""}`, 0, 0);
+				return new Text(`${theme.fg("success", ICONS.check)} ${theme.fg("toolTitle", theme.bold(`result ${target}`))}${suffix ? ` ${theme.fg("dim", "·")} ${suffix}` : ""}`, 0, 0);
 			}
-			const lines = [`${theme.fg("success", "✓")} ${theme.fg("toolTitle", theme.bold(target))}${suffix ? ` ${theme.fg("dim", "·")} ${suffix}` : ""}`];
+			const lines = [`${theme.fg("success", ICONS.check)} ${theme.fg("toolTitle", theme.bold(target))}${suffix ? ` ${theme.fg("dim", "·")} ${suffix}` : ""}`];
 			if (details?.summary) lines.push(`  ${theme.fg("toolOutput", oneLinePreview(details.summary, 120))}`);
 			if (details?.notes) {
 				const marker = details.notes.split(/\r?\n/).find((line) => /(?:PANE_|STEER_|_OK\b)/.test(line));
@@ -3861,20 +3874,18 @@ export default function (pi: ExtensionAPI) {
 				details,
 			};
 		},
-		renderCall(args, theme, context) {
-			const agent = args?.agent ?? (args?.taskId ? `task ${oneLinePreview(args.taskId, 28)}` : "subagent");
-			const mode = args?.deliverAs ?? "steer";
-			const prefix = !context?.executionStarted || context?.isPartial ? theme.fg("accent", "● ") : theme.fg(context?.isError ? "error" : "success", "● ");
-			return new Text(`${prefix}${theme.fg("toolTitle", theme.bold("Steer "))}${renderToolTarget(agent, theme)}${theme.fg("muted", ` · ${mode}`)}`, 0, 0);
+		renderCall(_args, _theme, _context) {
+			return new Container();
 		},
 		renderResult(result, { expanded }, theme, context) {
 			const raw = result.content?.find?.((part: any) => part?.type === "text")?.text ?? "";
 			const details = result.details as SteerSubagentDetails | undefined;
-			if (context?.isError) return new Text(`${theme.fg("error", "✗")} ${theme.fg("toolTitle", "Steer subagent failed")}\n${theme.fg("muted", raw)}`, 0, 0);
+			if (context?.isError) return new Text(`${theme.fg("error", ICONS.times)} ${theme.fg("toolTitle", "Steer subagent failed")}\n${theme.fg("muted", raw)}`, 0, 0);
 			if (!details) return new Text(raw, 0, 0);
 			if (expanded) return new Text(raw, 0, 0);
 			const status = details.bridge ? theme.fg("success", "bridge") : theme.fg("warning", "inbox fallback");
-			return new Text(`${theme.fg(details.bridge ? "success" : "warning", details.bridge ? "✓" : "◐")} ${theme.fg("toolTitle", theme.bold(`steered ${details.agent}`))} via ${status}`, 0, 0);
+			const icon = details.bridge ? ICONS.check : ICONS.warning;
+			return new Text(`${theme.fg(details.bridge ? "success" : "warning", icon)} ${theme.fg("toolTitle", theme.bold(`steered ${details.agent}`))} via ${status}`, 0, 0);
 		},
 	});
 
@@ -4328,7 +4339,7 @@ export default function (pi: ExtensionAPI) {
 			if (args.tasks && args.tasks.length > 0) {
 				const tasks = args.tasks as Array<{ agent: string; task?: string }>;
 				const text =
-					theme.fg("accent", "● ") +
+					theme.fg("accent", `${ICONS.circleFilled} `) +
 					theme.fg("toolTitle", theme.bold(`${tasks.length} agent${tasks.length === 1 ? "" : "s"} launching`)) +
 					theme.fg("muted", ` [${scope}]`);
 				return new Text(text, 0, 0);
@@ -4364,7 +4375,7 @@ export default function (pi: ExtensionAPI) {
 			const queuedPaneLine = (r: SingleResult) => {
 				if (!r.taskId || !r.paneId) return "";
 				const hint = quietInline(cwd) && dashboardEnabled(cwd) ? "" : theme.fg("dim", " · Ctrl+O");
-				return `${theme.fg("success", "✓")} ${theme.fg("toolTitle", theme.bold(`queued ${r.agent}`))}${hint}`;
+				return `${theme.fg("warning", ICONS.clock)} ${theme.fg("toolTitle", theme.bold(`queued ${r.agent}`))}${hint}`;
 			};
 			const finalOutputPreview = (r: SingleResult, maxChars = 96) => {
 				const finalOutput = getFinalOutput(r.messages).trim();
@@ -4405,7 +4416,8 @@ export default function (pi: ExtensionAPI) {
 			if (details.mode === "single" && details.results.length === 1) {
 				const r = details.results[0];
 				const isError = r.exitCode !== 0 || r.stopReason === "error" || r.stopReason === "aborted";
-				const icon = isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
+				const isQueued = !isError && Boolean(r.taskId && r.paneId);
+				const icon = isError ? theme.fg("error", ICONS.times) : isQueued ? theme.fg("warning", ICONS.clock) : theme.fg("success", ICONS.check);
 				const displayItems = getDisplayItems(r.messages);
 				const finalOutput = getFinalOutput(r.messages);
 				const queued = queuedPaneLine(r);
@@ -4479,7 +4491,7 @@ export default function (pi: ExtensionAPI) {
 
 			if (details.mode === "chain") {
 				const successCount = details.results.filter((r) => r.exitCode === 0).length;
-				const icon = successCount === details.results.length ? theme.fg("success", "✓") : theme.fg("error", "✗");
+				const icon = successCount === details.results.length ? theme.fg("success", ICONS.check) : theme.fg("error", ICONS.times);
 
 				if (expanded) {
 					const container = new Container();
@@ -4495,7 +4507,7 @@ export default function (pi: ExtensionAPI) {
 					);
 
 					for (const r of details.results) {
-						const rIcon = r.exitCode === 0 ? theme.fg("success", "✓") : theme.fg("error", "✗");
+						const rIcon = r.exitCode === 0 ? theme.fg("success", ICONS.check) : theme.fg("error", ICONS.times);
 						const displayItems = getDisplayItems(r.messages);
 						const finalOutput = getFinalOutput(r.messages);
 
@@ -4545,7 +4557,7 @@ export default function (pi: ExtensionAPI) {
 					theme.fg("toolTitle", theme.bold("chain ")) +
 					theme.fg("accent", `${successCount}/${details.results.length} steps`);
 				for (const r of details.results) {
-					const rIcon = r.exitCode === 0 ? theme.fg("success", "✓") : theme.fg("error", "✗");
+					const rIcon = r.exitCode === 0 ? theme.fg("success", ICONS.check) : theme.fg("error", ICONS.times);
 					const displayItems = getDisplayItems(r.messages);
 					text += `\n\n${theme.fg("muted", `─── Step ${r.step}: `)}${theme.fg("accent", r.agent)} ${rIcon}${truncationBadge(r)}`;
 					if (displayItems.length === 0) text += `\n${theme.fg("muted", "(no output)")}`;
@@ -4580,11 +4592,15 @@ export default function (pi: ExtensionAPI) {
 								? `${oneshotCompletedCount} completed, ${queuedPaneCount} queued`
 								: `${total} agent${pluralN(total)} completed`;
 				const headerText =
-					theme.fg("accent", "● ") +
+					theme.fg("accent", `${ICONS.circleFilled} `) +
 					theme.fg("toolTitle", theme.bold(headerLabel)) +
 					(expanded ? "" : theme.fg("muted", " (Ctrl+O to inspect)"));
-				const rowIcon = (r: SingleResult) =>
-					r.exitCode === -1 ? theme.fg("warning", "⏳ ") : r.exitCode === 0 ? theme.fg("success", "✓ ") : theme.fg("error", "✗ ");
+				const rowIcon = (r: SingleResult) => {
+					if (r.exitCode === -1) return theme.fg("warning", `${ICONS.hourglass} `);
+					if (r.exitCode > 0) return theme.fg("error", `${ICONS.times} `);
+					const queued = Boolean(r.taskId && r.paneId);
+					return queued ? theme.fg("warning", `${ICONS.clock} `) : theme.fg("success", `${ICONS.check} `);
+				};
 				const nameWidth = Math.min(28, Math.max(0, ...details.results.map((r) => visibleWidth(r.agent))));
 				const treeText = details.results
 					.map((r, index) => {
