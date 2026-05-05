@@ -1959,8 +1959,10 @@ export PI_SUBAGENT_PARENT_SESSION_ID=${shellQuote(parentSessionId)}
 # Inherit cached 1Password service-account token if available so the child
 # pi can read op:// refs without triggering the desktop CLI integration
 # prompt. No-op for users who don't use 1Password (file won't exist).
-if [ -z "\${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -r "/run/user/$(id -u)/op-service-account-token" ]; then
-    export OP_SERVICE_ACCOUNT_TOKEN=$(cat "/run/user/$(id -u)/op-service-account-token")
+if [ -z "\${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -r "/run/user/\$(id -u)/op-service-account-token" ]; then
+    __op_tok=\$(cat "/run/user/\$(id -u)/op-service-account-token" 2>/dev/null || true)
+    [ -n "\$__op_tok" ] && export OP_SERVICE_ACCOUNT_TOKEN="\$__op_tok"
+    unset __op_tok
 fi
 exec ${command}
 `;
