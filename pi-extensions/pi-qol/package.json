@@ -789,7 +789,7 @@
           "label": "Hidden thinking label",
           "description": "Label shown when thinking blocks are hidden. Defaults to a Nerd Font brain icon.",
           "type": "string",
-          "default": "",
+          "default": " ",
           "category": "Thinking",
           "apply": "reload",
           "requiresReload": true

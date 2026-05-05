@@ -422,7 +422,7 @@ function permissionGatePrompt(matched: string, command: string, cwd?: string): s
 	].join("\n");
 }
 
-const THINKING_LABEL_DEFAULT = "";
+const THINKING_LABEL_DEFAULT = " ";
 
 const lastNotificationAt = new Map<string, number>();
 const lastQuestionNotificationAt = new Map<string, number>();
@@ -443,15 +443,21 @@ function formatThinkingElapsed(ms: number): string {
 }
 
 function thinkingLabel(cwd?: string): string {
-	const configured = settingString("thinkingLabel.text", THINKING_LABEL_DEFAULT, cwd).trim();
-	return configured || THINKING_LABEL_DEFAULT;
+	const configured = settingString("thinkingLabel.text", THINKING_LABEL_DEFAULT, cwd);
+	return configured.trim() ? configured : THINKING_LABEL_DEFAULT;
 }
 
 function thinkingTimerLabel(theme: ThinkingTimerStore["theme"], ms: number, cwd?: string): string {
 	const base = thinkingLabel(cwd);
-	const elapsed = ` ${formatThinkingElapsed(ms)}`;
+	const separator = /\s$/.test(base) ? "" : " ";
+	const elapsed = `${separator}${formatThinkingElapsed(ms)}`;
 	if (!theme) return `${base}${elapsed}`;
-	return theme.italic(theme.fg("thinkingText", base) + theme.fg("dim", elapsed));
+	return theme.italic(theme.fg("muted", base) + theme.fg("dim", elapsed));
+}
+
+function hiddenThinkingLabel(theme: ThinkingTimerStore["theme"], cwd?: string): string {
+	const base = thinkingLabel(cwd);
+	return theme ? theme.fg("muted", base) : base;
 }
 
 function thinkingTimerKey(timestamp: number, contentIndex: number): string {
@@ -4020,7 +4026,7 @@ export default function qol(pi: ExtensionAPI): void {
 		installAutocompleteHintStyling(ctx);
 		installPendingQueueThemePatch(ctx);
 		if (ctx.hasUI) {
-			ctx.ui.setHiddenThinkingLabel(thinkingLabel(ctx.cwd));
+			ctx.ui.setHiddenThinkingLabel(hiddenThinkingLabel(ctx.ui.theme, ctx.cwd));
 			gitState = makeFallbackGitState(ctx.cwd);
 			void refreshStatusline(ctx);
 			installSessionTitle(ctx);
