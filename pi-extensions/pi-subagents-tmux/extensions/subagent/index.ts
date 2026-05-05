@@ -237,6 +237,10 @@ function dashboardShortcut(cwd?: string): string {
 	return settingString("dashboardShortcut", "alt+a", cwd);
 }
 
+function popupShortcut(cwd?: string): string {
+	return settingString("popupShortcut", "alt+shift+a", cwd);
+}
+
 function formatShortcutHint(shortcut: string): string {
 	return shortcut
 		.split("+")
@@ -1782,7 +1786,10 @@ function renderDashboardWidgetLines(state: SubagentDashboardState, theme: Theme,
 	const done = items.filter((item) => item.status === "completed").length;
 	const failed = items.filter((item) => item.status === "failed" || item.status === "blocked").length;
 	const shortcut = dashboardShortcut(cwd);
-	const hint = shortcut === "none" ? "" : theme.fg("dim", ` · ${formatShortcutHint(shortcut)} toggle`);
+	const popup = popupShortcut(cwd);
+	const toggleHint = shortcut === "none" ? "" : theme.fg("dim", ` · ${formatShortcutHint(shortcut)} toggle`);
+	const popupHint = popup === "none" ? "" : theme.fg("dim", ` · ${formatShortcutHint(popup)} agents`);
+	const hint = `${toggleHint}${popupHint}`;
 	const headerParts = [
 		`${done} done`,
 		running ? theme.fg("warning", `${running} active`) : "",
@@ -3571,6 +3578,22 @@ export default function (pi: ExtensionAPI) {
 	const shortcut = dashboardShortcut();
 	if (shortcut !== "none") {
 		pi.registerShortcut(shortcut, { description: "Cycle subagent dashboard display", handler: async (ctx) => toggleDashboardMode(ctx as ExtensionContext) });
+	}
+	const popup = popupShortcut();
+	if (popup !== "none") {
+		pi.registerShortcut(popup, {
+			description: "Open the /agents subagent browser popup",
+			handler: async (ctx) => {
+				const extCtx = ctx as ExtensionContext;
+				dashboardCtx = extCtx;
+				if (!extCtx.hasUI) return;
+				const parentModel = extCtx.model ? `${extCtx.model.provider}/${extCtx.model.id}` : undefined;
+				const parentThinkingLevel = pi.getThinkingLevel();
+				const parentSessionId = runtimeSessionId(extCtx);
+				const runtimeRoot = sessionRuntimeDir(parentSessionId);
+				await openAgentsBrowser(extCtx, "project", undefined, runtimeRoot, parentSessionId, parentModel, parentThinkingLevel);
+			},
+		});
 	}
 
 	pi.registerTool({

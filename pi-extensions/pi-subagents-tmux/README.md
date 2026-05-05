@@ -140,7 +140,7 @@ A future backend could use Pi SDK `createAgentSession()` for non-pane one-shot s
 `pi-extension-manager` exposes:
 
 - `maxParallelTasks` and `maxConcurrency` for one-shot delegation limits.
-- Dashboard controls: `dashboard`, `quietInlineWhenDashboard`, `dashboardMaxItems`, `dashboardCollapsed`, `dashboardShortcut`, and `treeStyle`.
+- Dashboard controls: `dashboard`, `quietInlineWhenDashboard`, `dashboardMaxItems`, `dashboardCollapsed`, `dashboardShortcut` (default `alt+a` cycles dashboard mode), `popupShortcut` (default `alt+shift+a` opens the full `/agents` browser), and `treeStyle`.
 - `collapsedItemCount` for compact result rendering.
 - `truncateResults`, `resultMaxBytes` (default 102400), `resultMaxLines` (default 4000), and `preserveFullOutput` for result truncation. Oversized one-shot outputs are saved under `~/.pi/agent/vstack/pi-subagents-tmux/sessions/<session-id>/outputs/` when preservation is enabled.
 - `completionPollMs` and `childInboxPollMs` for persistent pane polling intervals.

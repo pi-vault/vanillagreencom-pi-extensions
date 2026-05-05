@@ -106,6 +106,16 @@
           "requiresReload": true
         },
         {
+          "key": "popupShortcut",
+          "label": "Agents popup shortcut",
+          "description": "Keyboard shortcut that opens the full /agents subagent browser popup. Use none to disable.",
+          "type": "string",
+          "default": "alt+shift+a",
+          "category": "Keyboard",
+          "apply": "reload",
+          "requiresReload": true
+        },
+        {
           "key": "treeStyle",
           "label": "Tree connector style",
           "description": "Connector glyphs for subagent result rows. Unicode is prettier; ASCII uses |--/`-- for maximum terminal compatibility.",
