@@ -272,6 +272,7 @@ async function parseTranscriptUsage(transcriptPath: string | undefined): Promise
 	}
 	const total: UsageStats = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 };
 	let model: string | undefined;
+	let bestPerTurn: { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number } | undefined;
 	for (const line of content.split(/\r?\n/)) {
 		if (!line.trim()) continue;
 		let event: any;
@@ -280,24 +281,61 @@ async function parseTranscriptUsage(transcriptPath: string | undefined): Promise
 		} catch {
 			continue;
 		}
-		if (!model && typeof event?.modelId === "string") model = event.modelId;
-		if (!model && typeof event?.message?.model === "string") model = event.message.model;
-		const usage = event?.usage ?? event?.message?.usage;
+		// Oneshot transcripts wrap pi events in {ts, stream, raw, event}; pane
+		// transcripts write the raw pi event directly. Unwrap one level so the
+		// rest of the parser sees the inner shape uniformly.
+		const inner = event?.event && typeof event.event === "object" ? event.event : event;
+		if (!model && typeof inner?.modelId === "string") model = inner.modelId;
+		if (!model && typeof inner?.message?.model === "string") model = inner.message.model;
+		const usage = inner?.usage ?? inner?.message?.usage;
 		if (!usage || typeof usage !== "object") continue;
-		total.input += Number(usage.input ?? usage.input_tokens ?? 0) || 0;
-		total.output += Number(usage.output ?? usage.output_tokens ?? 0) || 0;
-		total.cacheRead += Number(usage.cacheRead ?? usage.cache_read_input_tokens ?? 0) || 0;
-		total.cacheWrite += Number(usage.cacheWrite ?? usage.cache_creation_input_tokens ?? 0) || 0;
-		const cost = usage.cost;
-		if (typeof cost === "number") total.cost += cost;
-		else if (cost && typeof cost === "object") {
-			total.cost +=
-				(Number((cost as Record<string, unknown>).input) || 0) +
-				(Number((cost as Record<string, unknown>).output) || 0) +
-				(Number((cost as Record<string, unknown>).cacheRead ?? (cost as Record<string, unknown>).cache_read) || 0) +
-				(Number((cost as Record<string, unknown>).cacheWrite ?? (cost as Record<string, unknown>).cache_write) || 0);
+		const input = Number((usage as Record<string, unknown>).input ?? (usage as Record<string, unknown>).input_tokens ?? 0) || 0;
+		const output = Number((usage as Record<string, unknown>).output ?? (usage as Record<string, unknown>).output_tokens ?? 0) || 0;
+		const cacheRead = Number((usage as Record<string, unknown>).cacheRead ?? (usage as Record<string, unknown>).cache_read_input_tokens ?? 0) || 0;
+		const cacheWrite = Number((usage as Record<string, unknown>).cacheWrite ?? (usage as Record<string, unknown>).cache_creation_input_tokens ?? 0) || 0;
+		const rawCost = (usage as Record<string, unknown>).cost;
+		let cost = 0;
+		if (typeof rawCost === "number") cost = rawCost;
+		else if (rawCost && typeof rawCost === "object") {
+			const c = rawCost as Record<string, unknown>;
+			cost =
+				(Number(c.total) || 0) ||
+				((Number(c.input) || 0) +
+					(Number(c.output) || 0) +
+					(Number(c.cacheRead ?? c.cache_read) || 0) +
+					(Number(c.cacheWrite ?? c.cache_write) || 0));
 		}
-		total.turns = (total.turns ?? 0) + 1;
+		// Pi emits message_start/message_update/message_end with the same usage
+		// progressively; the final value per turn is the one we want, not the sum.
+		// Track per-message events grouped by message id when present.
+		const type = inner?.type;
+		const isFinal = type === "message" || type === "message_end";
+		const hasAny = input > 0 || output > 0 || cacheRead > 0 || cacheWrite > 0 || cost > 0;
+		if (isFinal && hasAny) {
+			total.input += input;
+			total.output += output;
+			total.cacheRead += cacheRead;
+			total.cacheWrite += cacheWrite;
+			total.cost += cost;
+			total.turns = (total.turns ?? 0) + 1;
+		} else if (hasAny) {
+			// message_update events carry the running per-turn usage. Track the
+			// max (last) seen so we can fall back to it if no final message arrives.
+			bestPerTurn = bestPerTurn ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+			bestPerTurn.input = Math.max(bestPerTurn.input, input);
+			bestPerTurn.output = Math.max(bestPerTurn.output, output);
+			bestPerTurn.cacheRead = Math.max(bestPerTurn.cacheRead, cacheRead);
+			bestPerTurn.cacheWrite = Math.max(bestPerTurn.cacheWrite, cacheWrite);
+			bestPerTurn.cost = Math.max(bestPerTurn.cost, cost);
+		}
+	}
+	if ((total.turns ?? 0) === 0 && bestPerTurn) {
+		total.input = bestPerTurn.input;
+		total.output = bestPerTurn.output;
+		total.cacheRead = bestPerTurn.cacheRead;
+		total.cacheWrite = bestPerTurn.cacheWrite;
+		total.cost = bestPerTurn.cost;
+		total.turns = 1;
 	}
 	if ((total.turns ?? 0) === 0 && total.input === 0 && total.output === 0) return undefined;
 	return { usage: total, model };
@@ -1946,8 +1984,8 @@ function renderDashboardWidgetLines(state: SubagentDashboardState, theme: Theme,
 	if (running === 0 && state.mode === "compact") {
 		const aggregated = aggregateDashboardUsage(items);
 		const usageStr = aggregated ? formatUsageStats(aggregated) : "";
-		const tail = usageStr ? ` ${theme.fg("dim", `· ${usageStr}`)}` : "";
-		lines.push(`${subagentBranch(theme, "└", cwd)}${theme.fg("success", "done")} ${theme.fg("dim", dashboardTranscriptLabel(items, cwd))}${tail}`);
+		const body = usageStr ? theme.fg("dim", usageStr) : theme.fg("dim", `${items.length} transcript${items.length === 1 ? "" : "s"}`);
+		lines.push(`${subagentBranch(theme, "└", cwd)}${theme.fg("success", "done")} ${body}`);
 		return dashboardFrame(lines.map((line) => truncateToWidth(line, Math.max(1, width - 4), "")), Math.max(1, width), theme);
 	}
 	const maxItems = state.mode === "compact" || state.collapsed ? 1 : state.mode === "normal" ? Math.min(3, dashboardMaxItems(cwd)) : dashboardMaxItems(cwd);
@@ -3410,9 +3448,11 @@ export default function (pi: ExtensionAPI) {
 			usage: eventUsage ?? existing?.usage,
 			model: eventModel ?? existing?.model,
 		});
-		// Pane completions never carry usage in their event payload; parse the
-		// transcript jsonl asynchronously and patch the dashboard once we have it.
-		if (!eventUsage && transcriptPath) {
+		// Always parse the transcript when one exists. The event payload usage
+		// can be all zeros for models that don't report token counts on the
+		// stream, and pane events never carry usage at all. The transcript jsonl
+		// is authoritative either way - patch the dashboard once it resolves.
+		if (transcriptPath) {
 			parseTranscriptUsage(transcriptPath)
 				.then((parsed) => {
 					if (!parsed) return;
