@@ -2006,7 +2006,7 @@ function renderDashboardWidgetLines(state: SubagentDashboardState, theme: Theme,
 	const shortcut = dashboardShortcut(cwd);
 	const popup = popupShortcut(cwd);
 	const toggleHint = shortcut === "none" ? "" : theme.fg("dim", ` · ${formatShortcutHint(shortcut)} toggle`);
-	const popupHint = popup === "none" ? "" : theme.fg("dim", ` · ${formatShortcutHint(popup)} agents`);
+	const popupHint = popup === "none" ? "" : theme.fg("dim", ` · ${formatShortcutHint(popup)} popup`);
 	const hint = `${toggleHint}${popupHint}`;
 	const headerParts = [
 		done ? `${done} done` : "",
