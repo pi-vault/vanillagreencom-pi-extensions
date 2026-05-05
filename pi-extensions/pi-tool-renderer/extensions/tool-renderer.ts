@@ -2873,8 +2873,23 @@ function registerBash(pi: ExtensionAPI, agent: any, cwd: string): void {
 			const call = bashCallText(context?.args ?? {}, theme, effectiveCwd);
 			const output = textContent(result);
 			if (isPartial) {
-				const count = output.trim() ? output.split(/\r?\n/).filter((line) => line.trim().length > 0).length : 0;
+				const trimmedOutput = output.trim();
+				const count = trimmedOutput ? output.split(/\r?\n/).filter((line) => line.trim().length > 0).length : 0;
 				const lineText = count === 0 ? "starting" : `${count} line${count === 1 ? "" : "s"}`;
+				const partialMode = bashOutputMode(effectiveCwd);
+				if (partialMode !== "summary" && partialMode !== "hidden" && trimmedOutput) {
+					const limit = Math.max(1, Math.floor(settingNumber("bashCollapsedLines", 10, effectiveCwd)));
+					const tailLines = preview(output, limit, "tail", effectiveCwd).split(/\r?\n/);
+					const hasOverflow = count > limit;
+					let partialText = `${treeConnector(theme, "├")}${theme.fg("warning", `running… ${lineText}`)}`;
+					for (let i = 0; i < tailLines.length; i++) {
+						const isLastTail = i === tailLines.length - 1;
+						const connector = treeConnector(theme, isLastTail && !hasOverflow ? "└" : "│");
+						partialText += `\n${connector}${theme.fg("dim", tailLines[i] ?? "")}`;
+					}
+					if (hasOverflow) partialText += `\n${treeConnector(theme, "└")}${theme.fg("muted", `… ${count - limit} older line(s)`)}`;
+					return makeTruncatedLines(partialText);
+				}
 				return renderPendingDetail(`running… ${lineText}`, theme);
 			}
 			clearBlink(context);
