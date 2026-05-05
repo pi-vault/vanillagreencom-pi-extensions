@@ -1306,9 +1306,9 @@ function renderSplitDiff(diff: StructuredDiff, rows: StructuredDiffLine[], width
 	const tableWidth = Math.max(DIFF_SPLIT_MIN_WIDTH, width);
 	const maxNum = Math.max(1, ...diff.lines.map((line) => Math.max(line.oldNum ?? 0, line.newNum ?? 0)));
 	const numWidth = Math.max(2, String(maxNum).length);
-	const leftBorder = borderMuted(theme, "│");
+	const leftBorder = borderMuted(theme, "▏");
 	const divider = borderMuted(theme, "│");
-	const rightBorder = borderMuted(theme, "│");
+	const rightBorder = borderMuted(theme, "▕");
 	const innerWidth = Math.max(2, tableWidth - visibleLength(leftBorder) - visibleLength(divider) - visibleLength(rightBorder));
 	const leftCellWidth = Math.max(1, Math.floor(innerWidth / 2));
 	const rightCellWidth = Math.max(1, innerWidth - leftCellWidth);
