@@ -746,13 +746,15 @@ async function openAgentsBrowser(
 				return;
 			}
 			if (action.type === "stop") {
-				const registry = await readPaneRegistry(runtimeRoot);
-				const entry = registry[agent.name];
-				if (!entry) throw new Error(`No pane registry entry for ${agent.name}.`);
-				if (await paneExists(entry.paneId)) await tmux(["kill-pane", "-t", entry.paneId]);
-				delete registry[agent.name];
-				await writePaneRegistry(runtimeRoot, registry);
-				ctx.ui.notify(`Stopped ${agent.name} pane ${entry.paneId}`, "info");
+				let stoppedPaneId: string | undefined;
+				await updatePaneRegistry(runtimeRoot, async (registry) => {
+					const entry = registry[agent.name];
+					if (!entry) throw new Error(`No pane registry entry for ${agent.name}.`);
+					if (await paneExists(entry.paneId)) await tmux(["kill-pane", "-t", entry.paneId]);
+					stoppedPaneId = entry.paneId;
+					delete registry[agent.name];
+				});
+				ctx.ui.notify(`Stopped ${agent.name} pane ${stoppedPaneId}`, "info");
 				continue;
 			}
 		} catch (error) {
@@ -1635,6 +1637,27 @@ async function writePaneRegistry(runtimeRoot: string, registry: PaneRegistry): P
 	});
 }
 
+async function updatePaneRegistry(
+	runtimeRoot: string,
+	mutator: (registry: PaneRegistry) => Promise<void> | void,
+): Promise<PaneRegistry> {
+	const filePath = registryPath(runtimeRoot);
+	let registry: PaneRegistry = {};
+	await withFileMutationQueue(filePath, async () => {
+		try {
+			const content = await fs.promises.readFile(filePath, "utf-8");
+			const parsed = JSON.parse(content);
+			registry = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as PaneRegistry) : {};
+		} catch {
+			registry = {};
+		}
+		await mutator(registry);
+		await fs.promises.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
+		await fs.promises.writeFile(filePath, `${JSON.stringify(registry, null, "\t")}\n`, { encoding: "utf-8", mode: 0o600 });
+	});
+	return registry;
+}
+
 async function readTaskRegistry(runtimeRoot: string): Promise<PaneTaskRegistry> {
 	try {
 		const content = await fs.promises.readFile(taskRegistryPath(runtimeRoot), "utf-8");
@@ -1912,13 +1935,13 @@ async function ensurePaneBridgeMetadata(runtimeRoot: string, entry: PaneRegistry
 	// and never fall back to cwd: multiple Pi sessions commonly share the same cwd.
 	const metadata = await discoverBridgeMetadataForPane(entry, 2000);
 	if ((!metadata?.pid && !metadata?.socket) || !samePath(metadata.sessionFile, entry.sessionFile)) return undefined;
-	const registry = await readPaneRegistry(runtimeRoot);
-	const current = registry[entry.agent];
-	if (current && samePath(current.sessionFile, entry.sessionFile)) {
-		current.bridgePid = metadata.pid;
-		current.bridgeSocket = metadata.socket;
-		await writePaneRegistry(runtimeRoot, registry);
-	}
+	await updatePaneRegistry(runtimeRoot, (registry) => {
+		const current = registry[entry.agent];
+		if (current && samePath(current.sessionFile, entry.sessionFile)) {
+			current.bridgePid = metadata.pid;
+			current.bridgeSocket = metadata.socket;
+		}
+	});
 	entry.bridgePid = metadata.pid;
 	entry.bridgeSocket = metadata.socket;
 	return metadata;
@@ -1989,71 +2012,98 @@ async function ensurePersistentPane(
 	parentThinkingLevel: string | undefined,
 ): Promise<PaneRegistryEntry> {
 	await ensureTmux();
-	const registry = await readPaneRegistry(runtimeRoot);
-	if (await cleanupPaneRegistry(registry)) await writePaneRegistry(runtimeRoot, registry);
 
-	const existing = registry[agent.name];
-	if (existing && (await paneExists(existing.paneId))) return existing;
+	let entry: PaneRegistryEntry | undefined;
+	let reusedExisting = false;
+	let layoutGroup: number | undefined;
+	let primaryPaneId: string | undefined;
 
-	const selectedModel = parentModel ?? agent.model;
-	const paths = await writeLauncher(runtimeRoot, parentSessionId, cwd, agent, selectedModel, parentThinkingLevel);
-	const windowName = `subagent:${agent.name}`;
-	const primaryPaneId = await getPrimaryPaneId();
-	const layoutGroup = nextLayoutGroup(registry);
-	const groupEntries = groupedPaneEntries(registry).get(layoutGroup) ?? [];
-	const splitHorizontally = groupEntries.length === 0;
-	const splitTarget = splitHorizontally ? primaryPaneId : groupEntries[0].paneId;
-	const splitPercent = splitHorizontally ? "50" : String(Math.max(10, Math.floor(100 / (groupEntries.length + 1))));
-	const result = await tmux([
-		"split-window",
-		splitHorizontally ? "-h" : "-v",
-		"-d",
-		"-P",
-		"-F",
-		"#{pane_id}",
-		"-p",
-		splitPercent,
-		"-t",
-		splitTarget,
-		"-c",
-		cwd,
-		"bash",
-		paths.launcherFile,
-	]);
-	if (result.code !== 0) throw new Error(`Failed to launch tmux pane for ${agent.name}: ${result.stderr || result.stdout}`.trim());
-	const paneId = result.stdout.trim();
-	await tmux(["select-pane", "-t", paneId, "-T", windowName]);
-	await tmux(["set-window-option", "-t", paneId, "pane-border-status", "top"]);
-	await tmux([
-		"set-window-option",
-		"-t",
-		paneId,
-		"pane-border-format",
-		"#{?pane_active,#[bold],} #T #[default]",
-	]);
+	await updatePaneRegistry(runtimeRoot, async (registry) => {
+		await cleanupPaneRegistry(registry);
 
-	const entry: PaneRegistryEntry = {
-		agent: agent.name,
-		paneId,
-		windowName,
-		cwd,
-		sessionFile: paths.sessionFile,
-		promptFile: paths.promptFile,
-		launcherFile: paths.launcherFile,
-		model: selectedModel,
-		thinkingLevel: parentThinkingLevel,
-		startedAt: new Date().toISOString(),
-		launcherVersion: PANE_LAUNCHER_VERSION,
-		layoutGroup,
-		primaryPaneId,
-	};
+		const existing = registry[agent.name];
+		if (existing && (await paneExists(existing.paneId))) {
+			entry = existing;
+			reusedExisting = true;
+			return;
+		}
+
+		const selectedModel = parentModel ?? agent.model;
+		const paths = await writeLauncher(runtimeRoot, parentSessionId, cwd, agent, selectedModel, parentThinkingLevel);
+		const windowName = `subagent:${agent.name}`;
+		primaryPaneId = await getPrimaryPaneId();
+		layoutGroup = nextLayoutGroup(registry);
+		const groupEntries = groupedPaneEntries(registry).get(layoutGroup) ?? [];
+		const splitHorizontally = groupEntries.length === 0;
+		const splitTarget = splitHorizontally ? primaryPaneId : groupEntries[0].paneId;
+		const splitPercent = splitHorizontally ? "50" : String(Math.max(10, Math.floor(100 / (groupEntries.length + 1))));
+		const result = await tmux([
+			"split-window",
+			splitHorizontally ? "-h" : "-v",
+			"-d",
+			"-P",
+			"-F",
+			"#{pane_id}",
+			"-p",
+			splitPercent,
+			"-t",
+			splitTarget,
+			"-c",
+			cwd,
+			"bash",
+			paths.launcherFile,
+		]);
+		if (result.code !== 0) throw new Error(`Failed to launch tmux pane for ${agent.name}: ${result.stderr || result.stdout}`.trim());
+		const paneId = result.stdout.trim();
+		await tmux(["select-pane", "-t", paneId, "-T", windowName]);
+		await tmux(["set-window-option", "-t", paneId, "pane-border-status", "top"]);
+		await tmux([
+			"set-window-option",
+			"-t",
+			paneId,
+			"pane-border-format",
+			"#{?pane_active,#[bold],} #T #[default]",
+		]);
+
+		const created: PaneRegistryEntry = {
+			agent: agent.name,
+			paneId,
+			windowName,
+			cwd,
+			sessionFile: paths.sessionFile,
+			promptFile: paths.promptFile,
+			launcherFile: paths.launcherFile,
+			model: selectedModel,
+			thinkingLevel: parentThinkingLevel,
+			startedAt: new Date().toISOString(),
+			launcherVersion: PANE_LAUNCHER_VERSION,
+			layoutGroup,
+			primaryPaneId,
+		};
+		registry[agent.name] = created;
+		entry = created;
+	});
+
+	if (!entry) throw new Error(`ensurePersistentPane failed for ${agent.name}`);
+	if (reusedExisting) return entry;
+
 	const bridge = await discoverBridgeMetadataForPane(entry, 5000);
-	if (bridge?.pid) entry.bridgePid = bridge.pid;
-	if (bridge?.socket) entry.bridgeSocket = bridge.socket;
-	registry[agent.name] = entry;
-	await rebalanceColumn([...(groupedPaneEntries(registry).get(layoutGroup) ?? [])]);
-	await rebalanceColumns(registry, primaryPaneId);
-	await writePaneRegistry(runtimeRoot, registry);
+	if (bridge?.pid || bridge?.socket) {
+		await updatePaneRegistry(runtimeRoot, (registry) => {
+			const current = registry[agent.name];
+			if (current && current.paneId === entry!.paneId) {
+				if (bridge.pid) current.bridgePid = bridge.pid;
+				if (bridge.socket) current.bridgeSocket = bridge.socket;
+				entry = current;
+			}
+		});
+	}
+
+	if (layoutGroup !== undefined && primaryPaneId) {
+		const snapshot = await readPaneRegistry(runtimeRoot);
+		await rebalanceColumn([...(groupedPaneEntries(snapshot).get(layoutGroup) ?? [])]);
+		await rebalanceColumns(snapshot, primaryPaneId);
+	}
 	return entry;
 }
 
@@ -2241,12 +2291,12 @@ async function queuePersistentPaneTask(
 	await fs.promises.mkdir(path.dirname(taskFile), { recursive: true, mode: 0o700 });
 	await fs.promises.writeFile(taskFile, delegation, { encoding: "utf-8", mode: 0o600 });
 	const now = new Date().toISOString();
-	const registry = await readPaneRegistry(runtimeRoot);
-	if (registry[agent.name]) {
-		registry[agent.name].lastTaskAt = now;
-		registry[agent.name].lastTaskId = taskId;
-		await writePaneRegistry(runtimeRoot, registry);
-	}
+	await updatePaneRegistry(runtimeRoot, (registry) => {
+		if (registry[agent.name]) {
+			registry[agent.name].lastTaskAt = now;
+			registry[agent.name].lastTaskId = taskId;
+		}
+	});
 	await upsertTaskRecord(runtimeRoot, {
 		taskId,
 		agent: agent.name,
@@ -3452,13 +3502,15 @@ export default function (pi: ExtensionAPI) {
 					if (result.code !== 0) throw new Error(result.stderr || result.stdout || "tmux select-pane failed");
 					content = `Attached to ${entry.agent} at ${entry.paneId}.`;
 				} else if (command === "stop") {
-					const registry = await readPaneRegistry(runtimeRoot);
-					const entry = registry[parts[1] ?? ""];
-					if (!entry) throw new Error(`No pane registry entry for agent: ${parts[1] ?? "(missing)"}`);
-					if (await paneExists(entry.paneId)) await tmux(["kill-pane", "-t", entry.paneId]);
-					delete registry[entry.agent];
-					await writePaneRegistry(runtimeRoot, registry);
-					content = `Stopped ${entry.agent} pane ${entry.paneId}.`;
+					let stopped: { agent: string; paneId: string } | undefined;
+					await updatePaneRegistry(runtimeRoot, async (registry) => {
+						const entry = registry[parts[1] ?? ""];
+						if (!entry) throw new Error(`No pane registry entry for agent: ${parts[1] ?? "(missing)"}`);
+						if (await paneExists(entry.paneId)) await tmux(["kill-pane", "-t", entry.paneId]);
+						stopped = { agent: entry.agent, paneId: entry.paneId };
+						delete registry[entry.agent];
+					});
+					content = `Stopped ${stopped!.agent} pane ${stopped!.paneId}.`;
 				} else if (command === "collect") {
 					const collected = await pollPaneCompletions(runtimeRoot, pi, false);
 					content = `Collected ${collected} subagent completion file${collected === 1 ? "" : "s"}.`;
