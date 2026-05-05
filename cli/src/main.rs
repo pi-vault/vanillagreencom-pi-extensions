@@ -136,7 +136,9 @@ enum Commands {
         force: bool,
     },
 
-    /// Regenerate agent files from vstack.toml customizations
+    /// Reinstall all locked items (agents, skills, hooks, Pi packages) from
+    /// current source. Use after editing source files to push changes to the
+    /// install scope. Also re-applies vstack.toml customizations to agents.
     Refresh {
         #[arg(short, long)]
         global: bool,

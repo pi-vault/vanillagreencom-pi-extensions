@@ -13,7 +13,7 @@ cli/src/
 │   ├── list.rs          Show installed skills and agents
 │   ├── check.rs         Validate installation status
 │   ├── update.rs        Self-update to latest release
-│   ├── refresh.rs       Regenerate agents from vstack.toml customizations
+│   ├── refresh.rs       Reinstall locked items from source (agents, skills, hooks, Pi packages); re-applies vstack.toml
 │   └── init.rs          Scaffold new skill/agent template
 ├── agent.rs             Agent parsing, skill/hook matching heuristics
 ├── skill.rs             Skill parsing, frontmatter dependency resolution, dep reference injection

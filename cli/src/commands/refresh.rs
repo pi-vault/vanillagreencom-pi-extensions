@@ -244,7 +244,10 @@ pub fn refresh_items_in_scope(
     stats
 }
 
-/// Regenerate all installed agent files and re-copy skills from source.
+/// Reinstall every item recorded in the scope lock from current source:
+/// regenerate agent files (re-applying `vstack.toml` customizations),
+/// re-copy skills, and re-copy Pi packages. Use after editing source files
+/// to push changes to the install scope without re-running `vstack add`.
 pub fn run(global: bool) -> Result<()> {
     let lock_path = config::lock_file_path(global);
     let mut lock = config::LockFile::load(&lock_path)?;
