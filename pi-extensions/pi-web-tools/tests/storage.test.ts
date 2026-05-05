@@ -29,7 +29,8 @@ test("get_web_content renderer styles missing-id errors with tree guidance", () 
 	const component = tool.renderResult({ content: [{ type: "text", text: "Stored content id not found: https://example.com" }] }, {}, theme, { isError: true, args: { id: "https://example.com" } });
 	const text = component.render(200).join("\n");
 	assert.match(text, /Get Web Content \(Session\)/);
-	assert.match(text, /Stored content id not found/);
+	assert.match(text, /Get Web Content \(Session\) stored content id not found/);
+	assert.doesNotMatch(text.split("\n")[0] ?? "", /https:\/\/example\.com/);
 	assert.match(text, /├─ content id https:\/\/example\.com/);
 	assert.match(text, /URLs are not content ids/);
 });

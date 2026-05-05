@@ -46,7 +46,8 @@ export function createGetWebContentToolDefinition(name = "get_web_content") {
 		renderResult(result: any, options: any, theme: any, context: any) {
 			if (options?.isPartial) return emptyComponent();
 			if (context?.isError) {
-				const message = firstText(result) || "stored content id not found";
+				const rawMessage = firstText(result) || "stored content id not found";
+				const message = rawMessage.toLowerCase().includes("stored content id not found") ? "stored content id not found" : rawMessage;
 				const lines = [errorSummary(theme, providerLabel("Get Web Content", "session"), message)];
 				if (context?.args?.id) lines.push(`${tree(theme, "├")}${muted(theme, "content id ")}${accent(theme, context.args.id)}`);
 				lines.push(`${tree(theme, "└")}${muted(theme, "Use the content id returned by web_search or web_fetch; URLs are not content ids.")}`);
