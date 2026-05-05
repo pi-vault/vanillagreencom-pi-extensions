@@ -1371,7 +1371,7 @@ function managerPaneTitle(theme: Theme, label: string, active: boolean): string 
 }
 
 function managerEntityTitle(theme: Theme, label: string): string {
-	return theme.fg("text", theme.bold(label));
+	return theme.fg("accent", theme.bold(label));
 }
 
 function managerSectionTitle(theme: Theme, label: string): string {
@@ -1390,56 +1390,48 @@ function renderTabBar(tabs: ManagerTab[], active: TopTab, width: number, theme: 
 	const safeWidth = Math.max(1, width);
 	if (tabs.length === 0) return " ".repeat(safeWidth);
 	const activeIndex = Math.max(0, tabs.findIndex((tab) => tab.id === active));
-	const minCellWidth = 5;
-	const naturalCellWidth = (tab: ManagerTab): number => Math.max(minCellWidth, Math.min(24, visibleWidth(tab.label) + 2));
-	const indicatorWidth = (start: number, end: number): number => (start > 0 ? 1 : 0) + (end < tabs.length ? 1 : 0);
-	const gapWidth = (start: number, end: number): number => Math.max(0, end - start - 1) + (start > 0 ? 1 : 0) + (end < tabs.length ? 1 : 0);
-	const minimumWindowWidth = (start: number, end: number): number => (end - start) * minCellWidth + indicatorWidth(start, end) + gapWidth(start, end);
+	const widths = tabs.map((tab) => visibleWidth(tab.label) + 2);
+	const sliceWidth = (s: number, e: number): number => {
+		let total = 0;
+		for (let i = s; i < e; i += 1) total += widths[i]!;
+		total += Math.max(0, e - s - 1); // single-space gaps between tabs
+		total += s > 0 ? 2 : 0; // "‹ "
+		total += e < tabs.length ? 2 : 0; // " ›"
+		return total;
+	};
 
 	let start = activeIndex;
 	let end = activeIndex + 1;
 	let preferRight = true;
 	while (start > 0 || end < tabs.length) {
-		const addRight = end < tabs.length && (preferRight || start === 0);
-		const addLeft = !addRight && start > 0;
-		const nextStart = addLeft ? start - 1 : start;
-		const nextEnd = addRight ? end + 1 : end;
-		if (minimumWindowWidth(nextStart, nextEnd) > safeWidth) {
-			if (addRight && start > 0) {
-				preferRight = false;
-				continue;
+		let progressed = false;
+		const tryRight = (): boolean => {
+			if (end < tabs.length && sliceWidth(start, end + 1) <= safeWidth) {
+				end += 1;
+				return true;
 			}
-			break;
+			return false;
+		};
+		const tryLeft = (): boolean => {
+			if (start > 0 && sliceWidth(start - 1, end) <= safeWidth) {
+				start -= 1;
+				return true;
+			}
+			return false;
+		};
+		if (preferRight) {
+			if (tryRight()) progressed = true;
+			if (tryLeft()) progressed = true;
+		} else {
+			if (tryLeft()) progressed = true;
+			if (tryRight()) progressed = true;
 		}
-		start = nextStart;
-		end = nextEnd;
+		if (!progressed) break;
 		preferRight = !preferRight;
 	}
 
-	const visibleTabs = tabs.slice(start, end);
-	const separators = gapWidth(start, end);
-	const tabBudget = Math.max(visibleTabs.length * minCellWidth, safeWidth - indicatorWidth(start, end) - separators);
-	const widths = visibleTabs.map(naturalCellWidth);
-	let widthDelta = tabBudget - widths.reduce((sum, value) => sum + value, 0);
-	for (let i = 0; widthDelta > 0 && widths.length > 0; i = (i + 1) % widths.length) {
-		widths[i]! += 1;
-		widthDelta -= 1;
-	}
-	for (let i = widths.length - 1; widthDelta < 0 && i >= 0; i = i <= 0 ? widths.length - 1 : i - 1) {
-		if (widths[i]! <= minCellWidth) {
-			if (widths.every((value) => value <= minCellWidth)) break;
-			continue;
-		}
-		widths[i]! -= 1;
-		widthDelta += 1;
-	}
-
-	const cells = visibleTabs.map((tab, index) => {
-		const cellWidth = Math.max(1, widths[index]!);
-		const labelWidth = Math.max(1, cellWidth - 2);
-		// Style after truncation so ANSI resets cannot leak outside the cell.
-		const labelText = truncateToWidth(tab.label, labelWidth, "…");
-		const label = ` ${labelText}${" ".repeat(Math.max(0, labelWidth - visibleWidth(labelText)))} `;
+	const cells = tabs.slice(start, end).map((tab) => {
+		const label = ` ${tab.label} `;
 		return tab.id === active ? managerActivePill(theme, label) : managerInactivePill(theme, label);
 	});
 	if (start > 0) cells.unshift(theme.fg("dim", "‹"));
@@ -1611,13 +1603,10 @@ function renderInspector(inventory: Inventory, item: InventoryItem | undefined, 
 		const selected = index === ui.settingSelected;
 		const config = getConfigValue(inventory, extensionId, schema);
 		const marker = " ";
-		const apply = schema.apply ?? (schema.requiresReload ? "reload" : "live");
 		const value = formatSettingValue(schema, config.value);
-		const scope = config.explicit ? config.scope : "default";
-		const valueText = theme.fg(config.explicit ? "warning" : selected ? "text" : "muted", value);
-		const meta = managerMutedForSelection(theme, `(${schema.type}, ${scope}, ${apply})`, selected);
+		const valueText = theme.fg(config.explicit ? "success" : selected ? "text" : "muted", value);
 		const label = selected ? theme.fg("text", schema.label ?? schema.key) : schema.label ?? schema.key;
-		const row = truncateToWidth(`${marker}${label}: ${valueText} ${meta}`, width, "…");
+		const row = truncateToWidth(`${marker}${label}: ${valueText}`, width, "…");
 		settingLines.push(selected ? managerSelectedLine(theme, row, width) : row);
 		if (selected && schema.description) settingLines.push(`  ${theme.fg("muted", truncateToWidth(schema.description, Math.max(1, width - 2), "…"))}`);
 	}
@@ -1647,13 +1636,9 @@ function frame(lines: string[], width: number, theme: Theme, fixedInnerRows?: nu
 	const contentWidth = frameContentWidth(width);
 	const border = (s: string) => theme.fg("borderAccent", s);
 	let body = lines;
-	if (fixedInnerRows !== undefined) {
-		if (body.length > fixedInnerRows) {
-			const hidden = body.length - fixedInnerRows + 1;
-			body = [...body.slice(0, Math.max(0, fixedInnerRows - 1)), theme.fg("dim", `↓ ${hidden} more line(s)`)].slice(0, fixedInnerRows);
-		} else if (body.length < fixedInnerRows) {
-			body = [...body, ...Array.from({ length: fixedInnerRows - body.length }, () => "")];
-		}
+	if (fixedInnerRows !== undefined && body.length > fixedInnerRows) {
+		const hidden = body.length - fixedInnerRows + 1;
+		body = [...body.slice(0, Math.max(0, fixedInnerRows - 1)), theme.fg("dim", `↓ ${hidden} more line(s)`)].slice(0, fixedInnerRows);
 	}
 	const blank = `${border("┃")}${" ".repeat(inner)}${border("┃")}`;
 	const top = () => {
@@ -1979,7 +1964,7 @@ function createQuickSettingsComponent(pi: ExtensionAPI, ctx: ExtensionCommandCon
 			const index = ui.scroll + visibleIndex;
 			if (row.packageName !== lastPackage) {
 				if (lastPackage) lines.push("");
-				lines.push(managerSectionTitle(theme, row.packageName));
+				lines.push(managerEntityTitle(theme, row.packageName));
 				lastPackage = row.packageName;
 			}
 			const selected = index === ui.selected;
@@ -1989,10 +1974,8 @@ function createQuickSettingsComponent(pi: ExtensionAPI, ctx: ExtensionCommandCon
 			const label = selected ? theme.fg("text", labelText) : labelText;
 			const isEditing = ui.editing?.rowId === row.id;
 			const value = isEditing ? `${ui.editing?.buffer ?? ""}█` : formatSettingValue(row.schema, config.value);
-			const valueText = theme.fg(isEditing ? "accent" : config.explicit ? "warning" : selected ? "text" : "muted", value);
-			const mode = isEditing ? "editing" : row.schema.type === "boolean" || row.schema.type === "enum" ? "toggle" : "edit";
-			const meta = managerMutedForSelection(theme, `${row.schema.type} · ${mode} · ${config.scope}`, selected);
-			const rowText = truncateToWidth(`${itemPad}${label}${" ".repeat(Math.max(1, 36 - visibleWidth(labelText)))}${valueText} ${meta}`, bodyWidth, "…");
+			const valueText = theme.fg(isEditing ? "accent" : config.explicit ? "success" : selected ? "text" : "muted", value);
+			const rowText = truncateToWidth(`${itemPad}${label}${" ".repeat(Math.max(1, 36 - visibleWidth(labelText)))}${valueText}`, bodyWidth, "…");
 			lines.push(selected ? managerSelectedLine(theme, rowText, bodyWidth) : rowText);
 			if (selected && !isEditing && row.schema.description) lines.push(theme.fg("muted", `    ${truncateToWidth(row.schema.description, bodyWidth - 4, "…")}`));
 		}
