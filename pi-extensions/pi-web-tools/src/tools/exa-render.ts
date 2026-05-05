@@ -26,12 +26,12 @@ function answerPreviewLines(answer: string, theme: any, expanded: boolean, hasRe
 		if (paragraphs.length > 1) chunks.push("");
 	}
 	while (chunks.at(-1) === "") chunks.pop();
-	if (truncated) chunks.push(expanded ? "… answer truncated by UI cap" : "… answer truncated · Ctrl+O to expand");
+	if (truncated) chunks.push(expanded ? "… truncated by UI cap" : "… truncated · Ctrl+O to expand");
 	if (chunks.length === 0) return [];
 	return chunks.map((chunk, index) => {
 		const last = index === chunks.length - 1;
 		const branch = last && !hasResults ? "└" : index === 0 ? "├" : "│";
-		const prefix = index === 0 ? "answer " : "";
+		const prefix = "";
 		const value = chunk.startsWith("… answer truncated") ? muted(theme, chunk) : accent(theme, chunk || " ");
 		return `${tree(theme, branch)}${muted(theme, prefix)}${value}`;
 	});
@@ -48,7 +48,7 @@ export function renderExaResultList(label: string, target: string | undefined, r
 	const details = result?.details ?? {};
 	const results: ExaRenderableResult[] = Array.isArray(details.results) ? details.results : [];
 	const answer = typeof details.answer === "string" && details.answer.trim() ? details.answer.trim() : undefined;
-	const meta = answer && results.length === 0 ? "answer" : `${results.length} ${resultNoun}`;
+	const meta = answer && results.length === 0 ? undefined : `${results.length} ${resultNoun}`;
 	const lines = [successSummary(theme, providerLabel(label, "exa"), target || "complete", meta)];
 	if (answer) lines.push(...answerPreviewLines(answer, theme, Boolean(options?.expanded), results.length > 0));
 	const limit = options?.expanded ? 8 : 3;

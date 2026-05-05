@@ -150,8 +150,10 @@ test("advanced Exa tools render compact provider-labeled summaries", () => {
 	const expandedAnswerResult = answer.renderResult({ details: { answer: longAnswer, results: [] } }, { expanded: true }, theme, { args: { query: "What is Ghostty?" } }).render(200).join("\n");
 	const similarResult = similar.renderResult({ details: { results: [{ title: "Docs", url: "https://ghostty.org/docs" }, { title: "Repo", url: "https://github.com/ghostty-org/ghostty" }] } }, {}, theme, { args: { url: "https://ghostty.org" } }).render(200).join("\n");
 	assert.match(answerCall, /Web Answer \(Exa\) What is Ghostty\?/);
-	assert.match(answerResult, /Web Answer \(Exa\) What is Ghostty\? · answer/);
-	assert.match(answerResult, /answer Ghostty is a fast terminal emulator\./);
+	assert.match(answerResult, /Web Answer \(Exa\) What is Ghostty\?/);
+	assert.doesNotMatch(answerResult.split("\n")[0] ?? "", /· answer/);
+	assert.match(answerResult, /Ghostty is a fast terminal emulator\./);
+	assert.doesNotMatch(answerResult, /answer Ghostty/);
 	assert.match(answerResult, /Ctrl\+O to expand/);
 	assert.ok(expandedAnswerResult.length > answerResult.length);
 	assert.match(similarResult, /Web Find Similar \(Exa\) https:\/\/ghostty.org · 2 results/);
