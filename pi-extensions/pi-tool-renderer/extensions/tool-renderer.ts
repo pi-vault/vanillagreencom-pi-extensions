@@ -2789,15 +2789,15 @@ let activeToolChromeCtx: ExtensionContext | undefined;
 
 function mutedHorizontalRule(theme: any, width: number): string {
 	const rule = "─".repeat(Math.max(1, width));
-	try {
-		return theme?.fg?.("borderMuted", rule) ?? rule;
-	} catch {
+	for (const token of ["borderMuted", "muted"] as const) {
 		try {
-			return theme?.fg?.("muted", rule) ?? rule;
+			const styled = theme?.fg?.(token, rule);
+			if (typeof styled === "string" && styled !== rule) return styled;
 		} catch {
-			return rule;
+			// Try the next token/fallback below.
 		}
 	}
+	return `\x1b[90m${rule}\x1b[39m`;
 }
 
 function shouldOmitBottomToolChromeRule(core: string[]): boolean {
@@ -2822,7 +2822,7 @@ function installToolChromePatch(): void {
 		if (start > end) return rendered;
 		const core = rendered.slice(start, end + 1).map((line) => truncateToWidth(line, Math.max(1, width), ""));
 		if (mode === "transparent") return core;
-		const activeTheme = activeToolChromeCtx?.hasUI ? activeToolChromeCtx.ui.theme : undefined;
+		const activeTheme = this?.ui?.theme ?? (activeToolChromeCtx?.hasUI ? activeToolChromeCtx.ui.theme : undefined);
 		const rule = mutedHorizontalRule(activeTheme, width);
 		return shouldOmitBottomToolChromeRule(core) ? [rule, ...core] : [rule, ...core, rule];
 	};
