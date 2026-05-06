@@ -138,14 +138,28 @@ const MODELS = buildModels(getModels("anthropic"));
 
 // Disable Claude Code built-ins in the provider path. Pi owns tool execution;
 // Claude reaches Pi tools through the bridged MCP server instead.
-const DISALLOWED_BUILTIN_TOOLS = [
-	"Read", "Write", "Edit", "Glob", "Grep", "Bash", "Agent",
+//
+// `allowedTools` is a permission auto-allow list in the Claude Agent SDK, not a
+// visibility allowlist. Use `tools: []` to remove the built-in tool set, and keep
+// this disallow list as a belt-and-suspenders guard for SDK/CLI built-ins that may
+// otherwise leak into the model context (e.g. TodoWrite, CronList, SendMessage).
+export const DISALLOWED_BUILTIN_TOOLS = [
+	"Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "Bash", "Agent", "Task",
 	"NotebookEdit", "EnterWorktree", "ExitWorktree",
-	"CronCreate", "CronDelete", "TeamCreate", "TeamDelete",
+	"CronList", "CronCreate", "CronDelete", "TeamCreate", "TeamDelete",
+	"TaskOutput", "TaskStop", "SendMessage", "Skill",
+	"TodoRead", "TodoWrite",
+	"ListMcpResources", "ReadMcpResource",
 	"WebFetch", "WebSearch",
 	"AskUserQuestion", "EnterPlanMode", "ExitPlanMode",
 	"ToolSearch", "ScheduleWakeup",
 ];
+
+export const CLAUDE_BRIDGE_TOOL_ISOLATION = {
+	tools: [] as string[],
+	disallowedTools: DISALLOWED_BUILTIN_TOOLS,
+	allowedTools: [`mcp__${MCP_SERVER_NAME}__*`],
+} satisfies Pick<NonNullable<Parameters<typeof query>[0]["options"]>, "tools" | "allowedTools" | "disallowedTools">;
 
 // --- Session persistence ---
 
@@ -987,8 +1001,7 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 	const queryOptions: NonNullable<Parameters<typeof query>[0]["options"]> = {
 		cwd,
 		env: childEnv,
-		disallowedTools: DISALLOWED_BUILTIN_TOOLS,
-		allowedTools: [`mcp__${MCP_SERVER_NAME}__*`],
+		...CLAUDE_BRIDGE_TOOL_ISOLATION,
 		permissionMode: "bypassPermissions",
 		includePartialMessages: true,
 		systemPrompt: {

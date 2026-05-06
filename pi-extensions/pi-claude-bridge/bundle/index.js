@@ -33642,17 +33642,28 @@ var DISALLOWED_BUILTIN_TOOLS = [
   "Read",
   "Write",
   "Edit",
+  "MultiEdit",
   "Glob",
   "Grep",
   "Bash",
   "Agent",
+  "Task",
   "NotebookEdit",
   "EnterWorktree",
   "ExitWorktree",
+  "CronList",
   "CronCreate",
   "CronDelete",
   "TeamCreate",
   "TeamDelete",
+  "TaskOutput",
+  "TaskStop",
+  "SendMessage",
+  "Skill",
+  "TodoRead",
+  "TodoWrite",
+  "ListMcpResources",
+  "ReadMcpResource",
   "WebFetch",
   "WebSearch",
   "AskUserQuestion",
@@ -33661,6 +33672,11 @@ var DISALLOWED_BUILTIN_TOOLS = [
   "ToolSearch",
   "ScheduleWakeup"
 ];
+var CLAUDE_BRIDGE_TOOL_ISOLATION = {
+  tools: [],
+  disallowedTools: DISALLOWED_BUILTIN_TOOLS,
+  allowedTools: [`mcp__${MCP_SERVER_NAME}__*`]
+};
 var sharedSession = null;
 function convertAndImportMessages(session, messages, customToolNameToSdk) {
   const { anthropicMessages, sanitizedIds } = convertPiMessages(messages, customToolNameToSdk);
@@ -34235,8 +34251,7 @@ function streamClaudeAgentSdk(model, context, options) {
   const queryOptions = {
     cwd,
     env: childEnv,
-    disallowedTools: DISALLOWED_BUILTIN_TOOLS,
-    allowedTools: [`mcp__${MCP_SERVER_NAME}__*`],
+    ...CLAUDE_BRIDGE_TOOL_ISOLATION,
     permissionMode: "bypassPermissions",
     includePartialMessages: true,
     systemPrompt: {
@@ -34418,5 +34433,7 @@ function index_default(pi) {
   }
 }
 export {
+  CLAUDE_BRIDGE_TOOL_ISOLATION,
+  DISALLOWED_BUILTIN_TOOLS,
   index_default as default
 };
