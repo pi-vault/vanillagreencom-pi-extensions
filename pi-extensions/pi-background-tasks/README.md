@@ -1,7 +1,9 @@
 # pi-background-tasks
 
-![Background tasks dashboard](./assets/background-tasks-dashboard.gif)
-
+![Spawning background tasks](assets/spawn-tasks.png)
+![Task summary](assets/task-summary.png)
+![Inline mini-dashboard](assets/inline-dashboard.png)
+![Full dashboard](assets/dashboard.png)
 Pi package for explicit, non-blocking background shell tasks.
 
 ## What it provides
