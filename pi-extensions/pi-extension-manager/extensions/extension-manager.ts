@@ -8,7 +8,7 @@
  */
 
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext, Theme, ThemeColor } from "@mariozechner/pi-coding-agent";
-import { matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
+import { matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
@@ -1742,11 +1742,12 @@ function createManagerComponent(
 		let lines: string[] = [];
 		lines.push(renderTabBar(topTabs, ui.topTab, bodyWidth, theme));
 		lines.push("");
-		lines.push(ui.editing
+		const primaryHint = ui.editing
 			? `${theme.fg("dim", "editing value · ")}${ansiYellow("enter")} ${theme.fg("dim", "save · ")}${ansiYellow("esc")} ${theme.fg("dim", "cancel · ")}${ansiYellow("backspace")} ${theme.fg("dim", "delete · ")}${ansiYellow("ctrl+u")} ${theme.fg("dim", "clear")}`
 			: ui.showAudit
 			? `${theme.fg("dim", "diagnostics · ")}${ansiYellow("↑↓")} ${theme.fg("dim", "scroll · ")}${ansiYellow("PgUp/PgDn")} ${theme.fg("dim", "scroll · ")}${ansiYellow("Alt+A")} ${theme.fg("dim", "back · ")}${ansiYellow("esc")} ${theme.fg("dim", "close")}`
-			: `${ansiYellow("tab")} ${theme.fg("dim", "switch tabs · ")}${ansiYellow("↑↓")} ${theme.fg("dim", "navigate · ")}${ansiYellow("enter")} ${theme.fg("dim", "toggle/edit · ")}${ansiYellow("delete")} ${theme.fg("dim", "reset setting · ")}${ansiYellow("ctrl+x")} ${theme.fg("dim", "reset extension · ")}${ansiYellow("Alt+A")} ${theme.fg("dim", "diagnostics · ")}${ansiYellow("esc")} ${theme.fg("dim", "close")}`);
+			: `${ansiYellow("tab")} ${theme.fg("dim", "switch tabs · ")}${ansiYellow("↑↓")} ${theme.fg("dim", "navigate · ")}${ansiYellow("enter")} ${theme.fg("dim", "toggle/edit · ")}${ansiYellow("delete")} ${theme.fg("dim", "reset setting · ")}${ansiYellow("ctrl+x")} ${theme.fg("dim", "reset extension · ")}${ansiYellow("Alt+A")} ${theme.fg("dim", "diagnostics · ")}${ansiYellow("esc")} ${theme.fg("dim", "close")}`;
+		lines.push(...wrapLine(primaryHint, bodyWidth));
 		lines.push("");
 		lines.push(divider(bodyWidth, theme));
 		const availableRows = Math.max(1, layout.innerRows - lines.length);
@@ -1889,15 +1890,11 @@ function renderExtensions(inventory: Inventory, ui: ManagerUiState, width: numbe
 	const view = ui.topTab === TAB_ALL ? (ui.showResources ? "raw resources" : "packages") : "package";
 	const searchText = ` > ${ui.search}${theme.inverse(" ")}`;
 	const searchLine = theme.bg("toolPendingBg", pad(searchText, width));
-	const lines = [
-		"",
-		searchLine,
-		`${theme.fg("muted", "View")}: ${theme.fg("text", view)}  ${theme.fg("muted", "Filters")}: kind ${ui.kindFilter} · provider ${ui.providerFilter} · state ${ui.stateFilter} · scope ${ui.scopeFilter}`,
-		"",
-		`${ansiYellow("Alt+K/P/S/O")} ${theme.fg("dim", "filters · ")}${ansiYellow("Alt+R")} ${theme.fg("dim", "raw resources · ")}${ansiYellow("Alt+T")} ${theme.fg("dim", "toggle provider · ")}${ansiYellow("Alt+U")} ${theme.fg("dim", "uninstall package · ")}${ansiYellow("delete")} ${theme.fg("dim", "reset setting · ")}${ansiYellow("ctrl+x")} ${theme.fg("dim", "reset extension · ")}${ansiYellow("←/→")} ${theme.fg("dim", "pane")}`,
-		divider(width, theme),
-	];
-	for (let i = 0; i < rows; i += 1) {
+	const filterLine = `${theme.fg("muted", "View")}: ${theme.fg("text", view)}  ${theme.fg("muted", "Filters")}: kind ${ui.kindFilter} · provider ${ui.providerFilter} · state ${ui.stateFilter} · scope ${ui.scopeFilter}`;
+	const hintLine = `${ansiYellow("Alt+K/P/S/O")} ${theme.fg("dim", "filters · ")}${ansiYellow("Alt+R")} ${theme.fg("dim", "raw resources · ")}${ansiYellow("Alt+T")} ${theme.fg("dim", "toggle provider · ")}${ansiYellow("Alt+U")} ${theme.fg("dim", "uninstall package · ")}${ansiYellow("delete")} ${theme.fg("dim", "reset setting · ")}${ansiYellow("ctrl+x")} ${theme.fg("dim", "reset extension · ")}${ansiYellow("←/→")} ${theme.fg("dim", "pane")}`;
+	const lines = ["", searchLine, ...wrapLine(filterLine, width), "", ...wrapLine(hintLine, width), divider(width, theme)];
+	const tableRows = Math.max(1, rows - Math.max(0, lines.length - 6));
+	for (let i = 0; i < tableRows; i += 1) {
 		lines.push(`${pad(left[i] ?? "", leftWidth)} ${theme.fg("dim", "│")} ${truncateToWidth(right[i] ?? "", rightWidth, "")}`);
 	}
 	return lines;
@@ -1960,7 +1957,7 @@ function renderInspector(inventory: Inventory, item: InventoryItem | undefined, 
 	if (!item) return [theme.fg("dim", "Select an item to inspect it.")];
 	const detailLines = [
 		`${managerEntityTitle(theme, item.displayName)} ${theme.fg(stateColor(item.state), item.state)}`,
-		item.description ? truncateToWidth(item.description, width, "…") : theme.fg("dim", "No description."),
+		item.description ? theme.fg("text", item.description) : theme.fg("dim", "No description."),
 		"",
 		`${theme.fg("muted", "Kind")}: ${kindLabel(item.kind)}    ${theme.fg("muted", "Scope")}: ${item.scope}`,
 		`${theme.fg("muted", "Provider")}: ${item.provider}`,
@@ -2006,7 +2003,7 @@ function renderInspector(inventory: Inventory, item: InventoryItem | undefined, 
 	ui.settingSelected = Math.max(0, Math.min(ui.settingSelected, Math.max(0, schemas.length - 1)));
 	const selectedSchema = schemas[ui.settingSelected];
 	const hasSelectedDescription = Boolean(selectedSchema?.description);
-	const maxVisibleSettings = Math.max(1, Math.min(settingsRows, settingViewportRows - 2 - (hasSelectedDescription ? 1 : 0)));
+	const maxVisibleSettings = Math.max(1, Math.min(settingsRows, settingViewportRows - 2 - (hasSelectedDescription ? 2 : 0)));
 	if (ui.settingSelected < ui.settingScroll) ui.settingScroll = ui.settingSelected;
 	if (ui.settingSelected >= ui.settingScroll + maxVisibleSettings) ui.settingScroll = ui.settingSelected - maxVisibleSettings + 1;
 	ui.settingScroll = Math.max(0, Math.min(ui.settingScroll, Math.max(0, schemas.length - maxVisibleSettings)));
@@ -2024,7 +2021,7 @@ function renderInspector(inventory: Inventory, item: InventoryItem | undefined, 
 		const label = selected ? theme.fg("text", schema.label ?? schema.key) : schema.label ?? schema.key;
 		const row = truncateToWidth(`${marker}${label}: ${valueText}`, width, "…");
 		settingLines.push(selected ? managerSelectedLine(theme, row, width) : row);
-		if (selected && !isEditing && schema.description) settingLines.push(`  ${theme.fg("muted", truncateToWidth(schema.description, Math.max(1, width - 2), "…"))}`);
+		if (selected && !isEditing && schema.description) settingLines.push(...wrapDescription(schema.description, width, theme, "  "));
 	}
 	const hidden = Math.max(0, schemas.length - (ui.settingScroll + maxVisibleSettings));
 	if (hidden > 0) settingLines.push(theme.fg("dim", `↓ ${hidden} more setting(s)`));
@@ -2077,7 +2074,19 @@ function pad(text: string, width: number): string {
 }
 
 function wrapLine(line: string, width: number): string[] {
-	return [truncateToWidth(line, width, "…")];
+	const safeWidth = Math.max(1, width);
+	const normalized = String(line ?? "").replace(/\t/g, "  ");
+	const wrapped = normalized.split(/\r?\n/).flatMap((part) => {
+		const rows = wrapTextWithAnsi(part, safeWidth);
+		return rows.length > 0 ? rows : [""];
+	});
+	return wrapped.map((part) => truncateToWidth(part, safeWidth, ""));
+}
+
+function wrapDescription(text: string, width: number, theme: Theme, indent = ""): string[] {
+	const indentWidth = visibleWidth(indent);
+	const contentWidth = Math.max(1, width - indentWidth);
+	return wrapLine(text, contentWidth).map((line) => `${indent}${theme.fg("muted", line)}`);
 }
 
 function countBy<T>(items: T[], key: (item: T) => string): Record<string, number> {
@@ -2372,7 +2381,7 @@ function createQuickSettingsComponent(pi: ExtensionAPI, ctx: ExtensionCommandCon
 		lines.push(divider(bodyWidth, theme));
 		if (visible.length === 0) {
 			lines.push(theme.fg("muted", "No matching settings."));
-			lines.push(divider(bodyWidth, theme), footer);
+			lines.push(divider(bodyWidth, theme), ...wrapLine(footer, bodyWidth));
 			return frame(lines, safeWidth, theme, layout.innerRows, "Extension Settings");
 		}
 		let lastPackage = "";
@@ -2393,12 +2402,12 @@ function createQuickSettingsComponent(pi: ExtensionAPI, ctx: ExtensionCommandCon
 			const valueText = theme.fg(isEditing ? "accent" : config.explicit ? "success" : selected ? "text" : "muted", value);
 			const rowText = truncateToWidth(`${itemPad}${label}${" ".repeat(Math.max(1, 36 - visibleWidth(labelText)))}${valueText}`, bodyWidth, "…");
 			lines.push(selected ? managerSelectedLine(theme, rowText, bodyWidth) : rowText);
-			if (selected && !isEditing && row.schema.description) lines.push(theme.fg("muted", `    ${truncateToWidth(row.schema.description, bodyWidth - 4, "…")}`));
+			if (selected && !isEditing && row.schema.description) lines.push(...wrapDescription(row.schema.description, bodyWidth, theme, "    "));
 		}
 		const moreBefore = ui.scroll > 0 ? `↑ ${ui.scroll}` : "";
 		const moreAfter = ui.scroll + layout.listRows < filtered().length ? `↓ ${filtered().length - ui.scroll - layout.listRows}` : "";
 		if (moreBefore || moreAfter) lines.push("", theme.fg("dim", [moreBefore, moreAfter].filter(Boolean).join(" · ")));
-		lines.push(divider(bodyWidth, theme), footer);
+		lines.push(divider(bodyWidth, theme), ...wrapLine(footer, bodyWidth));
 		return frame(lines, safeWidth, theme, layout.innerRows, "Extension Settings");
 	}
 

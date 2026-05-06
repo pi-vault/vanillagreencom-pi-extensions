@@ -1308,7 +1308,7 @@ function createAgentsBrowserComponent(
 		const tabLine = renderAgentBrowserTabs(ui.tab, hasActive, bodyWidth, theme);
 		if (ui.tab === "active") {
 			const footer = `${ansiYellow("tab")} ${theme.fg("dim", "view · ")}${ansiYellow("↑↓")} ${theme.fg("dim", "step · ")}${ansiYellow("-/=")} ${theme.fg("dim", "page · ")}${ansiYellow("←/→")} ${theme.fg("dim", "pane · ")}${ansiYellow("ctrl+e")} ${theme.fg("dim", "view in editor · ")}${ansiYellow("esc")} ${theme.fg("dim", "close")}`;
-			const lines = [tabLine, "", ...renderActiveTabBody(activeItems, runtimeRoot, ui, bodyWidth, theme, layout), agentDivider(bodyWidth, theme), footer];
+			const lines = [tabLine, "", ...renderActiveTabBody(activeItems, runtimeRoot, ui, bodyWidth, theme, layout), agentDivider(bodyWidth, theme), ...wrapTextWithAnsi(footer, bodyWidth)];
 			return agentFrame(lines, safeWidth, theme, layout.innerRows, "Subagents");
 		}
 		clamp();
@@ -1318,7 +1318,7 @@ function createAgentsBrowserComponent(
 			"",
 			...renderAgentsBody(discovery, filtered(), statuses, ui, bodyWidth, theme, layout),
 			agentDivider(bodyWidth, theme),
-			footer,
+			...wrapTextWithAnsi(footer, bodyWidth),
 		];
 		return agentFrame(lines, safeWidth, theme, layout.innerRows, "Subagents");
 	}

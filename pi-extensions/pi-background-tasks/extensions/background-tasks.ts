@@ -1426,7 +1426,7 @@ export default function backgroundTasks(pi: ExtensionAPI): void {
 					if (sorted.length === 0) {
 						lines.push(theme.fg("dim", "No background tasks yet. Use /bg run <command> or the bg_task tool."));
 						while (lines.length < bodyRows) lines.push("");
-						lines.push("", footer);
+						lines.push("", ...wrapTextWithAnsi(footer, Math.max(1, width)));
 						return lines.map((line) => truncateToWidth(line, width, ""));
 					}
 
@@ -1477,7 +1477,7 @@ export default function backgroundTasks(pi: ExtensionAPI): void {
 						lines.push(`${padAnsi(left[i] ?? "", taskPaneWidth)}${theme.fg("dim", " │ ")}${truncateToWidth(right[i] ?? "", detailPaneWidth, "")}`);
 					}
 					while (lines.length < bodyRows) lines.push("");
-					lines.push("", footer);
+					lines.push("", ...wrapTextWithAnsi(footer, Math.max(1, width)));
 					return lines.map((line) => truncateToWidth(line, width, ""));
 				};
 
