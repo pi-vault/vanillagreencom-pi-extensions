@@ -4,9 +4,9 @@ import { type ExtensionAPI, type ExtensionUIContext } from "@mariozechner/pi-cod
 import { createSdkMcpServer, query, type EffortLevel, type SDKMessage, type SDKUserMessage, type SettingSource } from "@anthropic-ai/claude-agent-sdk";
 import type { Base64ImageSource, ContentBlockParam, MessageParam } from "@anthropic-ai/sdk/resources";
 import { createSession, deleteSession, repairToolPairing } from "cc-session-io";
-import { appendFileSync, mkdirSync, realpathSync, statSync } from "fs";
+import { accessSync, appendFileSync, constants as fsConstants, mkdirSync, realpathSync, statSync } from "fs";
 import { homedir } from "os";
-import { dirname, join } from "path";
+import { delimiter, dirname, join } from "path";
 import { PROVIDER_ID, messageContentToText, convertPiMessages } from "./convert.js";
 import { buildModels } from "./models.js";
 import { MCP_SERVER_NAME, MCP_TOOL_PREFIX, extractSkillsBlock } from "./skills.js";
@@ -55,6 +55,26 @@ function debug(...args: unknown[]) {
 	};
 	const msg = args.map(fmt).join(" ");
 	appendFileSync(DEBUG_LOG_PATH, `[${ts}] [${moduleInstanceId}] ${msg}\n`);
+}
+
+function executableFromPath(name: string): string | undefined {
+	const paths = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
+	for (const dir of paths) {
+		const candidate = join(dir, name);
+		try {
+			accessSync(candidate, fsConstants.X_OK);
+			return candidate;
+		} catch {
+			// keep searching
+		}
+	}
+	return undefined;
+}
+
+function resolveClaudeExecutable(configured?: string): string | undefined {
+	const trimmed = configured?.trim();
+	if (trimmed) return trimmed;
+	return executableFromPath("claude") ?? executableFromPath("claude-code");
 }
 
 // Per-query CLI debug capture. When CLAUDE_BRIDGE_DEBUG=1, ask the Claude Code
@@ -937,7 +957,7 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 		? undefined
 		: providerSettings.settingSources ?? ["user", "project"];
 	const strictMcpConfigEnabled = !appendSystemPrompt && providerSettings.strictMcpConfig !== false;
-	const claudeExecutable = providerSettings.pathToClaudeCodeExecutable;
+	const claudeExecutable = resolveClaudeExecutable(providerSettings.pathToClaudeCodeExecutable);
 
 	// Prefer the model's own thinkingLevelMap when present (pi-ai 0.72+ ships
 	// per-model overrides — e.g. opus-4-7 wants xhigh→xhigh, not xhigh→max).

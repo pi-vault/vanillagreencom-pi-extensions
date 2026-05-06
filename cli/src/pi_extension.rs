@@ -682,7 +682,6 @@ const COPY_DIR_SKIP_NAMES: &[&str] = &[
     ".turbo",
     ".next",
     ".cache",
-    "dist",
     "build",
     "out",
     "coverage",

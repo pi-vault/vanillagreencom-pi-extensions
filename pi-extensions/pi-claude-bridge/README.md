@@ -36,7 +36,7 @@ The bridge detects these hook additions from the effective Pi system prompt for 
 | `enabled` | on | Register the Claude bridge provider; reload required. |
 | `appendSystemPrompt` | on | Forward `AGENTS.md` + skills. |
 | `strictMcpConfig` | on | When Claude Code filesystem settings are loaded, block filesystem MCP auto-loads; Pi owns tool execution. |
-| `pathToClaudeCodeExecutable` | empty | Optional explicit `claude` binary path for NixOS/non-FHS systems. |
+| `pathToClaudeCodeExecutable` | auto | Explicit `claude` binary path; empty auto-detects `claude` or `claude-code` on PATH. |
 
 Legacy config files are still read: `~/.pi/agent/claude-bridge.json` and `.pi/claude-bridge.json`. vstack extension-manager settings override them.
 
@@ -44,6 +44,7 @@ Legacy config files are still read: `~/.pi/agent/claude-bridge.json` and `.pi/cl
 
 - No AskClaude tool; this package is provider-only.
 - vstack extension-manager settings for prompt forwarding and Claude Code options.
+- Bundled runtime dependencies for vstack installs; the bridge auto-detects the local Claude Code executable.
 - Opt-in delivery of `APPEND_SYSTEM.md` and recognized Pi `before_agent_start` prompt hooks.
 - Keeps upstream provider fixes: ID-based tool-result matching, compact/session rebuild handling, abort recovery, skill read-tool rewriting, strict MCP config, cloud MCP suppression, and Opus 4.7 thinking display forcing.
 

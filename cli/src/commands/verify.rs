@@ -226,8 +226,13 @@ fn hash_dir_walk(dir: &Path) -> u64 {
     const FNV_OFFSET: u64 = 0xcbf29ce484222325;
     const FNV_PRIME: u64 = 0x00000100000001B3;
     let mut state = FNV_OFFSET;
-    for entry in walkdir::WalkDir::new(dir).min_depth(1).sort_by_file_name() {
+    let mut walker = walkdir::WalkDir::new(dir).min_depth(1).sort_by_file_name().into_iter();
+    while let Some(entry) = walker.next() {
         let Ok(entry) = entry else { continue };
+        if entry.file_type().is_dir() && should_skip_hash_dir(entry.file_name().to_string_lossy().as_ref()) {
+            walker.skip_current_dir();
+            continue;
+        }
         if !entry.file_type().is_file() {
             continue;
         }
@@ -244,6 +249,13 @@ fn hash_dir_walk(dir: &Path) -> u64 {
         }
     }
     state
+}
+
+fn should_skip_hash_dir(name: &str) -> bool {
+    matches!(
+        name,
+        "node_modules" | ".git" | ".turbo" | ".next" | ".cache" | "build" | "out" | "coverage" | ".pi"
+    )
 }
 
 fn short_hash(h: u64) -> String {

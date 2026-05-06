@@ -13,7 +13,7 @@
   "license": "MIT",
   "pi": {
     "extensions": [
-      "./src/index.ts"
+      "./bundle/index.js"
     ],
     "image": "https://raw.githubusercontent.com/vanillagreencom/vstack/main/pi-extensions/pi-claude-bridge/assets/claude-bridge1.png"
   },
@@ -88,7 +88,7 @@
         {
           "key": "pathToClaudeCodeExecutable",
           "label": "Claude executable path",
-          "description": "Optional explicit path to the claude binary, useful on NixOS or non-FHS systems.",
+          "description": "Optional explicit path to the claude binary. If empty, the bridge auto-detects claude or claude-code on PATH.",
           "type": "path",
           "default": "",
           "category": "Claude Code",
@@ -111,16 +111,20 @@
     "@mariozechner/pi-ai": "^0.72.1",
     "@mariozechner/pi-coding-agent": "^0.72.1",
     "@types/node": "^24.3.0",
+    "esbuild": "^0.28.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
   },
   "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=bundle/index.js --external:@mariozechner/pi-ai --external:@mariozechner/pi-coding-agent",
+    "prepack": "npm run build",
     "test:unit": "node --import tsx --test tests/unit-*.mjs",
     "test": "set -a && [ -f .env.test ] && . .env.test; set +a && npm run test:unit && tests/int-smoke.sh && tests/int-multi-turn.sh && tests/int-cache.sh && node --import tsx --test tests/int-*.mjs",
     "test:usage": "tests/usage-test.sh",
     "typecheck": "tsc --noEmit"
   },
   "files": [
+    "bundle/",
     "src/",
     "assets/",
     "CHANGELOG.md",
