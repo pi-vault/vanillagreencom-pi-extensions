@@ -4590,19 +4590,24 @@ export default function (pi: ExtensionAPI) {
 
 	const updateDashboardFromTaskRecord = (record: PaneTaskRecord) => {
 		const kind: DashboardKind = record.paneId ? "pane" : "oneshot";
+		const existingKey = dashboardKeyForTask(record.taskId) ?? (kind === "pane" ? `pane:${record.agent}` : undefined);
+		const existing = existingKey ? dashboardState.items[existingKey] : undefined;
 		updateDashboard({
 			agent: record.agent,
 			artifacts: Boolean(record.completionArchivePath || record.outboxFile || record.transcriptPath || record.processingFile || record.doneFile),
+			bridge: existing?.bridge,
 			completedAt: record.completedAt,
 			kind,
 			message: record.summary || record.diagnostics?.at(-1) || record.task,
+			model: existing?.model,
 			paneId: record.paneId,
 			startedAt: record.createdAt,
 			status: dashboardStatusFor(record.status, kind),
 			task: record.task,
 			taskId: record.taskId,
-			transcriptPath: record.transcriptPath,
+			transcriptPath: record.transcriptPath ?? existing?.transcriptPath,
 			updatedAt: record.updatedAt ?? record.completedAt ?? record.createdAt,
+			usage: existing?.usage,
 		});
 	};
 
