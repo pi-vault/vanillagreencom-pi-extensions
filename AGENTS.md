@@ -13,6 +13,8 @@ cli/src/
 │   ├── list.rs          Show installed skills and agents
 │   ├── check.rs         Validate installation status
 │   ├── update.rs        Self-update to latest release
+│   ├── update_pi.rs     Update Pi packages by version (npm or vstack repos), grouped by (scope, sourceRepo)
+│   ├── verify.rs        Lock-vs-source hash check + byte-level Pi-package source-vs-install drift detection
 │   ├── refresh.rs       Reinstall locked items from source (agents, skills, hooks, Pi packages); re-applies vstack.toml
 │   └── init.rs          Scaffold new skill/agent template
 ├── agent.rs             Agent parsing, skill/hook matching heuristics
@@ -21,6 +23,7 @@ cli/src/
 ├── pi_extension.rs      Pi extension package discovery, install/remove, settings.json merge
 ├── frontmatter.rs       YAML frontmatter splitting/parsing
 ├── config.rs            Lock file (JSON), project root detection, staleness/mtime helpers
+├── scope.rs             Scope enum (project | global | all) and uniform `--scope`/`-g` parsing for scope-aware commands
 ├── mapping.rs           Source vstack.toml loader — MappingConfig (agent-skills, role-skills, hook-events)
 ├── project_config.rs    Project vstack.toml — ProjectConfig, ensure/write/update, TOML template
 ├── resolve.rs           Shared helpers — skill-pair resolution, read_existing_extras, is_vstack_source

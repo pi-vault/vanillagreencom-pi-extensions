@@ -1,5 +1,7 @@
 # pi-codex-minimal-tools Plan
 
+> **Historical planning document.** Captures the original design intent. The implementation has shipped and `web_search` has since migrated out to `pi-web-tools`; current behavior lives in [`pi-extensions/pi-codex-minimal-tools/README.md`](../pi-extensions/pi-codex-minimal-tools/README.md).
+
 ## Goal
 
 Create a small Pi package named `pi-codex-minimal-tools` that adds the Codex/OpenAI-native tools we actually want, without replacing Pi's normal workflow.
