@@ -59,6 +59,18 @@ Useful options:
 
 Persistent pane delegations return a `taskId`. Keep it if you need to retrieve or steer the task later.
 
+### Resuming bg agents
+
+Bg (non-pane) subagents are ephemeral by default — each call starts with no prior context. Pass `sessionKey: "<stable-id>"` to keep conversation history across calls:
+
+```json
+{ "agent": "reviewer-arch", "task": "Re-review with the new diff.", "sessionKey": "review-PROJ-123" }
+```
+
+The extension routes pi at `runtime/sessions/bg-<agent>-<key>.jsonl`. Same `agent + sessionKey` across delegations resumes the same pi session and retains memory; different keys (or no key) start fresh.
+
+Pane agents already persist via their own pane session file, so `sessionKey` is ignored when the agent has `pane: true`. To explicitly request a *fresh* pane, pass `forceSpawn: true`; the call errors if a live pane already exists and tells you to `/agents stop <name>` first.
+
 ## Commands
 
 | Command | Action |
