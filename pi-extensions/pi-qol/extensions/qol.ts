@@ -4,7 +4,7 @@ import { AssistantMessageComponent, BorderedLoader, convertToLlm, CustomEditor, 
 import type { AutocompleteItem, AutocompleteSuggestions, EditorTheme, TUI } from "@mariozechner/pi-tui";
 import { matchesKey, Text, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui";
 import { execFile, execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
@@ -2294,12 +2294,13 @@ function statusMessage(ctx: ExtensionContext): string {
 
 
 type QolSessionSortMode = "recent" | "relevance";
+type QolSessionSearchScope = "current" | "all";
 
 type QolSessionAction = "resume" | "copy" | "summarize" | "newSession" | "back";
 
 const QOL_SESSION_ACTIONS: QolSessionAction[] = ["resume", "copy", "summarize", "newSession", "back"];
 const QOL_SESSION_ACTION_LABELS: Record<QolSessionAction, string> = {
-	resume: "Resume Session From Here",
+	resume: "Fork session from here",
 	copy: "Copy Prompt",
 	summarize: "Inject Context",
 	newSession: "New Session + Context",
@@ -2336,6 +2337,7 @@ interface QolSessionSearchState {
 	query: string;
 	results: QolSessionSearchResult[];
 	selected: number;
+	scope: QolSessionSearchScope;
 	total: number;
 }
 
@@ -2446,6 +2448,23 @@ function configuredSessionDir(cwd: string): string | undefined {
 		}
 	}
 	return configured;
+}
+
+function canonicalPathForSessionSearch(path: string | undefined): string | undefined {
+	if (!path) return undefined;
+	try {
+		return realpathSync.native(path);
+	} catch {
+		return resolve(path);
+	}
+}
+
+function sameSessionSearchProject(sessionCwd: string | undefined, cwd: string): boolean {
+	return canonicalPathForSessionSearch(sessionCwd) === canonicalPathForSessionSearch(cwd);
+}
+
+function defaultSessionSearchScope(cwd?: string): QolSessionSearchScope {
+	return settingString("sessionSearch.defaultScope", "current", cwd).toLowerCase() === "all" ? "all" : "current";
 }
 
 async function loadQolSessionSearchSessions(ctx: ExtensionContext, onProgress?: (loaded: number, total: number) => void): Promise<QolSessionSearchSession[]> {
@@ -3226,12 +3245,15 @@ class QolSessionSearchComponent {
 		initialQuery = "",
 	) {
 		const query = initialQuery.trim();
+		const scope = defaultSessionSearchScope(cwd);
+		const scopedSessions = this.sessionsForScope(scope);
 		this.searchState = {
 			cursor: query.length,
 			query,
-			results: searchQolSessions(sessions, query, cwd),
+			results: searchQolSessions(scopedSessions, query, cwd),
 			selected: 0,
-			total: sessions.length,
+			scope,
+			total: scopedSessions.length,
 		};
 	}
 
@@ -3245,11 +3267,11 @@ class QolSessionSearchComponent {
 
 	private searchMaxVisibleRows(): number {
 		const configured = Math.max(1, Math.floor(settingNumber("sessionSearch.maxVisible", 8, this.cwd)));
-		// Search results render as 3 content rows plus a divider between rows.
+		// Search results render as 2 content rows plus a divider between rows.
 		// The remaining chrome is title, search box, help text, scroll status,
-		// footer, and frame. Keep the rendered line count within overlay maxHeight
+		// tabs, bottom detail rows, footer, and frame. Keep the rendered line count within overlay maxHeight
 		// so Pi does not clip the bottom of the popup on short terminals.
-		const responsive = Math.max(1, Math.floor((this.maxOverlayRows() - 12) / 4));
+		const responsive = Math.max(1, Math.floor((this.maxOverlayRows() - 16) / 3));
 		return Math.max(1, Math.min(configured, responsive));
 	}
 
@@ -3282,12 +3304,29 @@ class QolSessionSearchComponent {
 		this.searchState.selected = Math.max(0, Math.min(this.searchState.selected, Math.max(0, this.searchState.results.length - 1)));
 	}
 
+	private sessionsForScope(scope = this.searchState.scope): QolSessionSearchSession[] {
+		if (scope === "all") return this.sessions;
+		return this.sessions.filter((session) => sameSessionSearchProject(session.cwd, this.cwd));
+	}
+
+	private updateResults(resetSelection = true): void {
+		const state = this.searchState;
+		const scopedSessions = this.sessionsForScope(state.scope);
+		state.results = searchQolSessions(scopedSessions, state.query, this.cwd);
+		state.total = scopedSessions.length;
+		if (resetSelection) state.selected = 0;
+		this.clampSelection();
+	}
+
+	private toggleScope(): void {
+		this.searchState.scope = this.searchState.scope === "current" ? "all" : "current";
+		this.updateResults(true);
+	}
+
 	private updateQuery(query: string, cursor: number): void {
 		this.searchState.query = query;
 		this.searchState.cursor = Math.max(0, Math.min(cursor, query.length));
-		this.searchState.results = searchQolSessions(this.sessions, query, this.cwd);
-		this.searchState.selected = 0;
-		this.clampSelection();
+		this.updateResults(true);
 	}
 
 	private selectedMessageIndex(messages: QolSessionUserMessage[], query: string): number {
@@ -3320,6 +3359,10 @@ class QolSessionSearchComponent {
 		const state = this.searchState;
 		if (matchesKey(data, "escape")) {
 			this.done({ type: "cancel" });
+			return;
+		}
+		if (matchesKey(data, "tab")) {
+			this.toggleScope();
 			return;
 		}
 		if (matchesKey(data, "return") || matchesKey(data, "enter")) {
@@ -3400,6 +3443,16 @@ class QolSessionSearchComponent {
 		}
 		if (data.toLowerCase() === "r") {
 			this.done({ result: state.result, type: "resume" });
+			return;
+		}
+		if (data.toLowerCase() === "c") {
+			const message = state.messages[state.selected];
+			if (message) this.done({ message, result: state.result, type: "copy" });
+			return;
+		}
+		if (data.toLowerCase() === "f") {
+			const message = state.messages[state.selected];
+			if (message) this.done({ message, result: state.result, type: "resume" });
 			return;
 		}
 		if (matchesKey(data, "up")) {
@@ -3531,6 +3584,8 @@ class QolSessionSearchComponent {
 		};
 		const cursorChar = state.query[state.cursor] ?? " ";
 		const queryDisplay = `${state.query.slice(0, state.cursor)}${this.theme.inverse(cursorChar)}${state.query.slice(state.cursor + (state.cursor < state.query.length ? 1 : 0))}`;
+		lines.push(row(this.renderScopeTabs(inner)));
+		lines.push(empty());
 		lines.push(filledRow(` > ${queryDisplay}`));
 		lines.push(row(dim(`${state.total} sessions · re:<pattern> regex · "phrase" exact`)));
 		lines.push(empty(), divider(), empty());
@@ -3553,10 +3608,6 @@ class QolSessionSearchComponent {
 				const titleRow = pair(left, right);
 				lines.push(selected ? selectedRow(titleRow) : row(titleRow));
 
-				const folder = shortPathForUi(result.cwd || dirname(result.path));
-				const project = sessionDisplayName(result);
-				lines.push(row(muted(truncateToWidth(`${project} · ${folder}`, inner, "…"))));
-
 				const snippet = state.query.trim() ? (result.snippets[0] || lastUserMessageSnippet(result)) : lastUserMessageSnippet(result);
 				const label = state.query.trim() ? "match" : "last";
 				const snippetPrefix = `${dim(`${label}:`)} `;
@@ -3566,9 +3617,44 @@ class QolSessionSearchComponent {
 			if (state.results.length > maxVisible) lines.push(empty(), row(dim(`${state.selected + 1}/${state.results.length} ${state.query.trim() ? "matches" : "recent sessions"}`)));
 		}
 		lines.push(divider(), empty());
-		lines.push(row(`${ansiYellow("-/=")} ${dim("page")}  ${ansiYellow("enter")} ${dim("prompts")}  ${ansiYellow("ctrl+u")} ${dim("clear")}  ${ansiYellow("esc")} ${dim("close")}`));
+		lines.push(...this.renderSearchDetailRows(inner, row, dim, muted));
+		lines.push(empty());
+		lines.push(row(`${ansiYellow("-/=")} ${dim("page")}  ${ansiYellow("enter")} ${dim("prompts")}  ${ansiYellow("tab")} ${dim("scope")}  ${ansiYellow("ctrl+u")} ${dim("clear")}  ${ansiYellow("esc")} ${dim("close")}`));
 		lines.push(bottom());
 		return lines;
+	}
+
+	private renderScopeTabs(inner: number): string {
+		const tabs: { id: QolSessionSearchScope; label: string }[] = [
+			{ id: "current", label: "Project" },
+			{ id: "all", label: "All" },
+		];
+		const parts = tabs.map((tab) => {
+			const label = ` ${truncateToWidth(tab.label, 18, "…")} `;
+			if (tab.id === this.searchState.scope) return this.theme.fg("accent", this.theme.inverse(this.theme.bold(label)));
+			return this.theme.bg("selectedBg", this.theme.fg("accent", label));
+		});
+		return truncateToWidth(parts.join(" "), inner, "");
+	}
+
+	private renderSearchDetailRows(
+		inner: number,
+		row: (content?: string) => string,
+		dim: (s: string) => string,
+		muted: (s: string) => string,
+	): string[] {
+		const state = this.searchState;
+		const selected = state.results[state.selected];
+		const scope = state.scope === "current" ? "current project" : "all sessions";
+		const query = oneLine(state.query);
+		const summary = `${state.results.length}/${state.total} shown · ${scope}${query ? ` · query “${truncateToWidth(query, 28, "…")}”` : ""}`;
+		if (!selected) return [row(dim(summary))];
+		const locationPrefix = dim("Session CWD: ");
+		const location = shortPathForUi(selected.cwd || dirname(selected.path));
+		return [
+			row(locationPrefix + muted(truncateToWidth(location, Math.max(10, inner - visibleWidth(locationPrefix)), "…"))),
+			row(dim(summary)),
+		];
 	}
 
 	private renderMessages(width: number, state: QolSessionMessagesState): string[] {
@@ -3588,7 +3674,6 @@ class QolSessionSearchComponent {
 		const title = truncateToWidth(sessionResumeTitle(result), Math.max(12, inner - visibleWidth(right) - 1), "…");
 		lines.push(row(pair(this.theme.bold(accent(title)), right)));
 		lines.push(row(muted(truncateToWidth(shortPathForUi(result.cwd || result.path), inner, "…"))));
-		lines.push(row(dim(`${state.messages.length} user prompt${state.messages.length === 1 ? "" : "s"} · enter opens prompt actions · r resumes latest session state`)));
 		lines.push(empty(), divider(), empty());
 
 		const maxVisible = this.messageMaxVisibleRows();
@@ -3606,7 +3691,7 @@ class QolSessionSearchComponent {
 		}
 		if (state.messages.length > maxVisible) lines.push(empty(), row(dim(`${state.selected + 1}/${state.messages.length} user prompts`)));
 		lines.push(divider(), empty());
-		lines.push(row(`${ansiYellow("-/=")} ${dim("page")}  ${ansiYellow("enter")} ${dim("prompt actions")}  ${ansiYellow("r")} ${dim("resume session")}  ${ansiYellow("esc")} ${dim("sessions")}`));
+		lines.push(row(`${ansiYellow("-/=")} ${dim("page")}  ${ansiYellow("enter")} ${dim("prompt actions")}  ${ansiYellow("c")} ${dim("copy prompt")}  ${ansiYellow("f")} ${dim("fork from here")}  ${ansiYellow("esc")} ${dim("sessions")}`));
 		lines.push(bottom());
 		return lines;
 	}
@@ -3624,10 +3709,17 @@ class QolSessionSearchComponent {
 		lines.push(row(dim("Selected prompt")));
 		const wrapped = wrapVisible(state.message.text, inner, 4);
 		for (const line of wrapped) lines.push(row(line));
-		lines.push(empty());
-		lines.push(row(dim("Resume Session From Here restores this prompt in the selected session.")));
-		lines.push(row(dim("Inject Context adds a summary here; New Session + Context imports it into a new session.")));
 		lines.push(empty(), divider(), empty());
+		const helpLines = [
+			"Fork session from here opens the source session at the point before this prompt and places the prompt in the editor; submit to branch from there.",
+			"Copy Prompt copies this prompt into your current editor.",
+			"Inject Context summarizes this session or prompt into the current session.",
+			"New Session + Context creates a fresh session and imports that summary there.",
+		];
+		for (const help of helpLines) {
+			for (const line of wrapVisible(dim(help), inner, 2)) lines.push(row(line));
+		}
+		lines.push(empty());
 		const actions = QOL_SESSION_ACTIONS.map((action, index) => {
 			const label = QOL_SESSION_ACTION_LABELS[action];
 			return index === state.actionIndex ? this.theme.bold(accent(`[${label}]`)) : dim(`[${label}]`);
@@ -3940,15 +4032,15 @@ async function openQolSessionSearch(pi: ExtensionAPI, ctx: ExtensionContext, ini
 							if (selectedMessage.parentId && typeof manager?.branch === "function") manager.branch(selectedMessage.parentId);
 							else if (selectedMessage.parentId === null && typeof manager?.resetLeaf === "function") manager.resetLeaf();
 							replacementCtx.ui.setEditorText(selectedMessage.text);
-							replacementCtx.ui.notify(`Resumed ${targetTitle} from prompt #${selectedMessage.index}. Submit to branch from here.`, "info");
+							replacementCtx.ui.notify(`Fork point ready in ${targetTitle} at prompt #${selectedMessage.index}. Submit to branch from here.`, "info");
 							return;
 						}
 						replacementCtx.ui.notify(`Resumed session: ${targetTitle}`, "info");
 					},
 				});
-				if (result.cancelled) ctx.ui.notify("Resume cancelled", "info");
+				if (result.cancelled) ctx.ui.notify(selectedMessage ? "Fork cancelled" : "Resume cancelled", "info");
 			} catch (error) {
-				if (!replacementStarted) ctx.ui.notify(`Resume failed: ${stringifyError(error)}`, "error");
+				if (!replacementStarted) ctx.ui.notify(`${selectedMessage ? "Fork" : "Resume"} failed: ${stringifyError(error)}`, "error");
 			}
 			return;
 		}
