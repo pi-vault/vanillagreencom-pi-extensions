@@ -1321,26 +1321,28 @@ function cavemanIconTone(mode: string, active: boolean): "muted" | "text" | "suc
 
 function renderStatusLine(width: number, ctx: ExtensionContext, git: GitState, pi: ExtensionAPI, theme: Pick<Theme, "fg">): string {
 	const { label: contextLabel, percent } = statuslineContextInfo(ctx);
-	const projectChunk = `${git.projectName}${gitBadge(git, settingBoolean("showDirtyMarker", true, ctx.cwd))} ${formatModelName(ctx)} / `;
+	const projectChunk = `${git.projectName}${gitBadge(git, settingBoolean("showDirtyMarker", true, ctx.cwd))} ${formatModelName(ctx)}`;
+	const statusSeparator = " / ";
 	const thinkingLevel = normalizeThinkingLevel(pi.getThinkingLevel());
 	const thinkingChunk = thinkingLevel;
-	const contextChunk = ` (${contextLabel})`;
+	const contextChunk = ` ${contextLabel}`;
 	const cavemanBridge = readCavemanBridge();
 	const cavemanVisible = !!cavemanBridge && (cavemanBridge.isStatusBadgeEnabled?.(ctx.cwd) ?? true);
 	const caveman = cavemanVisible ? cavemanBridge : undefined;
 	const cavemanActive = caveman?.isActive() ?? false;
 	const cavemanGlyph = caveman ? (cavemanActive ? CAVEMAN_ICON_ACTIVE : CAVEMAN_ICON_INACTIVE) : "";
 	const cavemanTone = cavemanIconTone(caveman?.getMode() ?? "off", cavemanActive);
-	const cavemanSegment = caveman ? ` / ${cavemanGlyph}` : "";
-	const contextSeparator = caveman ? "  / " : "";
-	const leftPlain = `${projectChunk}${thinkingChunk}${cavemanSegment}${contextSeparator}${contextChunk.trimStart()}`;
+	const cavemanSegment = caveman ? `${statusSeparator}${cavemanGlyph}` : "";
+	const contextSeparator = caveman ? ` ${statusSeparator}` : "";
+	const leftPlain = `${projectChunk}${statusSeparator}${thinkingChunk}${cavemanSegment}${contextSeparator}${contextChunk.trimStart()}`;
 	const percentPlain = percent === null ? "…%" : `${percent}%`;
 	const subagentMarker = subagentStatuslineMarker(ctx.cwd);
 	const rightPlain = subagentMarker ? `${percentPlain} ${subagentMarker.plain}` : percentPlain;
 	const percentColor = percent === null ? "muted" : percent <= 15 ? "error" : percent <= 30 ? "warning" : "success";
+	const separatorColored = theme.fg("muted", statusSeparator);
 	const leftColored = caveman
-		? `${theme.fg("accent", projectChunk)}${theme.fg(THINKING_TOKEN[thinkingLevel], thinkingChunk)}${theme.fg("accent", " / ")}${theme.fg(cavemanTone, cavemanGlyph)}${theme.fg("accent", `${contextSeparator}${contextChunk.trimStart()}`)}`
-		: `${theme.fg("accent", projectChunk)}${theme.fg(THINKING_TOKEN[thinkingLevel], thinkingChunk)}${theme.fg("accent", contextChunk)}`;
+		? `${theme.fg("accent", projectChunk)}${separatorColored}${theme.fg(THINKING_TOKEN[thinkingLevel], thinkingChunk)}${separatorColored}${theme.fg(cavemanTone, cavemanGlyph)}${theme.fg("muted", contextSeparator)}${theme.fg("accent", contextChunk.trimStart())}`
+		: `${theme.fg("accent", projectChunk)}${separatorColored}${theme.fg(THINKING_TOKEN[thinkingLevel], thinkingChunk)}${theme.fg("accent", contextChunk)}`;
 	const right = subagentMarker ? `${theme.fg(percentColor, percentPlain)} ${subagentMarker.styled}` : theme.fg(percentColor, percentPlain);
 	const minimumGap = 1;
 	const gapWidth = Math.max(minimumGap, width - visibleWidth(leftPlain) - visibleWidth(rightPlain) - 2);
@@ -2522,8 +2524,8 @@ function isPendingQueueHintText(text: string): boolean {
 	return plain.startsWith("↳ ") && plain.includes("queued messages");
 }
 
-function pendingQueueLine(text: string): string {
-	return ansiGreen(`| ${text}`);
+function pendingQueuePreviewLine(text: string): string {
+	return ansiGreen(`┃ ${text}`);
 }
 
 function isQueuedMessageStatusText(text: string): boolean {
@@ -2566,7 +2568,8 @@ function installPendingQueueThemePatch(ctx: ExtensionContext): void {
 	proto[PENDING_QUEUE_THEME_PATCH_SYMBOL] = patch;
 	proto.fg = function patchedQolFg(this: Theme, token: string, text: string): string {
 		if (token === "dim" && typeof text === "string" && settingBoolean("pendingQueue.asciiGreen", true, patch.cwd)) {
-			if (isPendingQueuePreviewText(text) || isPendingQueueHintText(text)) return pendingQueueLine(text);
+			if (isPendingQueuePreviewText(text)) return pendingQueuePreviewLine(text);
+			if (isPendingQueueHintText(text)) return (patch.originalFg as (this: Theme, token: string, text: string) => string).call(this, token, `  ${text}`);
 		}
 		return (patch.originalFg as (this: Theme, token: string, text: string) => string).call(this, token, text);
 	};
