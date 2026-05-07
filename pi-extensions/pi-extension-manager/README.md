@@ -36,6 +36,7 @@ Restart Pi after installation.
 - `Alt+R` toggles the raw resource list; `Alt+A` opens diagnostics/audit; `Tab` and `Shift+Tab` cycle tabs.
 - `Delete` resets the selected setting; `Ctrl+X` resets settings for the selected extension/package.
 - `/extensions:settings` starts with `All`, then one tab per package with settings. Type to filter, `Enter` to toggle/edit, `Esc` to cancel.
+- Inline setting editors support cursor movement: `←`/`→`, `Home`/`End`, `Alt+←`/`Alt+→` word movement, `Backspace`/`Delete`, and `Ctrl+U` clear.
 
 Settings are stored under `vstack.extensionManager` in Pi `settings.json` files so they do not collide with Pi's top-level `extensions` array.
 

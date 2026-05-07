@@ -26,6 +26,7 @@ Restart Pi after installation.
 - `question` tool for multiple-choice question tabs.
 - `ctx.askQuestions(payload)` helper for other Pi extensions.
 - Editor-area UI by default, matching opencode/Claude-style prompts.
+- Wrapped option labels/descriptions so long choices remain readable in narrow panes.
 - Optional legacy floating overlay mode.
 - `pi-session-bridge` integration for listing, answering, rejecting, and streaming question events.
 - `pi-qol` notification hook before prompts open.

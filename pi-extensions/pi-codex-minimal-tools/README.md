@@ -13,7 +13,7 @@ Implemented features:
 - Capability gating that only adds/removes this package's tools and preserves Pi native tools.
 - OpenAI active-model gating: package tools are only active for OpenAI/OpenAI-Codex-like models, even if other providers support images.
 - Native-aware OpenAI Codex provider shim for active `image_generation` tools, including response-stream capture for `image_generation_call` results.
-- Generated image saving under `imageOutputDir` with `latest.<ext>` mirrors and an inline display message.
+- Generated image saving under `imageOutputDir` with short timestamp/uuid filenames, `latest.<ext>` mirrors, metadata, and inline previews when the terminal image protocol is available. Tmux sessions show the saved paths and skip inline image drawing to avoid stale overlay artifacts.
 - Optional direct OpenAI Images API fallback when `directImageApiFallback` is enabled and `OPENAI_API_KEY` is set.
 
 `web_search` moved to the `pi-web-tools` package. Old `pi-codex-minimal-tools` web-search settings are ignored after this migration. This package's Codex provider shim still calls Pi's normal provider payload hook, so `pi-web-tools` keeps ownership of web-search provider selection, native rewrite gating, and direct-provider fallbacks.
