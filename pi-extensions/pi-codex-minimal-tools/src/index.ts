@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { calculateImageRows, getCapabilities, getImageDimensions, getCellDimensions, Image, setCapabilities, Text, type Component } from "@mariozechner/pi-tui";
+import { getCapabilities, Image, Text, type Component } from "@mariozechner/pi-tui";
 import { hasOpenAiModelsLoaded } from "./activation.js";
 import { computeNextActiveTools, computeToolCapabilities, modelKey, PACKAGE_TOOL_NAMES, type ModelLike } from "./capabilities.js";
 import { rewriteNativeOpenAiTools } from "./provider-native-tools.js";
@@ -7,43 +7,11 @@ import { loadSettings, settingsDiagnostics } from "./settings.js";
 import { createApplyPatchToolDefinition } from "./tools/apply-patch.js";
 import { createImageGenerationToolDefinition } from "./tools/image-generation.js";
 import { viewImage, viewImageToolSchema, type ValidatedImage, type ViewImageInput } from "./tools/view-image.js";
-import { renderTmuxKittyPlaceholderImage, wrapKittyGraphicsForTmux } from "./terminal-image-rendering.js";
 
 const INSTALL_SYMBOL = Symbol.for("vstack.pi-codex-minimal-tools.installed");
-let tmuxClientTermCacheKey: string | undefined;
-let tmuxClientTermCacheValue = "";
 
 function terminalImageProtocol(): "kitty" | "iterm2" | null {
-	const caps = getCapabilities();
-	if (caps.images) return caps.images;
-	const termProgram = process.env.TERM_PROGRAM?.toLowerCase() || "";
-	const term = process.env.TERM?.toLowerCase() || "";
-	const tmuxClientTerm = process.env.TMUX ? (() => {
-		const cacheKey = `${process.env.TMUX}|${process.env.TMUX_PANE ?? ""}`;
-		if (tmuxClientTermCacheKey === cacheKey) return tmuxClientTermCacheValue;
-		try {
-			const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
-			tmuxClientTermCacheKey = cacheKey;
-			tmuxClientTermCacheValue = execFileSync("tmux", ["display-message", "-p", "#{client_termname}"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim().toLowerCase();
-			return tmuxClientTermCacheValue;
-		} catch {
-			tmuxClientTermCacheKey = cacheKey;
-			tmuxClientTermCacheValue = "";
-			return "";
-		}
-	})() : "";
-	const outer = `${termProgram} ${term} ${tmuxClientTerm}`;
-	if (process.env.KITTY_WINDOW_ID || outer.includes("kitty") || outer.includes("ghostty") || process.env.GHOSTTY_RESOURCES_DIR || process.env.WEZTERM_PANE || outer.includes("wezterm")) return "kitty";
-	if (process.env.ITERM_SESSION_ID || outer.includes("iterm")) return "iterm2";
-	return null;
-}
-
-function ensureTerminalImageCapability(): "kitty" | "iterm2" | null {
-	const protocol = terminalImageProtocol();
-	if (!protocol) return null;
-	const caps = getCapabilities();
-	if (caps.images !== protocol) setCapabilities({ ...caps, images: protocol, hyperlinks: caps.hyperlinks || Boolean(process.env.TMUX) });
-	return protocol;
+	return getCapabilities().images ?? null;
 }
 
 function formatBytes(bytes: number): string {
@@ -75,50 +43,22 @@ function textComponent(text: string): Component {
 	return new Text(text, 0, 0);
 }
 
-function tmuxKittyImageComponent(base64Data: string, mimeType: string, details: ValidatedImage | undefined, maxWidthCells: number, maxHeightCells: number, theme: any): Component {
-	const dimensions = getImageDimensions(base64Data, mimeType) || { widthPx: 800, heightPx: 600 };
-	const imageId = Math.floor(Math.random() * 0xffffffff) + 1;
-	let cachedLines: string[] | undefined;
-	let cachedWidth = 0;
-	return {
-		invalidate() {
-			cachedLines = undefined;
-			cachedWidth = 0;
-		},
-		render(width: number): string[] {
-			if (cachedLines && cachedWidth === width) return cachedLines;
-			const columns = Math.max(1, Math.min(width - 2, maxWidthCells));
-			const rows = Math.max(1, Math.min(maxHeightCells, calculateImageRows(dimensions, columns, getCellDimensions())));
-			try {
-				cachedLines = renderTmuxKittyPlaceholderImage(base64Data, { columns, rows, imageId });
-			} catch {
-				cachedLines = [theme.fg("dim", `[Image: ${details?.displayPath ?? mimeType} ${dimensions.widthPx}x${dimensions.heightPx}]`)];
-			}
-			cachedWidth = width;
-			return cachedLines;
-		},
-	};
-}
-
 function viewImageResultComponent(result: any, options: any, theme: any, context: any): Component {
 	if (options?.isPartial) return emptyComponent();
 	const details = result?.details as ValidatedImage | undefined;
 	const imagePart = result?.content?.find?.((part: any) => part?.type === "image" && typeof part.data === "string" && typeof part.mimeType === "string");
 	const header = textComponent(viewImageResultText(details, theme));
 	if (!imagePart) return header;
-	const protocol = ensureTerminalImageCapability();
 	const imageTheme = { fallbackColor: (text: string) => theme.fg("dim", text) };
 	const maxHeightCells = options?.expanded ? 28 : 18;
-	const image = process.env.TMUX && protocol === "kitty"
-		? tmuxKittyImageComponent(imagePart.data, imagePart.mimeType, details, 80, maxHeightCells, theme)
-		: new Image(imagePart.data, imagePart.mimeType, imageTheme, { maxWidthCells: 80, maxHeightCells, filename: details?.displayPath });
+	const image = new Image(imagePart.data, imagePart.mimeType, imageTheme, { maxWidthCells: 80, maxHeightCells, filename: details?.displayPath });
 	return {
 		invalidate() {
 			header.invalidate();
 			image.invalidate();
 		},
 		render(width: number): string[] {
-			return [...header.render(width), ...image.render(width).map(wrapKittyGraphicsForTmux)];
+			return [...header.render(width), ...image.render(width)];
 		},
 	};
 }

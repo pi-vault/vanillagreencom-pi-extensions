@@ -55,3 +55,17 @@ test("extension does not register tools until OpenAI models are loaded", async (
 	assert.ok(pi.activeTools.includes("bash"));
 	assert.ok(pi.activeTools.includes("apply_patch"));
 });
+
+test("active non-OpenAI models remove package tools even when OpenAI models exist in registry", async () => {
+	const pi = fakePi();
+	pi.setActiveTools(["read", "view_image", "apply_patch", "image_generation"]);
+	codexMinimalTools(pi as any);
+
+	await emit(pi, "model_select", {
+		cwd: process.cwd(),
+		model: { provider: "claude-bridge", id: "claude-opus-4-7", input: ["text", "image"] },
+		modelRegistry: { getAll: () => [{ provider: "openai-codex", id: "gpt-5.5", input: ["text", "image"] }] },
+	});
+
+	assert.deepEqual(pi.activeTools, ["read"]);
+});

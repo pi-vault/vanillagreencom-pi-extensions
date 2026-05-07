@@ -58,6 +58,13 @@ export function computeToolCapabilities(model: ModelLike | undefined, settings: 
 	const imageInput = supportsImageInput(model);
 	const openAiLike = isOpenAiLikeModel(model);
 	const codex = isOpenAiCodexModel(model);
+	if (!openAiLike) {
+		return {
+			image_generation: { enabled: false, reason: "model is not OpenAI/Codex-like" },
+			view_image: { enabled: false, reason: "model is not OpenAI/Codex-like" },
+			apply_patch: { enabled: false, reason: "model is not OpenAI/Codex-like" },
+		};
+	}
 
 	return {
 		image_generation: settings.imageGeneration && settings.nativeProviderTools && codex && imageInput

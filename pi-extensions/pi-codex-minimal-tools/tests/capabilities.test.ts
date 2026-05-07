@@ -23,8 +23,10 @@ test("capability gating follows provider and image support", () => {
 	assert.equal(openaiCaps.view_image.enabled, true);
 	assert.equal(openaiCaps.apply_patch.enabled, true);
 
-	const fakeOpenAi = computeToolCapabilities({ provider: "notopenai", id: "claude", input: ["text"] }, DEFAULT_SETTINGS);
-	assert.equal(fakeOpenAi.apply_patch.enabled, false);
+	const nonOpenAiVision = computeToolCapabilities({ provider: "claude-bridge", id: "claude-opus-4-7", input: ["text", "image"] }, DEFAULT_SETTINGS);
+	assert.equal(nonOpenAiVision.image_generation.enabled, false);
+	assert.equal(nonOpenAiVision.view_image.enabled, false);
+	assert.equal(nonOpenAiVision.apply_patch.enabled, false);
 });
 
 test("active tool sync preserves native tools and only manages package tools", () => {
