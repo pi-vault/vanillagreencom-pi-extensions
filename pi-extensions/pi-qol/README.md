@@ -86,7 +86,7 @@ Settings are exposed through `pi-extension-manager` under **QOL**.
 
 - `sessionSearch.enabled`: register `/search` and the overlay.
 - `sessionSearch.shortcutKey`: shortcut to open search; default `f2`, set `none` to disable.
-- `sessionSearch.sortMode`: `relevance` or `recent`.
+- `sessionSearch.sortMode`: `recent` (default) or `relevance`.
 - Result/layout knobs: `resultLimit`, `maxVisible`, `messageMaxVisible`, `previewSnippets`, `overlayWidth`, `cacheTtlSeconds`.
 - Summary knobs: `summaryModel`, `summaryMaxTokens`, `summaryInputMaxChars`.
 

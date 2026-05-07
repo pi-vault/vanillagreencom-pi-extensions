@@ -2955,6 +2955,16 @@ function messageContentText(content: unknown): string {
 	}).filter(Boolean).join(" ");
 }
 
+function sessionMessageTimestamp(entry: any, message: any): number | undefined {
+	if (typeof message?.timestamp === "number" && Number.isFinite(message.timestamp)) return message.timestamp;
+	if (typeof entry?.timestamp === "number" && Number.isFinite(entry.timestamp)) return entry.timestamp;
+	if (typeof entry?.timestamp === "string") {
+		const parsed = new Date(entry.timestamp).getTime();
+		if (!Number.isNaN(parsed)) return parsed;
+	}
+	return undefined;
+}
+
 function sessionUserMessages(sessionPath: string): QolSessionUserMessage[] {
 	const cached = qolSessionUserMessagesCache.get(sessionPath);
 	if (cached) return cached;
@@ -2974,7 +2984,7 @@ function sessionUserMessages(sessionPath: string): QolSessionUserMessage[] {
 				index: messages.length + 1,
 				parentId: typeof entry.parentId === "string" || entry.parentId === null ? entry.parentId : undefined,
 				text,
-				timestamp: typeof message.timestamp === "number" ? message.timestamp : undefined,
+				timestamp: sessionMessageTimestamp(entry, message),
 			});
 		}
 	} catch {
@@ -3163,7 +3173,7 @@ function searchQolSessions(sessions: QolSessionSearchSession[], query: string, c
 		if (!match.matches) continue;
 		results.push({ ...session, rank: match.score, snippets: buildSessionSnippets(session, parsed, snippetLimit) });
 	}
-	const sortMode = settingString("sessionSearch.sortMode", "relevance", cwd) === "recent" ? "recent" : "relevance" as QolSessionSortMode;
+	const sortMode = sessionSearchSortMode(cwd);
 	results.sort((a, b) => sortMode === "recent" ? b.modified.getTime() - a.modified.getTime() : a.rank - b.rank || b.modified.getTime() - a.modified.getTime());
 	return results.slice(0, limit);
 }
@@ -3224,21 +3234,36 @@ function buildPromptSnippet(message: QolSessionUserMessage, parsed: QolParsedSes
 	return source.slice(0, 160);
 }
 
+function sessionSearchSortMode(cwd: string): QolSessionSortMode {
+	return settingString("sessionSearch.sortMode", "recent", cwd) === "relevance" ? "relevance" : "recent";
+}
+
+function promptRecencyTime(hit: QolSessionSearchHit): number {
+	if (typeof hit.message.timestamp === "number" && Number.isFinite(hit.message.timestamp)) return hit.message.timestamp;
+	return hit.result.modified.getTime();
+}
+
+function compareSessionSearchHitsRecent(a: QolSessionSearchHit, b: QolSessionSearchHit): number {
+	return promptRecencyTime(b) - promptRecencyTime(a)
+		|| b.result.modified.getTime() - a.result.modified.getTime()
+		|| b.message.index - a.message.index;
+}
+
 function searchQolSessionHits(sessions: QolSessionSearchSession[], query: string, cwd: string): QolSessionSearchHit[] {
 	const limit = Math.max(1, Math.floor(settingNumber("sessionSearch.resultLimit", DEFAULT_SESSION_SEARCH_LIMIT, cwd)));
 	const parsed = parseSessionSearchQuery(query);
 	if (parsed.error) return [];
 	const hits: QolSessionSearchHit[] = [];
 	if (!query.trim()) {
-		for (const session of sessions.slice().sort((a, b) => b.modified.getTime() - a.modified.getTime())) {
-			const messages = userMessagesForResult(resultFromSession(session));
-			const message = messages[messages.length - 1];
-			if (!message) continue;
-			const snippet = buildPromptSnippet(message, parsed);
-			hits.push({ message, rank: 0, result: resultFromSession(session, 0, [snippet]), snippet });
-			if (hits.length >= limit) break;
+		for (const session of sessions) {
+			const result = resultFromSession(session);
+			for (const message of userMessagesForResult(result)) {
+				const snippet = buildPromptSnippet(message, parsed);
+				hits.push({ message, rank: 0, result: resultFromSession(session, 0, [snippet]), snippet });
+			}
 		}
-		return hits;
+		hits.sort(compareSessionSearchHitsRecent);
+		return hits.slice(0, limit);
 	}
 	for (const session of sessions) {
 		let addedPromptHit = false;
@@ -3259,10 +3284,10 @@ function searchQolSessionHits(sessions: QolSessionSearchSession[], query: string
 			hits.push({ message, rank: titleMatch.score, result: resultFromSession(session, titleMatch.score, [snippet]), snippet });
 		}
 	}
-	const sortMode = settingString("sessionSearch.sortMode", "relevance", cwd) === "recent" ? "recent" : "relevance" as QolSessionSortMode;
+	const sortMode = sessionSearchSortMode(cwd);
 	hits.sort((a, b) => sortMode === "recent"
-		? b.result.modified.getTime() - a.result.modified.getTime() || a.message.index - b.message.index
-		: a.rank - b.rank || b.result.modified.getTime() - a.result.modified.getTime() || a.message.index - b.message.index);
+		? compareSessionSearchHitsRecent(a, b)
+		: a.rank - b.rank || compareSessionSearchHitsRecent(a, b));
 	return hits.slice(0, limit);
 }
 
@@ -3828,7 +3853,8 @@ class QolSessionSearchComponent {
 			const selected = i === state.selected;
 			const titleText = truncateToWidth(sessionResumeTitle(hit.result), Math.max(8, leftWidth - 18), "…");
 			const titleMatched = styleSessionSnippet(titleText, state.query, this.theme);
-			const title = `${selected ? this.theme.bold(titleMatched) : this.theme.bold(titleMatched)} ${dim(`· #${hit.message.index} · ${formatSessionSearchDate(hit.result.modified)}`)}`;
+			const promptDate = new Date(promptRecencyTime(hit));
+			const title = `${selected ? this.theme.bold(titleMatched) : this.theme.bold(titleMatched)} ${dim(`· #${hit.message.index} · ${formatSessionSearchDate(promptDate)}`)}`;
 			leftLines.push(fixed(title, leftWidth, selected));
 			const snippet = styleSessionSnippet(hit.snippet || hit.message.text, state.query, this.theme);
 			leftLines.push(fixed(`${dim("match:")} ${snippet}`, leftWidth, selected));

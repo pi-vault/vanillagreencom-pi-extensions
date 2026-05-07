@@ -350,20 +350,20 @@
         {
           "key": "sessionSearch.sortMode",
           "label": "Session search sort mode",
-          "description": "Sort matches by relevance score or by most recent session modification time.",
+          "description": "Sort matches by most recent prompt time or by relevance score.",
           "type": "enum",
           "enumValues": [
             "relevance",
             "recent"
           ],
-          "default": "relevance",
+          "default": "recent",
           "category": "Session Search",
           "apply": "live"
         },
         {
           "key": "sessionSearch.resultLimit",
           "label": "Session search result limit",
-          "description": "Maximum number of matching sessions returned by the search palette.",
+          "description": "Maximum number of matching prompts returned by the search palette.",
           "type": "number",
           "default": 40,
           "category": "Session Search",
