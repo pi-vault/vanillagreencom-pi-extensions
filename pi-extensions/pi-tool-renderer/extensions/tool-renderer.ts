@@ -2498,6 +2498,7 @@ function registerToolBatch(pi: ExtensionAPI, agent: any, cwd: string): void {
 		promptSnippet: "Batch 2+ independent read/search/list/diagnostic bash calls into one compact result.",
 		promptGuidelines: [
 			"Prefer tool_batch instead of separate parallel read, grep, find, ls, or diagnostic bash calls whenever the calls are independent.",
+			"Use individual calls when you need the maximum output budget from each call; tool_batch preserves full per-call output only while the combined result fits the aggregate cap.",
 			"Use individual read/grep/find/ls/bash calls when there is only one call, when calls depend on previous results, when bash mutates state, when streaming/live output matters, or when the user explicitly wants separate tool entries.",
 			"Do not use tool_batch for edit/write or for bash commands that mutate files, depend on ordering, need streaming output, or should be inspected as separate commands.",
 		],

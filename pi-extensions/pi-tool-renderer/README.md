@@ -48,6 +48,8 @@ Prefer it for independent inspection calls. Do **not** use it for mutating comma
 
 Per-call arguments can be flat, as above, or `{ "tool": "read", "args": { "path": "README.md" } }`.
 
+`tool_batch` does not reduce per-call output while the combined result fits Pi's normal tool-result budget. If the aggregate would exceed that budget, it caps only enough child output to keep the single batch result safe, preserving head and tail for capped children. Use separate calls or explicit `read` `offset`/`limit` chunks when you need the maximum output budget from each call.
+
 ## Optional renderers
 
 Enable through `pi-extension-manager` settings:
@@ -75,4 +77,4 @@ Output modes can be tuned live with `readOutputMode`, `searchOutputMode`, `bashO
 
 ## Limits
 
-This package changes rendering, not underlying tool execution or tool-result truncation. Hidden `Thinking...` labels and reserved spacer rows require Pi core renderer changes to remove completely.
+This package mostly changes rendering, not underlying tool execution. The `tool_batch` helper is a single tool result, so it enforces an aggregate safety cap when combined child output would exceed Pi's normal result budget; individual built-in tools still apply their own truncation first. Hidden `Thinking...` labels and reserved spacer rows require Pi core renderer changes to remove completely.
