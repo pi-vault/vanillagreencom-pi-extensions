@@ -173,7 +173,7 @@ detect_start_cmd() {
     codex)    echo "codex '\$orchestration start $issue'" ;;
     opencode) echo "opencode --prompt '/orchestration start $issue'" ;;
     omp)      echo "omp '/skill:orchestration start $issue'" ;;
-    pi)       echo "pi '/orchestration start $issue'" ;;
+    pi)       echo "pi '/skill:orchestration start $issue'" ;;
     *)        echo "" ;;
   esac
 }
@@ -625,7 +625,11 @@ spawn_pi_bridge_tmux() {
   # Spawn pi with explicit `-e <ext>` so the bridge always auto-loads,
   # regardless of whether the package is registered in settings.json's
   # packages array (the array can drift; -e is deterministic).
-  local cmd; cmd="$pi_bin -e $ext_path '/orchestration start $issue'"
+  #
+  # Pi's slash grammar requires the `/skill:` prefix for native skill
+  # expansion (`_expandSkillCommand` only matches `/skill:`). Bare
+  # `/orchestration` would fall through to the LLM as raw text.
+  local cmd; cmd="$pi_bin -e $ext_path '/skill:orchestration start $issue'"
   if ! open_tmux "$wt_path" "$issue" "$cmd"; then
     return 1
   fi
