@@ -1855,7 +1855,13 @@ function createManagerComponent(
 			requestRender();
 			return;
 		}
-		if (matchesKey(data, "alt+t") && selected) return done({ type: "toggle-provider", provider: selected.provider });
+		if (matchesKey(data, "alt+t") && selected) {
+			if (selected.kind === "package") {
+				ctx.ui.notify("alt+t toggles a provider group. Select a non-package resource first.", "warning");
+				return;
+			}
+			return done({ type: "toggle-provider", provider: selected.provider });
+		}
 		if (matchesKey(data, "alt+u") && selected && selected.kind === "package") {
 			return done({ type: "uninstall-package", itemId: selected.id });
 		}
@@ -2034,7 +2040,14 @@ function renderExtensions(inventory: Inventory, ui: ManagerUiState, width: numbe
 	const searchText = ` > ${ui.search}${theme.inverse(" ")}`;
 	const searchLine = theme.bg("toolPendingBg", pad(searchText, width));
 	const filterLine = `${theme.fg("muted", "View")}: ${theme.fg("text", view)}  ${theme.fg("muted", "Filters")}: kind ${ui.kindFilter} · provider ${ui.providerFilter} · state ${ui.stateFilter} · scope ${ui.scopeFilter}`;
-	const hintLine = `${ansiYellow("alt+k/p/s/o")} ${theme.fg("dim", "filters · ")}${ansiYellow("alt+r")} ${theme.fg("dim", "raw resources · ")}${ansiYellow("alt+t")} ${theme.fg("dim", "toggle provider · ")}${ansiYellow("alt+u")} ${theme.fg("dim", "uninstall package · ")}${ansiYellow("delete")} ${theme.fg("dim", "reset setting · ")}${ansiYellow("alt+x")} ${theme.fg("dim", "reset extension · ")}${ansiYellow("←/→")} ${theme.fg("dim", "pane")}`;
+	const hintParts = [
+		`${ansiYellow("alt+k/p/s/o")} ${theme.fg("dim", "filters")}`,
+		`${ansiYellow("alt+r")} ${theme.fg("dim", "raw resources")}`,
+	];
+	if (selected && selected.kind !== "package") hintParts.push(`${ansiYellow("alt+t")} ${theme.fg("dim", "toggle provider group")}`);
+	if (selected?.kind === "package") hintParts.push(`${ansiYellow("alt+u")} ${theme.fg("dim", "uninstall package")}`);
+	hintParts.push(`${ansiYellow("delete")} ${theme.fg("dim", "reset setting")}`, `${ansiYellow("alt+x")} ${theme.fg("dim", "reset extension")}`, `${ansiYellow("←/→")} ${theme.fg("dim", "pane")}`);
+	const hintLine = hintParts.join(theme.fg("dim", " · "));
 	const lines = [searchLine, ...wrapLine(filterLine, width), "", ...wrapLine(hintLine, width), divider(width, theme)];
 	const tableRows = Math.max(1, rows - Math.max(0, lines.length - 5) - footerRows);
 	for (let i = 0; i < tableRows; i += 1) {
