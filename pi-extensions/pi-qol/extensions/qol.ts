@@ -3098,9 +3098,10 @@ function sessionSnippetSource(session: QolSessionSearchSession): string {
 	return (session.allMessagesText || session.firstMessage || "").replace(/\s+/g, " ").trim();
 }
 
-function snippetAround(text: string, start: number, length: number, width: number): string {
-	const safeStart = Math.max(0, start - Math.floor(width / 3));
-	const safeEnd = Math.min(text.length, start + length + Math.floor((width * 2) / 3));
+function snippetAround(text: string, start: number, length: number, width: number, lead = Math.floor(width / 3)): string {
+	const safeLead = Math.max(0, Math.min(width, lead));
+	const safeStart = Math.max(0, start - safeLead);
+	const safeEnd = Math.min(text.length, Math.max(start + length, safeStart + width));
 	const prefix = safeStart > 0 ? "…" : "";
 	const suffix = safeEnd < text.length ? "…" : "";
 	return `${prefix}${text.slice(safeStart, safeEnd)}${suffix}`;
@@ -3200,17 +3201,17 @@ function buildPromptSnippet(message: QolSessionUserMessage, parsed: QolParsedSes
 	if (parsed.mode === "regex" && parsed.regex) {
 		parsed.regex.lastIndex = 0;
 		const match = parsed.regex.exec(source);
-		return match ? snippetAround(source, match.index, match[0].length, 220) : source.slice(0, 220);
+		return match ? snippetAround(source, match.index, match[0].length, 160, 24) : source.slice(0, 160);
 	}
-	if (parsed.tokens.length === 0) return source.slice(0, 220);
+	if (parsed.tokens.length === 0) return source.slice(0, 160);
 	const lower = source.toLowerCase();
 	for (const token of parsed.tokens) {
 		const value = normalizeSearchText(token.value);
 		if (!value) continue;
 		const index = lower.indexOf(value.toLowerCase());
-		if (index >= 0) return snippetAround(source, index, value.length, 220);
+		if (index >= 0) return snippetAround(source, index, value.length, 160, 24);
 	}
-	return source.slice(0, 220);
+	return source.slice(0, 160);
 }
 
 function searchQolSessionHits(sessions: QolSessionSearchSession[], query: string, cwd: string): QolSessionSearchHit[] {
