@@ -2291,6 +2291,7 @@ function capBatchItemText(text: string, maxBytes: number, maxLines: number): { t
 
 	const marker = `[...tool_batch item truncated: showing head and tail within ${maxLines} lines / ${Math.round(maxBytes / 1024)}KB. Original: ${originalLines} lines / ${Math.round(originalBytes / 1024)}KB...]`;
 	const markerBytes = utf8Length(`\n${marker}\n`);
+	if (maxBytes <= markerBytes + 128 || maxLines <= 3) return { text: fitPrefix(marker, maxBytes), truncated: true };
 	const lines = text.split(/\r?\n/);
 	let working: string;
 	if (lines.length > maxLines) {
@@ -2311,12 +2312,41 @@ function capBatchItemText(text: string, maxBytes: number, maxLines: number): { t
 	return { text: working, truncated: true };
 }
 
-function batchItemLimits(itemCount: number): { maxBytes: number; maxLines: number } {
-	const count = Math.max(1, itemCount);
-	return {
-		maxBytes: Math.max(2 * 1024, Math.floor((TOOL_BATCH_MAX_OUTPUT_BYTES - 2 * 1024) / count)),
-		maxLines: Math.max(50, Math.floor((TOOL_BATCH_MAX_OUTPUT_LINES - 40) / count)),
-	};
+function allocateBatchBudgets(sizes: number[], total: number): number[] {
+	const budgets = new Array(sizes.length).fill(0);
+	let remaining = Math.max(0, total);
+	let pending = sizes.map((_size, index) => index);
+	while (pending.length > 0) {
+		const fair = Math.max(1, Math.floor(remaining / pending.length));
+		const fitting = pending.filter((index) => sizes[index] <= fair);
+		if (fitting.length === 0) {
+			for (const index of pending) budgets[index] = fair;
+			break;
+		}
+		for (const index of fitting) {
+			budgets[index] = sizes[index];
+			remaining -= sizes[index];
+		}
+		pending = pending.filter((index) => !fitting.includes(index));
+	}
+	return budgets;
+}
+
+function capBatchItemsForAggregate(items: BatchToolItem[]): BatchToolItem[] {
+	if (utf8Length(toolBatchOutput(items)) <= TOOL_BATCH_MAX_OUTPUT_BYTES && lineCount(toolBatchOutput(items)) <= TOOL_BATCH_MAX_OUTPUT_LINES) return items;
+
+	const emptyItems = items.map((item) => ({ ...item, resultText: "" }));
+	const overheadBytes = utf8Length(toolBatchOutput(emptyItems));
+	const overheadLines = lineCount(toolBatchOutput(emptyItems));
+	const availableBytes = Math.max(1, TOOL_BATCH_MAX_OUTPUT_BYTES - overheadBytes - 512);
+	const availableLines = Math.max(1, TOOL_BATCH_MAX_OUTPUT_LINES - overheadLines - items.length);
+	const byteBudgets = allocateBatchBudgets(items.map((item) => utf8Length(item.resultText)), availableBytes);
+	const lineBudgets = allocateBatchBudgets(items.map((item) => lineCount(item.resultText)), availableLines);
+
+	return items.map((item, index) => {
+		const capped = capBatchItemText(item.resultText, byteBudgets[index] ?? 1, lineBudgets[index] ?? 1);
+		return capped.truncated ? { ...item, resultText: capped.text, truncated: true } : item;
+	});
 }
 
 const builtInToolCache = new Map<string, BuiltInToolSet>();
@@ -2485,21 +2515,19 @@ function registerToolBatch(pi: ExtensionAPI, agent: any, cwd: string): void {
 				};
 			}
 			const concurrency = Math.max(1, Math.min(calls.length, Math.floor(Number(params?.concurrency) || calls.length), maxCalls));
-			const itemLimits = batchItemLimits(calls.length);
 			const items = await mapBatchWithConcurrency(calls, concurrency, async (call, index): Promise<BatchToolItem> => {
 				try {
 					const original = getBuiltInTool(agent, effectiveCwd, call.tool);
 					if (!original?.execute) throw new Error(`Built-in tool unavailable: ${call.tool}`);
 					const result = await original.execute(`${toolCallId}:${index}`, call.args, signal, undefined);
-					const capped = capBatchItemText(textContent(result), itemLimits.maxBytes, itemLimits.maxLines);
 					return {
 						args: call.args,
 						details: result?.details,
 						index,
 						isError: Boolean(result?.isError),
-						resultText: capped.text,
+						resultText: textContent(result),
 						toolName: call.tool,
-						truncated: resultTruncated(result) || capped.truncated,
+						truncated: resultTruncated(result),
 					};
 				} catch (error) {
 					return {
@@ -2512,9 +2540,10 @@ function registerToolBatch(pi: ExtensionAPI, agent: any, cwd: string): void {
 					};
 				}
 			});
-			const failed = items.filter((item) => item.isError).length;
-			const details: BatchToolDetails = { failed, items, succeeded: items.length - failed, total: items.length };
-			return { content: [{ type: "text", text: toolBatchOutput(items) }], details, isError: failed > 0 };
+			const cappedItems = capBatchItemsForAggregate(items);
+			const failed = cappedItems.filter((item) => item.isError).length;
+			const details: BatchToolDetails = { failed, items: cappedItems, succeeded: cappedItems.length - failed, total: cappedItems.length };
+			return { content: [{ type: "text", text: toolBatchOutput(cappedItems) }], details, isError: failed > 0 };
 		},
 		renderCall() {
 			return makeEmpty();
