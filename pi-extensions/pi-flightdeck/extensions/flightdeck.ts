@@ -902,8 +902,12 @@ export default function flightdeck(pi: ExtensionAPI): void {
 
 	pi.registerCommand("flightdeck", {
 		description: "Send /skill:flightdeck to the agent (loads the flightdeck skill into the master).",
-		handler: async (_args, _ctx) => {
-			pi.sendUserMessage("/skill:flightdeck");
+		handler: async (_args, ctx) => {
+			// pasteToEditor + trailing newline submits as a real slash command, so
+			// pi-skills-manager's /skill:<name> handler dispatches and the Skill
+			// tool fires. sendUserMessage bypasses the slash-command parser, which
+			// makes the LLM see literal text and call Read on SKILL.md instead.
+			ctx.ui.pasteToEditor("/skill:flightdeck\n");
 		},
 	});
 	pi.registerCommand("flightdeck:dashboard", {
