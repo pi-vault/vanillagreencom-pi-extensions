@@ -1805,8 +1805,9 @@ function createManagerComponent(
 			requestRender();
 			return;
 		}
-		if ((matchesKey(data, "delete") || matchesKey(data, "alt+x") || matchesKey(data, "ctrl+x")) && selected) {
-			if (matchesKey(data, "alt+x") || matchesKey(data, "ctrl+x")) return done({ type: "reset-settings", itemId: selected.id });
+		if (matchesKey(data, "alt+x") && selected) return done({ type: "toggle-item", itemId: selected.id });
+		if ((matchesKey(data, "delete") || matchesKey(data, "alt+shift+x") || matchesKey(data, "ctrl+x")) && selected) {
+			if (matchesKey(data, "alt+shift+x") || matchesKey(data, "ctrl+x")) return done({ type: "reset-settings", itemId: selected.id });
 			if (ui.pane === "settings" && settings.length > 0) {
 				const schema = settings[ui.settingSelected];
 				if (schema) return done({ type: "reset-setting", itemId: selected.id, settingKey: schema.key });
@@ -2039,21 +2040,33 @@ function renderExtensions(inventory: Inventory, ui: ManagerUiState, width: numbe
 	const view = ui.topTab === TAB_ALL ? (ui.showResources ? "raw resources" : "packages") : "package";
 	const searchText = ` > ${ui.search}${theme.inverse(" ")}`;
 	const searchLine = theme.bg("toolPendingBg", pad(searchText, width));
-	const filterLine = `${theme.fg("muted", "View")}: ${theme.fg("text", view)}  ${theme.fg("muted", "Filters")}: kind ${ui.kindFilter} · provider ${ui.providerFilter} · state ${ui.stateFilter} · scope ${ui.scopeFilter}`;
+	const filterValue = (label: string, value: string): string => `${theme.fg("muted", `${label}:`)} ${value === "all" ? theme.fg("dim", value) : theme.fg("accent", value)}`;
+	const filterLine = `${theme.fg("muted", "view:")} ${theme.fg("text", view)}  ${theme.fg("muted", "filters:")} ${filterValue("kind", ui.kindFilter)}  ${filterValue("provider", ui.providerFilter)}  ${filterValue("state", ui.stateFilter)}  ${filterValue("scope", ui.scopeFilter)}`;
+	const filterKeyLine = `${ansiYellow("alt+k")} ${theme.fg("dim", "kind filter · ")}${ansiYellow("alt+p")} ${theme.fg("dim", "provider filter · ")}${ansiYellow("alt+s")} ${theme.fg("dim", "state filter · ")}${ansiYellow("alt+o")} ${theme.fg("dim", "scope filter")}`;
 	const hintParts = [
-		`${ansiYellow("alt+k/p/s/o")} ${theme.fg("dim", "filters")}`,
 		`${ansiYellow("alt+r")} ${theme.fg("dim", "raw resources")}`,
 	];
+	const toggleLabel = itemToggleHintLabel(selected);
+	if (toggleLabel) hintParts.push(`${ansiYellow("alt+x")} ${theme.fg("dim", toggleLabel)}`);
 	if (selected && selected.kind !== "package") hintParts.push(`${ansiYellow("alt+t")} ${theme.fg("dim", "toggle provider group")}`);
 	if (selected?.kind === "package") hintParts.push(`${ansiYellow("alt+u")} ${theme.fg("dim", "uninstall package")}`);
-	hintParts.push(`${ansiYellow("delete")} ${theme.fg("dim", "reset setting")}`, `${ansiYellow("alt+x")} ${theme.fg("dim", "reset extension")}`, `${ansiYellow("←/→")} ${theme.fg("dim", "pane")}`);
+	if ((selected?.settingsSchema ?? []).some((schema) => schema.type !== "secret")) hintParts.push(`${ansiYellow("alt+shift+x")} ${theme.fg("dim", "reset settings")}`);
+	hintParts.push(`${ansiYellow("delete")} ${theme.fg("dim", "reset setting")}`, `${ansiYellow("←/→")} ${theme.fg("dim", "pane")}`);
 	const hintLine = hintParts.join(theme.fg("dim", " · "));
-	const lines = [searchLine, ...wrapLine(filterLine, width), "", ...wrapLine(hintLine, width), divider(width, theme)];
+	const lines = [searchLine, ...wrapLine(filterLine, width), ...wrapLine(filterKeyLine, width), "", ...wrapLine(hintLine, width), divider(width, theme)];
 	const tableRows = Math.max(1, rows - Math.max(0, lines.length - 5) - footerRows);
 	for (let i = 0; i < tableRows; i += 1) {
 		lines.push(`${pad(left[i] ?? "", leftWidth)} ${theme.fg("dim", "│")} ${truncateToWidth(right[i] ?? "", rightWidth, "")}`);
 	}
 	return lines;
+}
+
+function itemToggleHintLabel(item: InventoryItem | undefined): string | undefined {
+	if (!item || item.state === "broken" || item.state === "shadowed") return undefined;
+	const verb = item.state === "disabled" ? "enable" : "disable";
+	if (item.kind === "package") return `${verb} package`;
+	if (item.kind === "extension module") return `${verb} extension`;
+	return `${verb} ${kindLabel(item.kind)}`;
 }
 
 function listDisplayName(item: InventoryItem, ui: ManagerUiState): string {
