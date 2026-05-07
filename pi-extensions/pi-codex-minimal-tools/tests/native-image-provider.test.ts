@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { convertResponsesMessages, processResponsesStream } from "../src/providers/openai-responses-shared.js";
-import { saveOpenAICodexGeneratedImage } from "../src/provider-shim.js";
+import { buildWebSearchActivityMessage, renderWebSearchActivityText, saveOpenAICodexGeneratedImage } from "../src/provider-shim.js";
 
 async function* asAsyncIterable(events: any[]) {
 	for (const event of events) yield event;
@@ -83,6 +83,32 @@ test("processResponsesStream ignores in-progress image_generation_call items", a
 		model,
 	);
 	assert.deepEqual(output.content.filter((block: any) => block.type === "image_generation_call"), []);
+});
+
+test("native web search activity renders like compact tool output", () => {
+	const theme = { fg: (_tone: string, text: string) => text, bold: (text: string) => text };
+	const searches = [{
+		callId: "ws_123",
+		status: "completed",
+		query: "latest qwen local model",
+		queries: [],
+		sources: [
+			{ title: "Qwen3.6-27B", url: "https://huggingface.co/Qwen/Qwen3.6-27B" },
+			{ title: "Qwen3.6-35B-A3B", url: "https://huggingface.co/Qwen/Qwen3.6-35B-A3B" },
+		],
+	}];
+
+	const text = renderWebSearchActivityText(searches as any, false, theme);
+	assert.match(text, /^● Web Search \(OpenAI Native\) latest qwen local model · 2 sources/);
+	assert.match(text, /├─ Qwen3\.6-27B · https:\/\/huggingface\.co\/Qwen\/Qwen3\.6-27B/);
+	assert.match(text, /└─ Qwen3\.6-35B-A3B · https:\/\/huggingface\.co\/Qwen\/Qwen3\.6-35B-A3B/);
+});
+
+test("native web search activity raw message keeps queries and sources", () => {
+	const text = buildWebSearchActivityMessage([{ callId: "ws_1", query: "q", queries: [], sources: [{ title: "Source", url: "https://example.com" }] }] as any);
+	assert.match(text, /Web search results/);
+	assert.match(text, /- q/);
+	assert.match(text, /- Source — https:\/\/example\.com/);
 });
 
 test("saveOpenAICodexGeneratedImage writes generated images under the configured default output dir", async () => {

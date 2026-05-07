@@ -1338,6 +1338,78 @@ export function buildWebSearchSummaryText(searches: SurfacedWebSearch[]): string
 	return searches.length === 1 ? "Searched the web once" : `Searched the web ${searches.length} times`;
 }
 
+function color(theme: any, tone: string, text: string): string {
+	return typeof theme?.fg === "function" ? theme.fg(tone, text) : text;
+}
+
+function bold(theme: any, text: string): string {
+	return typeof theme?.bold === "function" ? theme.bold(text) : text;
+}
+
+function oneLine(value: string | undefined, max = 92): string {
+	const clean = String(value ?? "").replace(/\s+/g, " ").trim();
+	return clean.length > max ? `${clean.slice(0, Math.max(0, max - 1))}…` : clean;
+}
+
+function toolBullet(theme: any): string {
+	return color(theme, "success", "● ");
+}
+
+function toolLabel(theme: any, text: string): string {
+	return color(theme, "text", bold(theme, text));
+}
+
+function accent(theme: any, text: string): string {
+	return color(theme, "accent", text);
+}
+
+function muted(theme: any, text: string): string {
+	return color(theme, "muted", text);
+}
+
+function dim(theme: any, text: string): string {
+	return color(theme, "dim", text);
+}
+
+function tree(theme: any, branch: "├" | "└" | "│" = "└"): string {
+	if (branch === "│") return muted(theme, "  │ ");
+	return muted(theme, `  ${branch}─ `);
+}
+
+function primaryQuery(search: SurfacedWebSearch): string {
+	return search.queries.length > 0 ? search.queries[0]! : search.query || "web search";
+}
+
+export function renderWebSearchActivityText(searches: SurfacedWebSearch[], expanded: boolean, theme: any): string {
+	const sourceCount = searches.reduce((sum, search) => sum + search.sources.length, 0);
+	const queryCount = searches.reduce((sum, search) => sum + (search.queries.length || (search.query ? 1 : 0)), 0) || searches.length;
+	const target = searches.length === 1 ? primaryQuery(searches[0]!) : `${queryCount} queries`;
+	const meta = [
+		`${sourceCount} source${sourceCount === 1 ? "" : "s"}`,
+		!expanded && sourceCount > 3 ? "Ctrl+O to expand" : undefined,
+	].filter(Boolean).join(" · ");
+	const lines = [`${toolBullet(theme)}${toolLabel(theme, "Web Search (OpenAI Native) ")}${accent(theme, oneLine(target))}${meta ? dim(theme, ` · ${meta}`) : ""}`];
+	const sources = searches.flatMap((search) => search.sources.map((source) => ({ ...source, query: primaryQuery(search) })));
+	const limit = expanded ? 8 : 3;
+	const shown = sources.slice(0, limit);
+	for (let index = 0; index < shown.length; index++) {
+		const source = shown[index]!;
+		const title = source.title || source.url || "Source";
+		const isLast = index === shown.length - 1 && sources.length <= shown.length;
+		lines.push(`${tree(theme, isLast ? "└" : "├")}${accent(theme, oneLine(title, 76))}${source.url ? muted(theme, ` · ${oneLine(source.url, 76)}`) : ""}`);
+	}
+	if (sources.length > shown.length) lines.push(`${tree(theme, "└")}${muted(theme, `… ${sources.length - shown.length} more source${sources.length - shown.length === 1 ? "" : "s"}`)}`);
+	if (expanded && sources.length === 0) {
+		for (let index = 0; index < searches.length; index++) {
+			const search = searches[index]!;
+			const query = primaryQuery(search);
+			const status = search.status ? ` · ${search.status}` : "";
+			lines.push(`${tree(theme, index === searches.length - 1 ? "└" : "├")}${muted(theme, "query ")}${accent(theme, oneLine(query, 120))}${muted(theme, status)}`);
+		}
+	}
+	return lines.join("\n");
+}
+
 function makeCachedImagePreview(data: string, mimeType: string, bytes?: number): CachedImagePreview {
 	const dimensions = getImageDimensions(data, mimeType) ?? undefined;
 	return { data, mimeType, bytes: bytes ?? Buffer.from(data, "base64").byteLength, widthPx: dimensions?.widthPx, heightPx: dimensions?.heightPx };
@@ -1697,8 +1769,9 @@ export function registerOpenAICodexCustomProvider(pi: ExtensionAPI, options: { g
 				onImageSaved: (savedImage, imageData) => {
 					pendingActivities.push({ kind: "image", savedImage, imageData });
 				},
-				// Web-search provider selection and native rewrite ownership stays in pi-web-tools.
-				// Keep this shim focused on capturing native image_generation_call results.
+				onWebSearchCaptured: (search) => {
+					pendingActivities.push({ kind: "web-search", search });
+				},
 			}),
 	});
 
@@ -1729,18 +1802,7 @@ export function registerOpenAICodexCustomProvider(pi: ExtensionAPI, options: { g
 	});
 
 	pi.registerMessageRenderer<{ searches?: SurfacedWebSearch[] }>(WEB_SEARCH_ACTIVITY_MESSAGE_TYPE, (message, options, theme) => {
-		const box = new Box(1, 1, (text) => theme.bg("customMessageBg", text));
 		const searches = message.details?.searches ?? [];
-		box.addChild(new Text(theme.fg("customMessageLabel", theme.bold(buildWebSearchSummaryText(searches))), 0, 0));
-		if (options.expanded) {
-			const content = typeof message.content === "string"
-				? message.content
-				: message.content
-						.filter((item) => item.type === "text")
-						.map((item) => item.text)
-						.join("\n");
-			box.addChild(new Text(`\n${theme.fg("customMessageText", content)}`, 0, 0));
-		}
-		return box;
+		return new Text(renderWebSearchActivityText(searches, Boolean(options.expanded), theme), 0, 0);
 	});
 }
