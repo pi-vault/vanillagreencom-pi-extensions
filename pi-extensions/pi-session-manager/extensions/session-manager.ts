@@ -1084,6 +1084,8 @@ class SessionManagerOverlay implements Focusable {
 	): string[] {
 		const deleteAll = this.mode === "confirm-delete-all";
 		const target = deleteAll ? undefined : this.deleteTarget;
+		const deleteCount = this.deleteAllTargets.length;
+		const deleteCountLabel = `${deleteCount} shown ${deleteCount === 1 ? "session" : "sessions"}`;
 		const boxWidth = Math.max(1, Math.min(inner, Math.max(32, Math.min(74, inner - 18))));
 		const boxInner = Math.max(1, boxWidth - 4);
 		const centeredBoxLine = (line: string) => `${" ".repeat(Math.max(0, Math.floor((inner - boxWidth) / 2)))}${line}`;
@@ -1105,8 +1107,8 @@ class SessionManagerOverlay implements Focusable {
 				: "selected session";
 		const removeMessage = deleteAll
 			? this.scope === "current"
-				? "This removes all the sessions in this project."
-				: "This removes all shown sessions across all paths and projects."
+				? `This removes ${deleteCountLabel} in this project.`
+				: `This removes ${deleteCountLabel} across all paths and projects.`
 			: "This removes the session file.";
 		const optionRow = (index: 0 | 1, label: string) => {
 			const selected = this.deleteConfirmSelection === index;
@@ -1121,11 +1123,12 @@ class SessionManagerOverlay implements Focusable {
 			top(),
 			boxRow(centerAnsi(ui.error(this.theme.bold(deleteAll ? "Delete all sessions?" : "Delete session?")), boxInner)),
 			boxRow(centerAnsi(ui.accent(subject), boxInner)),
+			...(deleteAll ? [boxRow(centerAnsi(ui.warning(`${deleteCountLabel} will be deleted`), boxInner))] : []),
 			boxRow(""),
 			boxRow(ui.warning(removeMessage)),
 			boxRow(ui.dim("If trash is unavailable, deletion is permanent.")),
 			boxDivider(),
-			boxRow(optionRow(0, deleteAll ? "Delete all shown sessions" : "Delete this session")),
+			boxRow(optionRow(0, deleteAll ? `Delete ${deleteCountLabel}` : "Delete this session")),
 			boxRow(optionRow(1, "Go back to previous screen")),
 			bottom(),
 		];
