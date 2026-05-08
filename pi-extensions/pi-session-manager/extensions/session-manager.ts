@@ -580,6 +580,7 @@ class SessionManagerOverlay implements Focusable {
 	private renameTarget: SessionInfo | undefined;
 	private deleteTarget: SessionInfo | undefined;
 	private deleteAllTargets: SessionInfo[] = [];
+	private deleteConfirmSelection: 0 | 1 = 0;
 	private notice: { kind: "info" | "error"; text: string } | undefined;
 	private queryError: string | undefined;
 	private loadingProgress: { loaded: number; total: number } | undefined;
@@ -773,6 +774,7 @@ class SessionManagerOverlay implements Focusable {
 		this.renameTarget = undefined;
 		this.deleteTarget = undefined;
 		this.deleteAllTargets = [];
+		this.deleteConfirmSelection = 0;
 	}
 
 	private startDelete(session: SessionInfo): void {
@@ -781,6 +783,7 @@ class SessionManagerOverlay implements Focusable {
 			return;
 		}
 		this.deleteTarget = session;
+		this.deleteConfirmSelection = 0;
 		this.mode = "confirm-delete";
 		this.notice = undefined;
 	}
@@ -822,6 +825,7 @@ class SessionManagerOverlay implements Focusable {
 		}
 		this.deleteAllTargets = targets;
 		this.deleteTarget = undefined;
+		this.deleteConfirmSelection = 0;
 		this.mode = "confirm-delete-all";
 		this.notice = undefined;
 	}
@@ -869,7 +873,17 @@ class SessionManagerOverlay implements Focusable {
 		}
 
 		if (this.mode === "confirm-delete" || this.mode === "confirm-delete-all") {
+			if (this.keybindings.matches(data, "tui.select.up") || this.keybindings.matches(data, "tui.select.down") || matchesKey(data, "up") || matchesKey(data, "down")) {
+				this.deleteConfirmSelection = this.deleteConfirmSelection === 0 ? 1 : 0;
+				this.requestRender();
+				return;
+			}
 			if (this.keybindings.matches(data, "tui.select.confirm") || matchesKey(data, "enter") || matchesKey(data, "return")) {
+				if (this.deleteConfirmSelection === 1) {
+					this.cancelModalMode();
+					this.requestRender();
+					return;
+				}
 				if (this.mode === "confirm-delete-all") void this.confirmDeleteAll();
 				else void this.confirmDelete();
 				return;
@@ -1090,9 +1104,13 @@ class SessionManagerOverlay implements Focusable {
 		const scope = this.scope === "current" ? "current project" : "all sessions";
 		const search = oneLine(this.searchInput.getValue());
 		const context = `${scope}${search ? ` · query “${truncateToWidth(search, 20, "…")}”` : ""}`;
-		const deleteText = `${ansiYellow("enter")} ${ui.error(deleteAll ? "delete all shown sessions" : "delete this session")}`;
-		const cancelText = `${ansiYellow("backspace/esc")} ${ui.dim("go back to previous screen")}`;
-		const actionLine = this.theme.bg("toolErrorBg", padAnsi(deleteText, boxInner));
+		const optionRow = (index: 0 | 1, label: string) => {
+			const selected = this.deleteConfirmSelection === index;
+			const prefix = selected ? "› " : "  ";
+			const content = `${ui.warning(prefix)}${index === 0 ? ui.error(label) : ui.dim(label)}`;
+			const padded = padAnsi(content, boxInner);
+			return selected ? this.theme.bg(index === 0 ? "toolErrorBg" : "selectedBg", padded) : padded;
+		};
 
 		const boxLines = [
 			top(),
@@ -1101,14 +1119,10 @@ class SessionManagerOverlay implements Focusable {
 			boxRow(""),
 			boxRow(ui.warning("This removes the session file.")),
 			boxRow(ui.dim("If trash is unavailable, deletion is permanent.")),
-			...(deleteAll
-				? [boxRow(ui.dim(truncateToWidth(context, boxInner, "…")))]
-				: target
-					? [boxRow(`${ui.dim("Path: ")}${ui.muted(truncateToWidth(shortenPath(target.path), Math.max(8, boxInner - 6), "…"))}`)]
-					: []),
+			...(deleteAll ? [boxRow(ui.dim(truncateToWidth(context, boxInner, "…")))] : []),
 			boxDivider(),
-			boxRow(actionLine),
-			boxRow(cancelText),
+			boxRow(optionRow(0, deleteAll ? "Delete all shown sessions" : "Delete this session")),
+			boxRow(optionRow(1, "Go back to previous screen")),
 			bottom(),
 		];
 
