@@ -4738,6 +4738,12 @@ function openFileInExternalEditor(filePath: string | undefined, cwd: string, tui
 	if (!filePath) return "No file path for selected view.";
 	const editorCmd = process.env.VISUAL || process.env.EDITOR;
 	if (!editorCmd) return "Set $VISUAL or $EDITOR to open trace files externally.";
+	if (process.env.TMUX) {
+		const shellCommand = `cd ${shellQuote(cwd)} && ${editorCmd} ${shellQuote(filePath)}`;
+		const proc = spawnSync("tmux", ["display-popup", "-E", "-w", "90%", "-h", "90%", shellCommand], { stdio: "inherit" });
+		tui?.requestRender(true);
+		return proc.status === 0 ? `Opened ${filePath}` : `Editor exited with status ${proc.status ?? "unknown"}: ${filePath}`;
+	}
 	const [editor, ...editorArgs] = editorCmd.split(/\s+/).filter((part) => part.length > 0);
 	if (!editor) return "Set $VISUAL or $EDITOR to open trace files externally.";
 	let status: number | null = null;
