@@ -1286,9 +1286,23 @@ export default function (pi: ExtensionAPI) {
 			const details = result.details as SteerSubagentDetails | undefined;
 			if (context?.isError) return wrappedText(`${theme.fg("error", ICONS.times)} ${theme.fg("toolTitle", "Steer agent failed")}\n${theme.fg("muted", raw)}`);
 			if (!details) return wrappedText(raw);
-			if (expanded) return wrappedText(raw);
 			const status = details.bridge ? "steered" : "queued steering";
 			const via = details.bridge ? theme.fg("success", "bridge") : theme.fg("warning", "inbox fallback");
+			if (expanded) {
+				const container = new Container();
+				container.addChild(wrappedText(`${agentStatusLine(theme, details.agent, status, details.bridge ? "success" : "warning")} ${theme.fg("dim", "via")} ${via}`));
+				addWrappedSection(container, theme, "Delivery", details.deliverAs, "toolOutput");
+				if (details.taskId) addWrappedSection(container, theme, "Task ID", details.taskId, "dim");
+				addWrappedSection(container, theme, "Bridge", details.bridge ? "active" : "not used", details.bridge ? "toolOutput" : "muted");
+				if (details.bridgePid) addWrappedSection(container, theme, "Bridge PID", details.bridgePid, "dim");
+				addWrappedSection(container, theme, "Pane ID", details.paneId, "dim");
+				addArtifactPathSection(container, theme, "Bridge socket", details.bridgeSocket);
+				addArtifactPathSection(container, theme, "Child session", details.sessionFile);
+				addArtifactPathSection(container, theme, "Runtime root", details.runtimeRoot);
+				addArtifactPathSection(container, theme, "Inbox fallback", details.fallbackFile);
+				addArtifactPathSection(container, theme, "Expected outbox", details.outboxFile);
+				return container;
+			}
 			return wrappedText(`${agentStatusLine(theme, details.agent, status, details.bridge ? "success" : "warning")} ${theme.fg("dim", "via")} ${via}`);
 		},
 	});
