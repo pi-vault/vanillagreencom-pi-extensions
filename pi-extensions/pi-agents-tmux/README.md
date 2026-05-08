@@ -81,7 +81,7 @@ Bg (non-pane) agents resume by default per parent session: omitting `sessionKey`
 
 The extension routes pi at `runtime/sessions/bg-<agent>-<key>.jsonl`. Same `agent + sessionKey` across delegations resumes the same pi session and retains memory; different keys keep separate histories.
 
-Pane agents persist via their own pane session file, so `sessionKey` is ignored when the agent has `pane: true`. `stop_subagent` and `/agents:stop <name>` kill the live tmux process but preserve that session file. Default `subagent`, `/agents:start <name>`, and `/agents:send <name> ...` resume/reuse it; to start fresh, pass `forceSpawn: true` or run `/agents:new <name>`.
+Pane agents persist via their own pane session file, so `sessionKey` is ignored when the agent has `pane: true`. `stop_subagent` and `/agents:stop <name>` kill the live tmux process but preserve that session file. Default `subagent`, `/agents:start <name>`, and `/agents:send <name> ...` resume/reuse it. To start fresh, pass `forceSpawn: true` or run `/agents:new <name>`. To restore an older archived pane session, pass `resumeSession: "latest"` to `subagent` or run `/agents:resume <name> [latest|archive-file]`.
 
 ## Commands
 
@@ -92,6 +92,7 @@ Pane agents persist via their own pane session file, so `sessionKey` is ignored 
 | `/agents show <name> [scope]` | Inspect an agent. |
 | `/agents:start <name>` | Start/reuse a live pane or resume the saved pane session. |
 | `/agents:new <name>` | Stop any live pane, archive the saved pane session, and start fresh. |
+| `/agents:resume <name> [latest\|archive-file]` | Restore an archived pane session and start it. |
 | `/agents:send <name> <task>` | Queue a task for a persistent pane. |
 | `/agents:attach <name>` | Focus an existing pane. |
 | `/agents:stop <name>` | Stop a persistent pane. |
@@ -100,7 +101,7 @@ Pane agents persist via their own pane session file, so `sessionKey` is ignored 
 | `/agents:trace <ref>` | Open/show one trace by task id, short id, or trace ref. |
 | `/agents:toggle` | Toggle the persistent dashboard. |
 
-Arguments support autocomplete, including known agent names for `show`, `start`, `new`, `send`, `attach`, and `stop`.
+Arguments support autocomplete, including known agent names for `show`, `start`, `new`, `resume`, `send`, `attach`, and `stop`.
 
 ## Browser keys
 

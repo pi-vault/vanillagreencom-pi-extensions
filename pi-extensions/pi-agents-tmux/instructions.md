@@ -15,11 +15,11 @@ When NOT to use:
 Calling rules:
 - Default `agentScope` is `"project"`. Use `"both"` only when user-level agents at `~/.pi/agent/agents` are explicitly needed.
 - For persistent-pane agents (`pane: true`): save the returned `taskId`. Use `get_subagent_result` if you missed the completion event, `steer_subagent` only for mid-run correction, and `stop_subagent` to kill/close the pane.
-- `stop_subagent` kills the live tmux process but preserves the pane session file. The next default `subagent` call or `/agents start <name>` resumes that saved session; use `forceSpawn: true` or `/agents new <name>` only when the user wants a fresh session.
+- `stop_subagent` kills the live tmux process but preserves the pane session file. The next default `subagent` call or `/agents start <name>` resumes that saved session; use `forceSpawn: true` or `/agents new <name>` only when the user wants a fresh session. To restore an older archived pane session, pass `resumeSession: "latest"` (or an archive filename/path) to `subagent`.
 - `confirmProjectAgents: true` to gate any project-defined agent behind explicit user approval.
 - Provide a single, self-contained `task` string per delegation — the subagent cannot ask you follow-ups.
 - Use `forceSpawn: true` only after stopping a pane when you want a fresh pane session; omit it to resume/reuse.
 
-Slash commands available to the user (you do not invoke these): `/agents start|new|send|attach|stop|status`, plus `/agents` for the picker.
+Slash commands available to the user (you do not invoke these): `/agents start|new|resume|send|attach|stop|status`, plus `/agents` for the picker.
 
 The `before_agent_start` hook injects the live list of project agents and their descriptions into your context — use those names in `subagent` calls. If no project agents are loaded, the tool still works but with no curated list.

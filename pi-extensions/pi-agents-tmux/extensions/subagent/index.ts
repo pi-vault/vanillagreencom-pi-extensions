@@ -2750,6 +2750,38 @@ function hasSavedPaneSession(runtimeRoot: string, agentName: string): boolean {
 	}
 }
 
+function archivedPaneSessionDir(runtimeRoot: string): string {
+	return path.join(runtimeRoot, "sessions", "archived");
+}
+
+function archivedPaneSessions(runtimeRoot: string, agentName: string): string[] {
+	const safeName = safeFileName(agentName);
+	const dir = archivedPaneSessionDir(runtimeRoot);
+	try {
+		return fs.readdirSync(dir)
+			.filter((file) => file.startsWith(`${safeName}-`) && file.endsWith(".jsonl"))
+			.map((file) => path.join(dir, file))
+			.filter((file) => fs.statSync(file).isFile())
+			.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+	} catch {
+		return [];
+	}
+}
+
+async function restoreArchivedPaneSession(runtimeRoot: string, agentName: string, selector = "latest"): Promise<string> {
+	const archives = archivedPaneSessions(runtimeRoot, agentName);
+	if (archives.length === 0) throw new Error(`No archived pane sessions found for ${agentName}.`);
+	const wanted = selector.trim() || "latest";
+	const selected = wanted === "latest" || wanted === "latest-archived"
+		? archives[0]
+		: archives.find((file) => file === wanted || path.basename(file) === wanted || path.basename(file).includes(wanted));
+	if (!selected) throw new Error(`No archived pane session for ${agentName} matched "${wanted}". Available: ${archives.map((file) => path.basename(file)).join(", ")}`);
+	await resetPersistentPaneSession(runtimeRoot, agentName);
+	await fs.promises.mkdir(path.dirname(paneSessionPath(runtimeRoot, agentName)), { recursive: true, mode: 0o700 });
+	await fs.promises.copyFile(selected, paneSessionPath(runtimeRoot, agentName));
+	return selected;
+}
+
 function oneShotTranscriptPath(runtimeRoot: string, agentName: string, label: string): string {
 	return path.join(transcriptDir(runtimeRoot), safeFileName(agentName || "subagent"), `${Date.now()}-${safeFileName(label || "oneshot")}.jsonl`);
 }
@@ -4216,6 +4248,7 @@ async function runPersistentPaneAgent(
 	step: number | undefined,
 	pi: ExtensionAPI,
 	forceSpawn = false,
+	resumeSession?: string,
 ): Promise<SingleResult> {
 	const agent = agents.find((a) => a.name === agentName);
 	if (!agent) {
@@ -4232,7 +4265,30 @@ async function runPersistentPaneAgent(
 		};
 	}
 
-	if (forceSpawn) {
+	if (resumeSession?.trim()) {
+		if (forceSpawn) {
+			const stderr = "Cannot use resumeSession with forceSpawn: resumeSession restores an archived pane session, while forceSpawn starts fresh.";
+			return {
+				agent: agent.name,
+				agentSource: agent.source,
+				task,
+				exitCode: 1,
+				messages: [],
+				stderr,
+				stopReason: "error",
+				errorMessage: stderr,
+				usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
+				step,
+			};
+		}
+		const registry = await readPaneRegistry(runtimeRoot);
+		const existing = registry[agent.name];
+		if (existing && (await paneExists(existing.paneId))) {
+			await stopPersistentPane(runtimeRoot, agent.name);
+			removeDashboardAgent(agent.name);
+		}
+		await restoreArchivedPaneSession(runtimeRoot, agent.name, resumeSession);
+	} else if (forceSpawn) {
 		const registry = await readPaneRegistry(runtimeRoot);
 		const existing = registry[agent.name];
 		if (existing && (await paneExists(existing.paneId))) {
@@ -4569,6 +4625,12 @@ const SubagentParams = Type.Object({
 			description:
 				"For pane-mode agents only. When true and a live pane exists, the call errors instead of reusing it. When no live pane exists, the previous session file is archived before launch so the next pane starts fresh. Omit/false resumes or reuses the existing pane session.",
 			default: false,
+		}),
+	),
+	resumeSession: Type.Optional(
+		Type.String({
+			description:
+				"For pane-mode agents only. Restore an archived pane session before launching. Use 'latest'/'latest-archived' or an archived session filename/path from sessions/archived. Cannot be combined with forceSpawn.",
 		}),
 	),
 });
@@ -5199,7 +5261,7 @@ export default function (pi: ExtensionAPI) {
 				});
 			return completions.length > 0 ? completions : null;
 		}
-		if (["show", "start", "new", "send", "attach", "stop"].includes(first)) {
+		if (["show", "start", "new", "resume", "send", "attach", "stop"].includes(first)) {
 			if (first === "show" && parts.length === 1 && raw.endsWith(" ")) return null;
 			if (parts.length > 2 || (parts.length === 2 && raw.endsWith(" "))) return null;
 			const rest = parts[1]?.toLowerCase() ?? "";
@@ -5654,7 +5716,7 @@ export default function (pi: ExtensionAPI) {
 			};
 
 			try {
-				if (command === "start" || command === "new") {
+				if (command === "start" || command === "new" || command === "resume") {
 					const agent = findAgent(parts[1]);
 					if (!agent) throw new Error(`Unknown agent: ${parts[1] ?? "(missing)"}`);
 					if (!agent.pane) throw new Error(`Agent ${agent.name} is not configured for persistent panes. Add \`pane: true\` to its frontmatter to enable.`);
@@ -5666,6 +5728,10 @@ export default function (pi: ExtensionAPI) {
 						if (hadLivePane) await stopPersistentPane(runtimeRoot, agent.name);
 						removeDashboardAgent(agent.name);
 						await resetPersistentPaneSession(runtimeRoot, agent.name);
+					} else if (command === "resume") {
+						if (hadLivePane) await stopPersistentPane(runtimeRoot, agent.name);
+						removeDashboardAgent(agent.name);
+						await restoreArchivedPaneSession(runtimeRoot, agent.name, parts[2] ?? "latest");
 					}
 					const pane = await ensurePersistentPane(runtimeRoot, parentSessionId, ctx.cwd, agent, parentModel, parentThinkingLevel, pi.getActiveTools());
 					if (!hadLivePane || command === "new") {
@@ -5677,7 +5743,7 @@ export default function (pi: ExtensionAPI) {
 							transcriptPath: pane.sessionFile,
 						});
 					}
-					const startLabel = command === "new" ? "Started new" : hadLivePane ? "Reused live" : hadSavedSession ? "Resumed saved" : "Started new";
+					const startLabel = command === "new" ? "Started new" : command === "resume" ? "Resumed archived" : hadLivePane ? "Reused live" : hadSavedSession ? "Resumed saved" : "Started new";
 					content = `${startLabel} ${agent.name} (${pane.windowName}).\nSession: ${pane.sessionFile}`;
 					messageDetails = { action: "start", agent: agent.name, sessionFile: pane.sessionFile, windowName: pane.windowName, status: startLabel };
 				} else if (command === "send") {
@@ -6147,7 +6213,7 @@ export default function (pi: ExtensionAPI) {
 			.join("\n");
 
 		return {
-			systemPrompt: `${event.systemPrompt}\n\n## Project Agents\nUse the \`subagent\` tool when isolated context, specialist review, reconnaissance, planning, or parallel read-only investigation would help. Project-local agents are loaded from .pi/agents, with .claude/agents as a compatibility source. Agents with \`pane=true\` run in persistent tmux panes and can also be managed with \`/agents start|new|send|attach|stop|status\`. For persistent panes, save the returned taskId, use \`get_subagent_result\` to recover missed completions, use \`steer_subagent\` only for mid-run correction, and use \`stop_subagent\` to kill/close a pane. Stopping kills the live tmux process but preserves the session file; the next default \`subagent\` call or \`/agents start\` resumes the saved session. Use \`forceSpawn: true\` or \`/agents new\` only when the user asks for a fresh session. Available project agents:\n${agentLines}\n\nDefault \`agentScope\` is \"project\". Use \"both\" only when user-level agents are explicitly needed.`,
+			systemPrompt: `${event.systemPrompt}\n\n## Project Agents\nUse the \`subagent\` tool when isolated context, specialist review, reconnaissance, planning, or parallel read-only investigation would help. Project-local agents are loaded from .pi/agents, with .claude/agents as a compatibility source. Agents with \`pane=true\` run in persistent tmux panes and can also be managed with \`/agents start|new|resume|send|attach|stop|status\`. For persistent panes, save the returned taskId, use \`get_subagent_result\` to recover missed completions, use \`steer_subagent\` only for mid-run correction, and use \`stop_subagent\` to kill/close a pane. Stopping kills the live tmux process but preserves the session file; the next default \`subagent\` call or \`/agents start\` resumes the saved session. Use \`forceSpawn: true\` or \`/agents new\` only when the user asks for a fresh session. Available project agents:\n${agentLines}\n\nDefault \`agentScope\` is \"project\". Use \"both\" only when user-level agents are explicitly needed.`,
 		};
 	});
 
@@ -6274,6 +6340,7 @@ export default function (pi: ExtensionAPI) {
 								i + 1,
 								pi,
 								params.forceSpawn ?? false,
+								params.resumeSession,
 							)
 						: await runSingleAgent(
 								ctx.cwd,
@@ -6429,6 +6496,7 @@ export default function (pi: ExtensionAPI) {
 								undefined,
 								pi,
 								params.forceSpawn ?? false,
+								params.resumeSession,
 							)
 						: await runSingleAgent(
 								ctx.cwd,
@@ -6505,6 +6573,7 @@ export default function (pi: ExtensionAPI) {
 							undefined,
 							pi,
 							params.forceSpawn ?? false,
+							params.resumeSession,
 						)
 					: await runSingleAgent(
 							ctx.cwd,
