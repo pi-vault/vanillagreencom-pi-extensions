@@ -272,8 +272,9 @@ Requirements:
 3. Include executive summary, key findings, evidence and sources, recommendation/decision criteria, risks, and revisit conditions.
 4. Save raw Exa metadata to `[RESEARCH_DOCS_PATH]/[RESEARCH_ISSUE_ID]/raw-exa.json`.
 5. Keep `findings.md` clean; do not embed raw JSON or fenced raw metadata.
-6. Do not change production code.
-7. Return only after findings.md and raw-exa.json exist.
+6. Do not run local reproduction, benchmark, test, code-inspection, or implementation commands unless this delegation explicitly requests local validation in addition to Exa research.
+7. Do not change production code.
+8. Return only after findings.md and raw-exa.json exist.
 </delegation_format>
 
 After researcher returns:

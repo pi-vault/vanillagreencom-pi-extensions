@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 
 /// Canonical agent definition — harness-agnostic.
@@ -200,8 +201,98 @@ pub struct AgentExtras {
     pub color: Option<String>,
     pub guidance: Option<String>,
     pub instructions: Option<String>,
+    /// User-controlled frontmatter overrides from project `vstack.toml`.
+    /// The top-level override applies to every harness; entries in
+    /// `frontmatter_by_harness` apply only to the matching harness id and win.
+    pub frontmatter: AgentFrontmatterOverrides,
+    pub frontmatter_by_harness: HashMap<String, AgentFrontmatterOverrides>,
     /// Custom hooks from vstack.toml (Claude Code only — command paths)
     pub custom_hooks: Vec<CustomHookEntry>,
+}
+
+/// Typed subset of generated agent frontmatter that project users may override.
+/// Fields that are not meaningful for a harness are ignored by that harness.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct AgentFrontmatterOverrides {
+    pub color: Option<String>,
+    /// Exact harness model id to write. Prefer harness-specific overrides when
+    /// providers use different model id formats.
+    pub model: Option<String>,
+    /// Pi tool allowlist. Written as the Pi `tools:` frontmatter string.
+    #[serde(default, deserialize_with = "deserialize_optional_tools")]
+    pub tools: Option<Vec<String>>,
+    /// Pi persistent pane flag.
+    pub pane: Option<bool>,
+    /// OpenCode mode override.
+    pub mode: Option<String>,
+    /// Codex sandbox mode override.
+    pub sandbox_mode: Option<String>,
+    /// Codex reasoning effort override.
+    pub model_reasoning_effort: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ToolsValue {
+    String(String),
+    List(Vec<String>),
+}
+
+fn deserialize_optional_tools<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<ToolsValue>::deserialize(deserializer)?;
+    Ok(value.map(|value| match value {
+        ToolsValue::String(s) => s
+            .split(',')
+            .map(|tool| tool.trim().to_string())
+            .filter(|tool| !tool.is_empty())
+            .collect(),
+        ToolsValue::List(list) => list
+            .into_iter()
+            .map(|tool| tool.trim().to_string())
+            .filter(|tool| !tool.is_empty())
+            .collect(),
+    }))
+}
+
+impl AgentFrontmatterOverrides {
+    pub fn merge(&self, harness: &Self) -> Self {
+        Self {
+            color: harness.color.clone().or_else(|| self.color.clone()),
+            model: harness.model.clone().or_else(|| self.model.clone()),
+            tools: harness.tools.clone().or_else(|| self.tools.clone()),
+            pane: harness.pane.or(self.pane),
+            mode: harness.mode.clone().or_else(|| self.mode.clone()),
+            sandbox_mode: harness
+                .sandbox_mode
+                .clone()
+                .or_else(|| self.sandbox_mode.clone()),
+            model_reasoning_effort: harness
+                .model_reasoning_effort
+                .clone()
+                .or_else(|| self.model_reasoning_effort.clone()),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self == &Self::default()
+    }
+}
+
+impl AgentExtras {
+    pub fn frontmatter_for(&self, harness_id: &str) -> AgentFrontmatterOverrides {
+        let harness = self
+            .frontmatter_by_harness
+            .get(harness_id)
+            .cloned()
+            .unwrap_or_default();
+        self.frontmatter.merge(&harness)
+    }
 }
 
 /// A custom hook entry for agent frontmatter

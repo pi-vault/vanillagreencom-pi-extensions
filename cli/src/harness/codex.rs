@@ -19,12 +19,17 @@ pub fn generate_agent(
 
     let path = dir.join(format!("{}.toml", agent.name));
 
-    // Map role to sandbox_mode
-    let sandbox_mode = match agent.role {
-        AgentRole::Reviewer => "read-only",
-        AgentRole::Engineer => "danger-full-access",
-        AgentRole::Manager => "danger-full-access",
-    };
+    let frontmatter = extras.frontmatter_for("codex");
+
+    // Map role to sandbox_mode unless project config supplies an exact value.
+    let sandbox_mode = frontmatter
+        .sandbox_mode
+        .as_deref()
+        .unwrap_or(match agent.role {
+            AgentRole::Reviewer => "read-only",
+            AgentRole::Engineer => "danger-full-access",
+            AgentRole::Manager => "danger-full-access",
+        });
 
     // Map model to reasoning effort
     let lower = agent.model.to_lowercase();
@@ -34,6 +39,11 @@ pub fn generate_agent(
         "haiku" => ("gpt-5.5", "medium"),
         other => (other, "high"),
     };
+    let model = frontmatter.model.as_deref().unwrap_or(model);
+    let reasoning_effort = frontmatter
+        .model_reasoning_effort
+        .as_deref()
+        .unwrap_or(reasoning_effort);
 
     // Build TOML manually to control format (triple-quoted developer_instructions)
     let mut output = String::new();

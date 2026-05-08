@@ -67,6 +67,17 @@ pub fn build_agent_extras(
             .instructions_for(agent_name)
             .or(file_instructions)
             .map(String::from),
+        frontmatter: project_config.frontmatter_for(agent_name, ""),
+        frontmatter_by_harness: project_config
+            .agent_frontmatter_by_harness
+            .iter()
+            .filter_map(|(harness, entries)| {
+                entries
+                    .get(agent_name)
+                    .cloned()
+                    .map(|overrides| (harness.clone(), overrides))
+            })
+            .collect(),
         custom_hooks: project_config.custom_hooks_for(agent_name, agent_role),
     }
 }

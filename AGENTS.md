@@ -141,10 +141,14 @@ rust = ["rust-arch", "rust-cargo"]
 [agent-skills-optional]
 rust = [{ skill = "rust-async", when = "Async, tokio, channels" }]
 
-# Agent display color written to supported agent frontmatter.
-# Pi subagent panes use this for the statusline badge background.
-[agent-colors]
-rust = "green"
+# Generated-frontmatter overrides. Top-level entries apply to every harness.
+[agent-frontmatter]
+rust = { color = "green" }
+
+# Harness-specific generated-frontmatter overrides win over top-level entries.
+# Use exact model/tool ids for the target harness.
+[agent-frontmatter.pi]
+researcher = { model = "openai/gpt-5.5:xhigh", tools = ["read", "grep", "find", "ls", "bash", "edit", "write", "web_research"] }
 
 # What the agent should do when first invoked.
 [agent-launch-instructions]

@@ -22,6 +22,14 @@ pub struct ProjectConfig {
     /// Empty values are ignored and fall back to source frontmatter.
     #[serde(rename = "agent-colors")]
     pub agent_colors: HashMap<String, String>,
+    /// Typed frontmatter overrides parsed from `[agent-frontmatter]` and
+    /// `[agent-frontmatter.<harness>]`. Parsed manually in `load()` so nested
+    /// TOML tables can coexist with per-agent inline tables.
+    #[serde(skip)]
+    pub agent_frontmatter: HashMap<String, crate::agent::AgentFrontmatterOverrides>,
+    #[serde(skip)]
+    pub agent_frontmatter_by_harness:
+        HashMap<String, HashMap<String, crate::agent::AgentFrontmatterOverrides>>,
     #[serde(rename = "agent-skills-optional")]
     pub agent_skills_optional: HashMap<String, Vec<crate::mapping::OptionalSkill>>,
     #[serde(rename = "agent-launch-instructions", alias = "agent-guidance")]
@@ -55,6 +63,23 @@ fn default_hook_agents() -> CustomHookTarget {
     CustomHookTarget::All("all".into())
 }
 
+fn is_agent_frontmatter_override(value: &toml::Value) -> bool {
+    let Some(table) = value.as_table() else {
+        return false;
+    };
+    [
+        "color",
+        "model",
+        "tools",
+        "pane",
+        "mode",
+        "sandbox-mode",
+        "model-reasoning-effort",
+    ]
+    .iter()
+    .any(|key| table.contains_key(*key))
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 pub enum CustomHookTarget {
@@ -73,7 +98,48 @@ impl ProjectConfig {
         let Ok(content) = std::fs::read_to_string(&path) else {
             return Self::default();
         };
-        toml::from_str(&content).unwrap_or_default()
+        let mut parsed: Self = toml::from_str(&content).unwrap_or_default();
+        parsed.load_agent_frontmatter_tables(&content);
+        parsed
+    }
+
+    fn load_agent_frontmatter_tables(&mut self, content: &str) {
+        let Ok(value) = toml::from_str::<toml::Value>(content) else {
+            return;
+        };
+        let Some(table) = value
+            .get("agent-frontmatter")
+            .and_then(|value| value.as_table())
+        else {
+            return;
+        };
+
+        for (key, value) in table {
+            if is_agent_frontmatter_override(value) {
+                if let Ok(overrides) = value.clone().try_into() {
+                    self.agent_frontmatter.insert(key.clone(), overrides);
+                }
+                continue;
+            }
+
+            let Some(agent_table) = value.as_table() else {
+                continue;
+            };
+            let harness_key = crate::harness::Harness::from_id(key)
+                .map(|harness| harness.id().to_string())
+                .unwrap_or_else(|| key.clone());
+            for (agent_name, override_value) in agent_table {
+                if !is_agent_frontmatter_override(override_value) {
+                    continue;
+                }
+                if let Ok(overrides) = override_value.clone().try_into() {
+                    self.agent_frontmatter_by_harness
+                        .entry(harness_key.clone())
+                        .or_default()
+                        .insert(agent_name.clone(), overrides);
+                }
+            }
+        }
     }
 
     /// Get the project-level skill list for an agent, if one exists.
@@ -89,6 +155,26 @@ impl ProjectConfig {
             .get(agent_name)
             .map(|s| s.as_str())
             .filter(|s| !s.trim().is_empty())
+    }
+
+    /// Get global + harness-specific frontmatter overrides for an agent.
+    pub fn frontmatter_for(
+        &self,
+        agent_name: &str,
+        harness_id: &str,
+    ) -> crate::agent::AgentFrontmatterOverrides {
+        let base = self
+            .agent_frontmatter
+            .get(agent_name)
+            .cloned()
+            .unwrap_or_default();
+        let harness = self
+            .agent_frontmatter_by_harness
+            .get(harness_id)
+            .and_then(|entries| entries.get(agent_name))
+            .cloned()
+            .unwrap_or_default();
+        base.merge(&harness)
     }
 
     /// Get guidance text for an agent
@@ -145,7 +231,13 @@ impl ProjectConfig {
             extracted.guidance.is_some() && self.guidance_for(agent_name).is_none();
         let needs_instructions =
             extracted.instructions.is_some() && self.instructions_for(agent_name).is_none();
-        let needs_color = extracted.color.is_some() && self.color_for(agent_name).is_none();
+        let needs_color = extracted.color.is_some()
+            && self.color_for(agent_name).is_none()
+            && self
+                .agent_frontmatter
+                .get(agent_name)
+                .and_then(|entry| entry.color.as_deref())
+                .is_none();
 
         if !needs_guidance && !needs_instructions && !needs_color {
             return;
@@ -474,23 +566,21 @@ pub fn write_agent_skills(project_root: &Path, agent_skill_map: &HashMap<String,
     }
 }
 
-/// Write `[agent-colors]` entries to the project's vstack.toml.
-/// Only adds agents that don't already have an entry — never overwrites user edits.
+/// Write default agent color entries to `[agent-frontmatter]`.
+/// Legacy `[agent-colors]` remains supported and is treated as user-owned.
+/// Only adds agents that don't already have a color — never overwrites user edits.
 pub fn write_agent_colors(project_root: &Path, agent_color_map: &HashMap<String, Option<String>>) {
     let path = project_root.join("vstack.toml");
     let existing = std::fs::read_to_string(&path).unwrap_or_default();
 
-    let parsed: ProjectConfig = toml::from_str(&existing).unwrap_or_default();
+    let parsed = ProjectConfig::load(project_root);
 
     let mut content = existing.clone();
-    if !content.contains("[agent-colors]") {
-        content.push_str("\n\n# ── Agent Colors ─────────────────────────────────────\n");
-        content.push_str("# Agent display color written to frontmatter when the\n");
-        content.push_str("# target harness supports it. Pi subagent panes use this\n");
-        content.push_str("# for the statusline badge background. Empty = source default.\n");
-        content.push_str("# Common values: red, green, yellow, blue, magenta, cyan.\n");
+    if !content.contains("[agent-frontmatter]") {
+        content.push_str("\n\n# ── Agent Frontmatter ────────────────────────────────\n");
+        content.push_str("# Optional generated-frontmatter overrides.\n");
         content.push_str("#\n");
-        content.push_str("[agent-colors]\n");
+        content.push_str("[agent-frontmatter]\n");
     }
 
     let mut agents: Vec<&String> = agent_color_map.keys().collect();
@@ -501,12 +591,20 @@ pub fn write_agent_colors(project_root: &Path, agent_color_map: &HashMap<String,
         if parsed.agent_colors.contains_key(agent.as_str()) {
             continue;
         }
+        if parsed
+            .agent_frontmatter
+            .get(agent.as_str())
+            .and_then(|entry| entry.color.as_deref())
+            .is_some()
+        {
+            continue;
+        }
         let color = agent_color_map
             .get(agent)
             .and_then(|value| value.as_deref())
             .unwrap_or("");
         let escaped = color.replace('\\', "\\\\").replace('"', "\\\"");
-        new_entries.push_str(&format!("{} = \"{}\"\n", agent, escaped));
+        new_entries.push_str(&format!("{} = {{ color = \"{}\" }}\n", agent, escaped));
     }
 
     if new_entries.is_empty() {
@@ -516,7 +614,7 @@ pub fn write_agent_colors(project_root: &Path, agent_color_map: &HashMap<String,
         return;
     }
 
-    let out = insert_entries_into_section(&content, "[agent-colors]", &new_entries);
+    let out = insert_entries_into_section(&content, "[agent-frontmatter]", &new_entries);
     if out != existing {
         let _ = std::fs::write(&path, out);
     }
@@ -698,15 +796,20 @@ fn create_project_config(path: &Path, agents: &[String], skills: &[String]) {
     // Actual skill lists are written by write_agent_skills() after
     // the mapping is computed, so we just emit the section header here.
 
-    // ── agent-colors ──
-    out.push_str("\n\n# ── Agent Colors ─────────────────────────────────────\n");
-    out.push_str("# Agent display color written to frontmatter when the\n");
-    out.push_str("# target harness supports it. Pi subagent panes use this\n");
-    out.push_str("# for the statusline badge background. Empty = source default.\n");
-    out.push_str("# Common values: red, green, yellow, blue, magenta, cyan.\n");
+    // ── agent-frontmatter ──
+    out.push_str("\n\n# ── Agent Frontmatter ────────────────────────────────\n");
+    out.push_str("# Optional generated-frontmatter overrides. Top-level entries\n");
+    out.push_str("# apply to every harness; harness-specific tables win. Prefer\n");
+    out.push_str("# harness-specific model values when model id formats differ.\n");
+    out.push_str("# Supported fields: color, model, tools, pane, mode,\n");
+    out.push_str("# sandbox-mode, model-reasoning-effort. Unknown fields ignored.\n");
+    out.push_str("# Example:\n");
+    out.push_str("# researcher = { color = \"purple\" }\n");
+    out.push_str("# [agent-frontmatter.pi]\n");
+    out.push_str("# researcher = { model = \"openai/gpt-5.5:xhigh\", tools = [\"read\", \"grep\", \"find\", \"ls\", \"bash\", \"edit\", \"write\", \"web_research\"] }\n");
     out.push_str("#\n");
-    out.push_str("[agent-colors]\n");
-    // Actual entries are written by write_agent_colors().
+    out.push_str("[agent-frontmatter]\n");
+    // Color entries are still also supported from legacy [agent-colors].
 
     // ── agent-skills-optional ──
     out.push_str("\n\n# ── Optional Skills ──────────────────────────────────\n");
@@ -966,6 +1069,9 @@ fn strip_skills_reference(content: &str) -> String {
 
         let mut out = String::with_capacity(content.len());
         out.push_str(&content[..start]);
+        if !out.is_empty() && !out.ends_with('\n') && cursor < content.len() {
+            out.push('\n');
+        }
         out.push_str(&content[cursor..]);
         return out;
     }
@@ -1027,6 +1133,43 @@ rust = "Always run clippy before committing."
     }
 
     #[test]
+    fn project_config_parses_frontmatter_overrides() {
+        let dir = std::env::temp_dir().join(format!(
+            "vstack_test_agent_frontmatter_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("vstack.toml"),
+            r#"
+[agent-frontmatter]
+researcher = { color = "purple", model = "generic-model" }
+
+[agent-frontmatter.pi]
+researcher = { model = "openai/gpt-5.5:xhigh", tools = "read, grep, web_research" }
+
+[agent-frontmatter.claude]
+researcher = { model = "opus[1m]" }
+"#,
+        )
+        .unwrap();
+
+        let config = ProjectConfig::load(&dir);
+        let pi = config.frontmatter_for("researcher", "pi");
+        assert_eq!(pi.color.as_deref(), Some("purple"));
+        assert_eq!(pi.model.as_deref(), Some("openai/gpt-5.5:xhigh"));
+        assert_eq!(
+            pi.tools,
+            Some(vec!["read".into(), "grep".into(), "web_research".into()])
+        );
+        let claude = config.frontmatter_for("researcher", "claude-code");
+        assert_eq!(claude.model.as_deref(), Some("opus[1m]"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn write_agent_colors_adds_missing_entries_without_overwriting() {
         let dir =
             std::env::temp_dir().join(format!("vstack_test_agent_colors_{}", std::process::id()));
@@ -1046,11 +1189,14 @@ rust = "Always run clippy before committing."
 
         let updated = std::fs::read_to_string(&path).unwrap();
         assert!(updated.contains("rust = \"blue\""));
-        assert!(updated.contains("iced = \"magenta\""));
+        assert!(updated.contains("iced = { color = \"magenta\" }"));
 
-        let config: ProjectConfig = toml::from_str(&updated).unwrap();
+        let config = ProjectConfig::load(&dir);
         assert_eq!(config.color_for("rust"), Some("blue"));
-        assert_eq!(config.color_for("iced"), Some("magenta"));
+        assert_eq!(
+            config.frontmatter_for("iced", "pi").color.as_deref(),
+            Some("magenta")
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1291,6 +1437,16 @@ command = \"./scripts/x.sh\"\n";
         assert!(
             stripped.contains("event = \"PreToolUse\""),
             "user-added TOML body should be preserved, got: {stripped}"
+        );
+    }
+
+    #[test]
+    fn strip_skills_reference_keeps_newline_before_trailing_toml() {
+        let content = "# agents = \"all\"\n\n# ── Installed skills (reference) ─────────────────────\n#   rust\n[agent-frontmatter.pi]\nresearcher = { model = \"m\" }\n";
+        let stripped = strip_skills_reference(content);
+        assert!(
+            stripped.contains("# agents = \"all\"\n[agent-frontmatter.pi]"),
+            "active TOML should remain on its own line, got: {stripped:?}"
         );
     }
 

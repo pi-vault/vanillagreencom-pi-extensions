@@ -27,11 +27,20 @@ pub fn generate_agent(
     let desc = agent.description.replace('"', "\\\"");
     output.push_str(&format!("description: \"{}\"\n", desc));
 
-    // Map model to Claude Code format
-    let model = agent.model_id("claude-code");
+    let frontmatter = extras.frontmatter_for("claude-code");
+    // Map model to Claude Code format unless project config supplies an exact id.
+    let model = frontmatter
+        .model
+        .clone()
+        .unwrap_or_else(|| agent.model_id("claude-code"));
     output.push_str(&format!("model: {}\n", model));
 
-    if let Some(color) = extras.color.as_ref().or(agent.color.as_ref()) {
+    if let Some(color) = frontmatter
+        .color
+        .as_ref()
+        .or(extras.color.as_ref())
+        .or(agent.color.as_ref())
+    {
         output.push_str(&format!("color: {}\n", color));
     }
 

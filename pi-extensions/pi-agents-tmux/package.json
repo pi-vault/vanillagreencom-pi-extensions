@@ -203,6 +203,34 @@
           "category": "Persistent panes",
           "apply": "reload",
           "requiresReload": true
+        },
+        {
+          "key": "subagentToolAccess",
+          "label": "Subagent tool access",
+          "description": "Choose whether child agents receive only tools listed in their frontmatter allowlist, or all active Pi tools from the child session.",
+          "type": "enum",
+          "enumValues": [
+            "frontmatter",
+            "all"
+          ],
+          "default": "frontmatter",
+          "category": "Execution",
+          "apply": "reload",
+          "requiresReload": true
+        },
+        {
+          "key": "subagentModelSource",
+          "label": "Subagent model source",
+          "description": "Choose whether child agents use the model from agent frontmatter or inherit the parent session model.",
+          "type": "enum",
+          "enumValues": [
+            "frontmatter",
+            "parent"
+          ],
+          "default": "frontmatter",
+          "category": "Execution",
+          "apply": "reload",
+          "requiresReload": true
         }
       ],
       "resources": [

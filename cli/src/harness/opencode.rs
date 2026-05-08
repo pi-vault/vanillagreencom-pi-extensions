@@ -19,14 +19,18 @@ pub fn generate_agent(
 
     let path = dir.join(format!("{}.md", agent.name));
 
-    // Determine mode based on role
-    let mode = match agent.role {
+    let frontmatter = extras.frontmatter_for("opencode");
+    // Determine mode based on role unless project config supplies an exact mode.
+    let mode = frontmatter.mode.as_deref().unwrap_or(match agent.role {
         AgentRole::Engineer => "all",
         AgentRole::Reviewer => "subagent",
         AgentRole::Manager => "subagent",
-    };
+    });
 
-    let model = agent.model_id("openai");
+    let model = frontmatter
+        .model
+        .clone()
+        .unwrap_or_else(|| agent.model_id("openai"));
 
     let mut output = String::new();
     output.push_str("---\n");

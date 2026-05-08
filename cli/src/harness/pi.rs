@@ -34,8 +34,15 @@ pub fn generate_agent(
 
     let path = dir.join(format!("{}.md", agent.name));
 
-    let model = pi_model_for(&agent.model);
-    let tools = pi_tools_for(&agent.role);
+    let frontmatter = extras.frontmatter_for("pi");
+    let model = frontmatter
+        .model
+        .clone()
+        .unwrap_or_else(|| pi_model_for(&agent.model));
+    let tools = frontmatter
+        .tools
+        .clone()
+        .unwrap_or_else(|| pi_tools_for(agent, skills));
 
     let mut output = String::new();
     output.push_str("---\n");
@@ -43,12 +50,20 @@ pub fn generate_agent(
 
     let desc = agent.description.replace('\\', "\\\\").replace('"', "\\\"");
     output.push_str(&format!("description: \"{}\"\n", desc));
-    output.push_str(&format!("tools: {}\n", tools));
+    output.push_str(&format!("tools: {}\n", tools.join(", ")));
     output.push_str(&format!("model: {}\n", model));
-    if let Some(color) = extras.color.as_ref().or(agent.color.as_ref()) {
+    if let Some(color) = frontmatter
+        .color
+        .as_ref()
+        .or(extras.color.as_ref())
+        .or(agent.color.as_ref())
+    {
         output.push_str(&format!("color: {}\n", color));
     }
-    if matches!(agent.role, AgentRole::Engineer) {
+    let pane = frontmatter
+        .pane
+        .unwrap_or_else(|| matches!(agent.role, AgentRole::Engineer));
+    if pane {
         output.push_str("pane: true\n");
     }
     output.push_str("---\n\n");
@@ -92,11 +107,52 @@ pub fn pi_model_for(model: &str) -> String {
 ///
 /// Engineers get the full read+write toolset; reviewers/managers get a
 /// read-only toolset so they can investigate without mutating the workspace.
-pub fn pi_tools_for(role: &AgentRole) -> &'static str {
-    match role {
-        AgentRole::Engineer => "read, grep, find, ls, bash, edit, write",
-        AgentRole::Reviewer | AgentRole::Manager => "read, grep, find, ls, bash",
+pub fn pi_tools_for(agent: &Agent, skills: &[(String, String)]) -> Vec<String> {
+    let mut tools = match agent.role {
+        AgentRole::Engineer => vec!["read", "grep", "find", "ls", "bash", "edit", "write"],
+        AgentRole::Reviewer | AgentRole::Manager => vec!["read", "grep", "find", "ls", "bash"],
+    };
+
+    let skill_names: std::collections::HashSet<&str> =
+        skills.iter().map(|(name, _)| name.as_str()).collect();
+
+    if skill_names.contains("deep-research") {
+        tools.extend(["web_research", "web_search", "web_fetch", "get_web_content"]);
     }
+
+    if skill_names.contains("project-management")
+        || skill_names.contains("orchestration")
+        || skill_names.contains("flightdeck")
+        || skill_names.contains("issue-lifecycle")
+        || skill_names.contains("second-opinion")
+    {
+        tools.extend([
+            "question",
+            "tasks_write",
+            "subagent",
+            "get_subagent_result",
+            "steer_subagent",
+            "bg_task",
+            "bg_status",
+        ]);
+    }
+
+    if matches!(agent.role, AgentRole::Engineer) {
+        tools.extend(["tool_batch", "apply_patch"]);
+    }
+
+    dedupe_tools(tools)
+}
+
+fn dedupe_tools(tools: Vec<&str>) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for tool in tools {
+        if seen.insert(tool) {
+            out.push(tool.to_string());
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -126,18 +182,29 @@ mod tests {
 
     #[test]
     fn pi_tools_engineer_gets_write_tools() {
-        let tools = pi_tools_for(&AgentRole::Engineer);
-        assert!(tools.contains("write"));
-        assert!(tools.contains("edit"));
-        assert!(tools.contains("bash"));
+        let agent = agent_fixture("rust", AgentRole::Engineer, "opus");
+        let tools = pi_tools_for(&agent, &[]);
+        assert!(tools.iter().any(|tool| tool == "write"));
+        assert!(tools.iter().any(|tool| tool == "edit"));
+        assert!(tools.iter().any(|tool| tool == "bash"));
     }
 
     #[test]
     fn pi_tools_reviewer_is_read_only() {
-        let tools = pi_tools_for(&AgentRole::Reviewer);
-        assert!(!tools.contains("write"));
-        assert!(!tools.contains("edit"));
-        assert!(tools.contains("read"));
+        let agent = agent_fixture("reviewer-arch", AgentRole::Reviewer, "sonnet");
+        let tools = pi_tools_for(&agent, &[]);
+        assert!(!tools.iter().any(|tool| tool == "write"));
+        assert!(!tools.iter().any(|tool| tool == "edit"));
+        assert!(tools.iter().any(|tool| tool == "read"));
+    }
+
+    #[test]
+    fn pi_tools_deep_research_gets_web_research() {
+        let agent = agent_fixture("researcher", AgentRole::Engineer, "opus");
+        let skills = vec![("deep-research".into(), "Exa research".into())];
+        let tools = pi_tools_for(&agent, &skills);
+        assert!(tools.iter().any(|tool| tool == "web_research"));
+        assert!(tools.iter().any(|tool| tool == "get_web_content"));
     }
 
     #[test]
@@ -151,7 +218,7 @@ mod tests {
             color: Some("magenta".into()),
             guidance: Some("Read open issues and start.".into()),
             instructions: Some("Run clippy before commits.".into()),
-            custom_hooks: Vec::new(),
+            ..AgentExtras::default()
         };
         let skills = vec![(
             "rust-arch".into(),

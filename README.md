@@ -67,9 +67,13 @@ rust = ["rust-arch", "rust-cargo", "github", "worktree"]
 [agent-additional-instructions]
 rust = "Always run clippy before committing."
 
-# Agent display color.
-[agent-colors]
-rust = "green"
+# Generated-frontmatter overrides.
+[agent-frontmatter]
+rust = { color = "green" }
+
+# Harness-specific frontmatter values win over top-level values.
+[agent-frontmatter.pi]
+researcher = { model = "openai/gpt-5.5:xhigh", tools = ["read", "grep", "find", "ls", "bash", "edit", "write", "web_research"] }
 ```
 
 Custom safety hooks (`[[custom-hooks]]`) and per-skill instructions (`[skill-instructions]`) follow the same pattern. Direct edits to generated agent or skill files are also picked up automatically — everything survives upstream updates.

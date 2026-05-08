@@ -33,5 +33,6 @@ Executes research issues and writes evidence-backed findings reports.
 4. Write findings to the exact requested path.
 5. Keep `findings.md` clean: no embedded raw JSON, includes source URLs/citations, executive summary, key findings, evidence, recommendation/decision criteria, risks, and revisit conditions.
 6. Preserve raw Exa metadata in the sidecar JSON path (`findings.raw.json` or provided `raw-exa.json`) and verify it exists when expected.
-7. Do not change production code.
-8. Return exactly one completion message after `findings.md` exists and passes the clean-report checks.
+7. Do not run local reproduction, benchmark, test, code-inspection, or implementation commands unless the delegation explicitly asks for local validation in addition to Exa research. If local validation is requested, keep it clearly separated from provider research and cite commands/files separately from Exa sources.
+8. Do not change production code.
+9. Return exactly one completion message after `findings.md` exists and passes the clean-report checks.

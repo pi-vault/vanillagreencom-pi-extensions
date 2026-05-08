@@ -31,6 +31,7 @@ Use this skill for evidence-backed research reports, architectural investigation
 - For workflow-owned research, write `findings.md` to the requested research docs path exactly.
 - Include citations/source URLs in every findings report.
 - Keep `findings.md` clean and human-readable; preserve raw Exa metadata in a sidecar JSON file (`findings.raw.json` by default when `--output findings.md` is used). Evidence excerpts must be sanitized so source Markdown headings do not render as large quoted headings.
+- Once the requested report and raw sidecar exist, validate them and stop. Do not add local reproduction, benchmark, test, code-inspection, or implementation work unless the caller explicitly requested local validation in addition to Exa research.
 - If `EXA_API_KEY` is missing, fail with clear setup instructions. `EXA_API_KEY` may be a direct key or a 1Password `op://vault/item/field` reference when the `op` CLI is installed and signed in.
 - Use `--mode standard` by default. Use `--mode lite` for fast spikes and `--mode full` for strategic/high-risk decisions. Explicit `--type`, `--num-results`, and `--text-max-characters` override mode defaults.
 - Use one adaptive findings format for all modes. The mode changes depth/source volume and Exa content settings, not the required report sections; record mode and source counts in `## Research Metadata`.

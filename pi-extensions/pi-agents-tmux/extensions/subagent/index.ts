@@ -43,7 +43,7 @@ const STATUSLINE_SYMBOL = Symbol.for("vstack.pi-agents-tmux.statusline");
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
 const COLLAPSED_ITEM_COUNT = 10;
-const PANE_LAUNCHER_VERSION = 8;
+const PANE_LAUNCHER_VERSION = 9;
 const SUBAGENT_WIDGET_KEY = "vstack-agents-dashboard";
 const FIRST_AGENT_COLUMN_ROWS = 3;
 const NEXT_AGENT_COLUMN_ROWS = 4;
@@ -202,6 +202,26 @@ function settingBoolean(key: string, fallback: boolean, cwd?: string): boolean {
 function settingString(key: string, fallback: string, cwd?: string): string {
 	const value = readVstackConfig(cwd)[key];
 	return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function subagentToolAccess(cwd?: string): "frontmatter" | "all" {
+	return settingString("subagentToolAccess", "frontmatter", cwd) === "all" ? "all" : "frontmatter";
+}
+
+function subagentModelSource(cwd?: string): "frontmatter" | "parent" {
+	return settingString("subagentModelSource", "frontmatter", cwd) === "parent" ? "parent" : "frontmatter";
+}
+
+function selectedModelForAgent(agent: AgentConfig, parentModel: string | undefined, cwd?: string): string | undefined {
+	return subagentModelSource(cwd) === "parent" ? (parentModel ?? agent.model) : (agent.model ?? parentModel);
+}
+
+function selectedToolsForAgent(agent: AgentConfig, cwd: string | undefined, extraTools: string[] = []): string[] | undefined {
+	if (subagentToolAccess(cwd) === "all") return undefined;
+	const tools = [...(agent.tools ?? []), ...extraTools]
+		.map((tool) => tool.trim())
+		.filter(Boolean);
+	return tools.length > 0 ? [...new Set(tools)] : undefined;
 }
 
 function formatTokens(count: number): string {
@@ -3402,7 +3422,8 @@ async function writeLauncher(
 	if (bridgeExtension) args.push("-e", bridgeExtension);
 	if (model) args.push("--model", model);
 	if (thinkingLevel && thinkingLevel !== "off") args.push("--thinking", thinkingLevel);
-	if (agent.tools && agent.tools.length > 0) args.push("--tools", [...new Set([...agent.tools, "complete_subagent"])].join(","));
+	const selectedTools = selectedToolsForAgent(agent, cwd, ["complete_subagent"]);
+	if (selectedTools && selectedTools.length > 0) args.push("--tools", selectedTools.join(","));
 
 	const invocation = getPiInvocation(args);
 	const command = [invocation.command, ...invocation.args].map(shellQuote).join(" ");
@@ -3454,7 +3475,7 @@ async function ensurePersistentPane(
 			return;
 		}
 
-		const selectedModel = parentModel ?? agent.model;
+		const selectedModel = selectedModelForAgent(agent, parentModel, cwd);
 		const paths = await writeLauncher(runtimeRoot, parentSessionId, cwd, agent, selectedModel, parentThinkingLevel);
 		const windowName = `agent:${agent.name}`;
 		primaryPaneId = await getPrimaryPaneId();
@@ -3908,10 +3929,11 @@ async function runSingleAgent(
 	await fs.promises.mkdir(sessionsDir, { recursive: true, mode: 0o700 }).catch(() => undefined);
 	const resumedSessionPath = path.join(sessionsDir, `bg-${safeFileName(agent.name)}-${safeFileName(effectiveSessionKey)}.jsonl`);
 	args.push("--session", resumedSessionPath);
-	const selectedModel = parentModel ?? agent.model;
+	const selectedModel = selectedModelForAgent(agent, parentModel, defaultCwd);
 	if (selectedModel) args.push("--model", selectedModel);
 	if (parentThinkingLevel && parentThinkingLevel !== "off") args.push("--thinking", parentThinkingLevel);
-	if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
+	const selectedTools = selectedToolsForAgent(agent, defaultCwd);
+	if (selectedTools && selectedTools.length > 0) args.push("--tools", selectedTools.join(","));
 
 	let tmpPromptDir: string | null = null;
 	let tmpPromptPath: string | null = null;
