@@ -20,6 +20,7 @@ import {
 	readOnlyCallText,
 	resultTruncated,
 	textContent,
+	type TruncatedLines,
 } from "./text.js";
 import { renderPathListPreview } from "./text.js";
 

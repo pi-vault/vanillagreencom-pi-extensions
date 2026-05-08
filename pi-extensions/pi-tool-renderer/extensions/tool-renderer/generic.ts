@@ -17,6 +17,7 @@ import {
 	makeEmpty,
 	makeTruncatedLines,
 	pendingStatusPrefix,
+	renderPendingDetail,
 	textContent,
 	type TruncatedLines,
 } from "./text.js";

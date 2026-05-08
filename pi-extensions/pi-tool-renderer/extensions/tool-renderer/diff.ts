@@ -15,8 +15,10 @@ import {
 	updateActiveAnsiStyle,
 	visibleLength,
 	visibleWidth,
+	type AnsiParts,
 } from "./ansi.js";
 import {
+	bashDiffRenderingEnabled,
 	diffBackgroundEnabled,
 	settingBoolean,
 	settingNumber,
@@ -25,6 +27,7 @@ import { borderMuted, stackPrefix, toolLabel, treeConnector } from "./theme.js";
 import {
 	makeEmpty,
 	makeTruncatedLines,
+	isGitDiffCommand,
 	pendingStatusPrefix,
 	type TruncatedLines,
 } from "./text.js";

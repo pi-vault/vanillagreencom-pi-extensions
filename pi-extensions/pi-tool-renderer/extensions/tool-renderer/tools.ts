@@ -41,7 +41,7 @@ import {
 	resultTruncated,
 	textContent,
 } from "./text.js";
-import { renderStackedToolResult } from "./stack.js";
+import { renderStackedToolResult, type StackableToolName } from "./stack.js";
 
 export type BuiltInToolName = StackableToolName | "edit" | "write";
 export type BuiltInToolSet = Partial<Record<BuiltInToolName, any>>;
