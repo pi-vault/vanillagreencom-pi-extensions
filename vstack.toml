@@ -15,7 +15,7 @@
 # [agent-frontmatter.pi]
 # planner = { color = "blue", model = "openai-codex/gpt-5.5:high", deny-tools = ["bash"] }
 #
-# The Pi `/agents` popup can edit model/tools/deny-tools/color for vstack-managed project
+# The Pi `/agents` popup can edit model/deny-tools/tools/color for vstack-managed project
 # agents and writes those changes into `[agent-frontmatter.pi]` automatically.
 
 # Skill mappings per agent — always loaded into context

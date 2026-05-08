@@ -637,8 +637,8 @@ function editableAgentFrontmatterText(agent: AgentConfig): string {
 		"# Edit Pi agent frontmatter overrides. Blank values remove the override.",
 		"# For vstack-managed project agents, this writes [agent-frontmatter.pi] in vstack.toml.",
 		`model: ${current.model}`,
-		`tools: ${current.tools.join(", ")}`,
 		`deny-tools: ${current.denyTools.join(", ")}`,
+		`tools: ${current.tools.join(", ")}`,
 		`color: ${current.color}`,
 		"",
 	].join("\n");
@@ -770,7 +770,7 @@ function tomlAgentKey(agentName: string): string {
 }
 
 function renderTomlInlineTable(fields: Map<string, string>): string {
-	const preferred = ["color", "model", "tools", "deny-tools", "pane", "mode", "sandbox-mode", "model-reasoning-effort"];
+	const preferred = ["color", "model", "deny-tools", "tools", "pane", "mode", "sandbox-mode", "model-reasoning-effort"];
 	const keys = [...preferred.filter((key) => fields.has(key)), ...[...fields.keys()].filter((key) => !preferred.includes(key)).sort()];
 	return `{ ${keys.map((key) => `${key} = ${fields.get(key)}`).join(", ")} }`;
 }
@@ -781,7 +781,7 @@ function upsertAgentFrontmatterToml(content: string, agentName: string, edit: Ag
 	let sectionStart = lines.findIndex((line) => line.trim() === section);
 	if (sectionStart < 0) {
 		const insertAt = lines.findIndex((line) => line.trim().startsWith("# ── Installed skills"));
-		const block = ["", "# Pi-specific frontmatter overrides. This is where the", "# Pi /agents popup writes model, tools, deny-tools, and color changes for", "# vstack-managed project agents.", section, ""];
+		const block = ["", "# Pi-specific frontmatter overrides. This is where the", "# Pi /agents popup writes model, deny-tools, tools, and color changes for", "# vstack-managed project agents.", section, ""];
 		if (insertAt >= 0) lines.splice(insertAt, 0, ...block);
 		else lines.push(...block);
 		sectionStart = lines.findIndex((line) => line.trim() === section);
@@ -4794,7 +4794,7 @@ function renderTraceTabBar(items: TraceViewerItem[], selected: number, width: nu
 }
 
 async function editAgentFrontmatterOverrides(ctx: ExtensionContext, agent: AgentConfig): Promise<string | undefined> {
-	const edited = await ctx.ui.editor(`Edit ${agent.name} frontmatter — model/tools/deny-tools/color`, editableAgentFrontmatterText(agent));
+	const edited = await ctx.ui.editor(`Edit ${agent.name} frontmatter — model/deny-tools/tools/color`, editableAgentFrontmatterText(agent));
 	if (edited === undefined) return undefined;
 	const parsed = parseEditableAgentFrontmatterText(edited);
 	if (isVstackManagedAgentFile(agent)) {

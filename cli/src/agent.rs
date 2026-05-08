@@ -223,8 +223,8 @@ pub struct AgentFrontmatterOverrides {
     #[serde(default, deserialize_with = "deserialize_optional_tools")]
     pub tools: Option<Vec<String>>,
     /// Tool denylist applied after defaults or an explicit `tools` allowlist.
-    /// Vstack generators subtract these names for harnesses whose native
-    /// frontmatter only supports allowlists.
+    /// Generators either emit a native deny field (for example Claude Code
+    /// `disallowedTools`) or preserve the denylist for the harness extension.
     #[serde(default, deserialize_with = "deserialize_optional_tools")]
     pub deny_tools: Option<Vec<String>>,
     /// Pi persistent pane flag.

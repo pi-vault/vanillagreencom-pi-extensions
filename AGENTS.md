@@ -30,11 +30,11 @@ cli/src/
 ├── installer.rs         Symlink/copy logic, per-harness hook installation, removal
 ├── harness/
 │   ├── mod.rs           Harness enum, detection, routing
-│   ├── claude.rs        → .claude/agents/*.md (tools + skills + hooks frontmatter, "Required Skills")
+│   ├── claude.rs        → .claude/agents/*.md (tools/disallowedTools + skills + hooks frontmatter, "Required Skills")
 │   ├── cursor.rs        → .cursor/rules/*.mdc (description + alwaysApply + skills section)
 │   ├── opencode.rs      → .opencode/agents/*.md (YAML frontmatter + skills section)
 │   ├── codex.rs         → .codex/agents/*.toml (developer_instructions + skills section)
-│   └── pi.rs            → .pi/agents/*.md (Pi frontmatter: name, description, tools, model, pane)
+│   └── pi.rs            → .pi/agents/*.md (Pi frontmatter: name, description, tools, deny-tools, model, pane)
 └── tui/
     ├── mod.rs           Re-exports and shared types (DiscoveredItems incl. pi_extensions)
     ├── install_flow.rs  Install wizard, event loop, inline update, tab mutation

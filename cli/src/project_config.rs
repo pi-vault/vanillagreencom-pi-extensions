@@ -70,8 +70,8 @@ fn is_agent_frontmatter_override(value: &toml::Value) -> bool {
     [
         "color",
         "model",
-        "tools",
         "deny-tools",
+        "tools",
         "pane",
         "mode",
         "sandbox-mode",
@@ -503,8 +503,8 @@ fn render_inline_table_fields(fields: &[(String, String)]) -> String {
     let preferred = [
         "color",
         "model",
-        "tools",
         "deny-tools",
+        "tools",
         "pane",
         "mode",
         "sandbox-mode",
@@ -1439,7 +1439,7 @@ fn sync_agent_frontmatter_heading(content: &str) -> String {
 fn agent_frontmatter_pi_heading() -> String {
     let mut out = String::new();
     out.push_str("# Pi-specific frontmatter overrides. This is where the\n");
-    out.push_str("# Pi /agents popup writes model, tools, deny-tools, and color changes for\n");
+    out.push_str("# Pi /agents popup writes model, deny-tools, tools, and color changes for\n");
     out.push_str("# vstack-managed project agents.\n");
     out.push_str("# Examples:\n");
     out.push_str("# rust = { color = \"orange\" }\n");
