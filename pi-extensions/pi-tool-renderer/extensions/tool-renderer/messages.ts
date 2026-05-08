@@ -40,7 +40,7 @@ function renderUserMessageBorder(lines: string[], width: number, theme: any): st
 		return `${border(left)}${marker("π")}${border(right)}`;
 	};
 	const fitLine = (line: string) => {
-		const clipped = truncateToWidth(line, innerWidth, "");
+		const clipped = truncateAnsi(line, innerWidth);
 		return applyBaseTextFg(clipped, theme) + " ".repeat(Math.max(0, innerWidth - visibleWidth(clipped)));
 	};
 
