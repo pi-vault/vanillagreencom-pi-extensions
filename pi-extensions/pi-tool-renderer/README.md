@@ -62,6 +62,8 @@ Enable through `pi-extension-manager` settings:
 - MCP-looking tool renderers (`mcp`, `mcp__server__tool`, etc.) with `mcpOutputMode`.
 - `workingIndicator`: optionally use a compact pulse or hide Pi's streaming indicator.
 - `toolChrome`: optional global container chrome (`off`, `transparent`, or `outlines`).
+- `rightMarginGuard=true`: render compact tool chrome, wrapped lines, diffs, and compact user-message borders one column short to avoid right-margin auto-wrap flashes in tmux and some terminals.
+- `pendingStatusAnimation=false`: animate pending compact tool bullets; disabled by default for more stable streaming output at the bottom of terminal panes.
 
 Output modes can be tuned live with `readOutputMode`, `searchOutputMode`, `bashOutputMode`, and `mcpOutputMode`.
 
