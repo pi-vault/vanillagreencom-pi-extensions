@@ -251,8 +251,13 @@ export async function refreshTaskDiagnostics(runtimeRoot: string, record: PaneTa
 			}
 		}
 		if (!inboxExists && !processingExists && !doneExists && !outboxExists && !archiveExists) {
-			if (record.status === "queued" || record.status === "running") nextStatus = "unknown";
-			add(`No task handoff or completion artifacts are present for ${record.taskId}; the pane may have been reset or the runtime was cleaned.`);
+			// Bridge-delivered follow-up tasks (created without an inbox file) legitimately have no
+			// on-disk artifacts until the child writes its outbox. Only treat the missing-artifact
+			// state as a lost task when the record was originally inbox-queued.
+			if (record.inboxFile && (record.status === "queued" || record.status === "running")) {
+				nextStatus = "unknown";
+				add(`No task handoff or completion artifacts are present for ${record.taskId}; the pane may have been reset or the runtime was cleaned.`);
+			}
 		}
 	}
 
