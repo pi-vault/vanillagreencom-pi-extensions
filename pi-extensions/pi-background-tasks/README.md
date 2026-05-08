@@ -26,6 +26,7 @@ Restart Pi after installation.
 ## What it provides
 
 - `bg_task` tool for spawning, listing, tailing logs, stopping, and clearing tracked tasks.
+- Ships `instructions.md` so vstack/npm install adds `bg_task`/`bg_status` usage rules to the scope's `APPEND_SYSTEM.md`, removed on uninstall or disable.
 - `bg_status` compatibility tool for list/log/stop by PID.
 - `/bg` dashboard and task-control command.
 - `Alt+.` arms a one-shot diversion so the next not-yet-started bash command runs as a background task instead of blocking the turn.

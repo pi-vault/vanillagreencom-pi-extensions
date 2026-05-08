@@ -24,6 +24,7 @@ Restart Pi after installation.
 ## What it provides
 
 - `subagent` tool for one-off delegation, parallel delegation, or sequential chains.
+- Ships `instructions.md` so vstack/npm install adds `subagent`/`steer_subagent`/`get_subagent_result` usage rules to the scope's `APPEND_SYSTEM.md`, removed on uninstall or disable.
 - Project/user agent discovery from `.pi/agents`, `.claude/agents`, and `~/.pi/agent/agents`.
 - Persistent tmux panes for agents with `pane: true` frontmatter.
 - Grouped, themed completion notifications for persistent pane results.

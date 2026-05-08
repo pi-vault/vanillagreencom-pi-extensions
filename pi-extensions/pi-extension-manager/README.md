@@ -37,6 +37,7 @@ Restart Pi after installation.
 - `alt+shift+e` and `F11` open the extension manager popup; `alt+shift+s` and `F12` open the settings popup.
 - `/extensions:settings` starts with `All`, then one tab per package with settings. Type to filter, `Enter` to toggle/edit, and `Esc` to cancel. The popup keeps a fixed height and pads blank space under short filtered lists.
 - Inline setting editors support cursor movement: `←`/`→`, `Home`/`End`, `alt+←`/`alt+→` word movement, `Backspace`/`Delete`, and `Ctrl+U` clear.
+- For packages declaring `pi.appendSystem` in `package.json`, enabling/disabling and uninstalling syncs the corresponding block in the scope's `APPEND_SYSTEM.md` (added on enable/install, removed on disable/uninstall).
 
 Settings are stored under `vstack.extensionManager` in Pi `settings.json` files so they do not collide with Pi's top-level `extensions` array.
 

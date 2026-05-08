@@ -24,6 +24,7 @@ Restart Pi after installation.
 ## What it provides
 
 - `question` tool for multiple-choice question tabs.
+- Ships `instructions.md` so vstack/npm install adds `question` usage rules to the scope's `APPEND_SYSTEM.md`, removed on uninstall or disable.
 - `ctx.askQuestions(payload)` helper for other Pi extensions.
 - Editor-area UI by default, matching opencode/Claude-style prompts.
 - Wrapped option labels/descriptions so long choices remain readable in narrow panes.

@@ -54,6 +54,7 @@ The model updates tasks with `tasks_write`. Tool results render as compact inlin
 
 Panel behavior:
 
+- Ships `instructions.md` so vstack/npm install adds `tasks_write` usage rules to the scope's `APPEND_SYSTEM.md`, removed on uninstall or disable.
 - Keeps one active task highlighted.
 - Automatically advances to the next pending task when the active task is completed/dropped.
 - Hides when all tasks are complete and reappears when pending work is added.
