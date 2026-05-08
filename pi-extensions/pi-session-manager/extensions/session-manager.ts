@@ -52,6 +52,7 @@ type SessionAction = { type: "resume"; path: string; title: string; keepCurrentM
 type SessionManagerContext = ExtensionCommandContext | ExtensionContext;
 const pendingSessionManagerActions = new Map<string, SessionAction>();
 let pendingSessionManagerActionCounter = 0;
+const sessionUserMessagesCache = new Map<string, SessionUserMessage[]>();
 
 function pinSessionModel(sessionPath: string, model: NonNullable<ExtensionContext["model"]>, thinkingLevel?: string): void {
 	const manager = SessionManager.open(sessionPath);
@@ -94,6 +95,12 @@ interface FlatSessionNode {
 	ancestorContinues: boolean[];
 	score: number;
 	snippet?: string;
+}
+
+interface SessionUserMessage {
+	index: number;
+	text: string;
+	timestamp?: number;
 }
 
 type VstackConfig = Record<string, unknown>;
@@ -280,21 +287,62 @@ function sessionResumeTitle(session: SessionInfo): string {
 	return sessionFallbackName(session);
 }
 
-function sessionSearchText(session: SessionInfo): string {
-	return [
-		session.id,
-		session.name ?? "",
-		session.cwd,
-		session.path,
-		session.firstMessage,
-		session.allMessagesText,
-	]
-		.map((part) => oneLine(part))
-		.join("\n");
-}
-
 function normalizeSearchText(text: string): string {
 	return oneLine(text).toLowerCase();
+}
+
+function messageContentText(content: unknown): string {
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	return content.map((part: any) => {
+		if (part?.type === "text" && typeof part.text === "string") return part.text;
+		if (part?.type === "image") return "[image]";
+		return "";
+	}).filter(Boolean).join(" ");
+}
+
+function sessionMessageTimestamp(entry: any, message: any): number | undefined {
+	if (typeof message?.timestamp === "number" && Number.isFinite(message.timestamp)) return message.timestamp;
+	if (typeof entry?.timestamp === "number" && Number.isFinite(entry.timestamp)) return entry.timestamp;
+	if (typeof entry?.timestamp === "string") {
+		const parsed = new Date(entry.timestamp).getTime();
+		if (!Number.isNaN(parsed)) return parsed;
+	}
+	return undefined;
+}
+
+function sessionUserMessages(sessionPath: string): SessionUserMessage[] {
+	const cached = sessionUserMessagesCache.get(sessionPath);
+	if (cached) return cached;
+	const messages: SessionUserMessage[] = [];
+	try {
+		const lines = readFileSync(sessionPath, "utf8").split(/\r?\n/);
+		for (const line of lines) {
+			if (!line.trim()) continue;
+			let entry: any;
+			try { entry = JSON.parse(line); } catch { continue; }
+			const message = entry?.type === "message" ? entry.message : undefined;
+			if (!message || message.role !== "user") continue;
+			const text = oneLine(messageContentText(message.content));
+			if (!text) continue;
+			messages.push({ index: messages.length + 1, text, timestamp: sessionMessageTimestamp(entry, message) });
+		}
+	} catch {
+		// Ignore unreadable sessions; callers fall back to SessionInfo.firstMessage.
+	}
+	sessionUserMessagesCache.set(sessionPath, messages);
+	return messages;
+}
+
+function userMessagesForSession(session: SessionInfo): SessionUserMessage[] {
+	const messages = sessionUserMessages(session.path);
+	if (messages.length > 0) return messages;
+	const fallback = oneLine(session.firstMessage || "");
+	return fallback ? [{ index: 1, text: fallback }] : [];
+}
+
+function sessionTitleSearchText(session: SessionInfo): string {
+	return [session.name ?? "", sessionResumeTitle(session), sessionFallbackName(session)].map((part) => oneLine(part)).join("\n");
 }
 
 function parseQuery(query: string): ParsedQuery {
@@ -352,52 +400,58 @@ function parseQuery(query: string): ParsedQuery {
 	return { mode: "tokens", tokens };
 }
 
-function simpleFuzzyScore(needle: string, haystack: string): number | undefined {
-	const query = needle.toLowerCase();
-	const text = haystack.toLowerCase();
-	if (!query) return 0;
-	const direct = text.indexOf(query);
-	if (direct >= 0) return direct * 0.1;
-	let pos = 0;
-	let score = 1000;
-	for (const ch of query) {
-		const found = text.indexOf(ch, pos);
-		if (found < 0) return undefined;
-		score += found - pos + 1;
-		pos = found + 1;
-	}
-	return score;
+function searchWordLengthPenalty(word: string, query: string): number {
+	return Math.max(0, word.length - query.length);
 }
 
-function matchSession(session: SessionInfo, parsed: ParsedQuery): MatchResult {
-	const text = sessionSearchText(session);
+function searchStringScore(needle: string, haystack: string): number | undefined {
+	const query = normalizeSearchText(needle);
+	const text = normalizeSearchText(haystack);
+	if (!query) return 0;
+	let best: number | undefined;
+	const record = (score: number) => {
+		best = best === undefined ? score : Math.min(best, score);
+	};
+	if (/^[a-z0-9_]+$/i.test(query)) {
+		for (const match of text.matchAll(/[a-z0-9_]+/gi)) {
+			const word = match[0].toLowerCase();
+			if (word === query) record(0);
+			else if (word.startsWith(query)) record(10 + searchWordLengthPenalty(word, query));
+			else if (word.includes(query)) record(100 + searchWordLengthPenalty(word, query));
+		}
+		return best;
+	}
+	return text.includes(query) ? 0 : undefined;
+}
+
+function matchTextSearch(text: string, parsed: ParsedQuery): MatchResult {
 	if (parsed.mode === "regex") {
 		if (!parsed.regex) return { matches: false, score: 0 };
+		parsed.regex.lastIndex = 0;
 		const index = text.search(parsed.regex);
-		return index < 0 ? { matches: false, score: 0 } : { matches: true, score: index * 0.1 };
+		return index < 0 ? { matches: false, score: 0 } : { matches: true, score: 0 };
 	}
 	if (parsed.tokens.length === 0) return { matches: true, score: 0 };
-
 	let score = 0;
-	let normalized: string | undefined;
 	for (const token of parsed.tokens) {
-		if (token.kind === "phrase") {
-			normalized ??= normalizeSearchText(text);
-			const phrase = normalizeSearchText(token.value);
-			const index = normalized.indexOf(phrase);
-			if (index < 0) return { matches: false, score: 0 };
-			score += index * 0.1;
-			continue;
-		}
-		const tokenScore = simpleFuzzyScore(token.value, text);
+		const tokenScore = searchStringScore(token.value, text);
 		if (tokenScore === undefined) return { matches: false, score: 0 };
 		score += tokenScore;
 	}
 	return { matches: true, score };
 }
 
-function snippetSource(session: SessionInfo): string {
-	return oneLine(session.allMessagesText || session.firstMessage || "");
+function matchSession(session: SessionInfo, parsed: ParsedQuery): MatchResult {
+	if (parsed.mode === "tokens" && parsed.tokens.length === 0) return { matches: true, score: 0 };
+	let best: number | undefined;
+	for (const message of userMessagesForSession(session)) {
+		const match = matchTextSearch(message.text, parsed);
+		if (!match.matches) continue;
+		best = best === undefined ? match.score : Math.min(best, match.score);
+	}
+	if (best !== undefined) return { matches: true, score: best };
+	const titleMatch = matchTextSearch(sessionTitleSearchText(session), parsed);
+	return titleMatch.matches ? titleMatch : { matches: false, score: 0 };
 }
 
 function snippetAround(text: string, start: number, length: number, width: number): string {
@@ -409,14 +463,16 @@ function snippetAround(text: string, start: number, length: number, width: numbe
 }
 
 function buildSnippet(session: SessionInfo, parsed: ParsedQuery): string | undefined {
-	const source = snippetSource(session);
-	if (!source) return undefined;
-	if (parsed.mode === "regex" && parsed.regex) {
-		parsed.regex.lastIndex = 0;
-		const match = parsed.regex.exec(source);
-		return match ? snippetAround(source, match.index, match[0].length, 180) : undefined;
-	}
-	if (parsed.mode === "tokens") {
+	const messages = userMessagesForSession(session);
+	if (parsed.mode === "tokens" && parsed.tokens.length === 0) return messages[messages.length - 1]?.text.slice(0, 180);
+	for (const message of messages) {
+		const source = message.text;
+		if (!matchTextSearch(source, parsed).matches) continue;
+		if (parsed.mode === "regex" && parsed.regex) {
+			parsed.regex.lastIndex = 0;
+			const match = parsed.regex.exec(source);
+			return match ? snippetAround(source, match.index, match[0].length, 180) : source.slice(0, 180);
+		}
 		const lower = source.toLowerCase();
 		for (const token of parsed.tokens) {
 			const value = normalizeSearchText(token.value);
@@ -424,8 +480,9 @@ function buildSnippet(session: SessionInfo, parsed: ParsedQuery): string | undef
 			const index = lower.indexOf(value.toLowerCase());
 			if (index >= 0) return snippetAround(source, index, value.length, 180);
 		}
+		return source.slice(0, 180);
 	}
-	return source.slice(0, 180);
+	return undefined;
 }
 
 function styleSearchMatches(text: string, query: string): string {
@@ -658,6 +715,7 @@ class SessionManagerOverlay implements Focusable {
 				this.requestRender();
 			});
 			if (seq !== this.loadSeq) return;
+			sessionUserMessagesCache.clear();
 			this.sessions = sessions.sort((a, b) => b.modified.getTime() - a.modified.getTime());
 			this.mode = "browse";
 			this.applyFilter(false);
