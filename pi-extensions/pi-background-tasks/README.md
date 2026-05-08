@@ -89,6 +89,8 @@ Useful `spawn` options:
 
 Tasks are scoped to the current Pi runtime and are stopped on session shutdown. On Unix, shells start in their own process group so `/bg:stop` and shutdown terminate child processes as well as the shell. For Pi bridge, session monitoring, and tmux/agent pane monitoring, prefer `bg_task`, `/bg:run`, or the built-in auto-backgrounding over raw foreground polling loops.
 
+Background tasks inherit Pi's current process environment and working directory. The extension also prepends `${PI_CODING_AGENT_DIR:-~/.pi/agent}/bin` to `PATH` when that directory exists, so installed Pi package CLIs such as `pi-bridge` are available. Project env files such as `.env.local` are not sourced by the shell automatically; they are available only when the invoked framework/tool loads them, or when the command explicitly sources them.
+
 ## Attribution
 
 This package is locally owned by vstack and is based on ideas and portions of the MIT-licensed `@ifi/pi-background-tasks` package from `ifiokjr/oh-pi`. See `THIRD_PARTY_NOTICES.md`.
