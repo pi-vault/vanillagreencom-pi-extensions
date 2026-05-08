@@ -1,4 +1,5 @@
 import { type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { resolve } from "node:path";
 
 import {
 	attachDiffDetails,
