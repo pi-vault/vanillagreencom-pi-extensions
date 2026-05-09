@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { withFileMutationQueue, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { atomicWriteFile, withCrossProcessFileLock } from "./file-lock.js";
 import { stringifyError } from "./format.js";
 import { safeFileName } from "./names.js";
 import {
@@ -52,12 +53,13 @@ export async function readPaneRegistry(runtimeRoot: string): Promise<PaneRegistr
 	}
 }
 
+async function atomicWriteJson(filePath: string, data: unknown): Promise<void> {
+	await atomicWriteFile(filePath, `${JSON.stringify(data, null, "\t")}\n`);
+}
+
 export async function writePaneRegistry(runtimeRoot: string, registry: PaneRegistry): Promise<void> {
 	const filePath = registryPath(runtimeRoot);
-	await withFileMutationQueue(filePath, async () => {
-		await fs.promises.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
-		await fs.promises.writeFile(filePath, `${JSON.stringify(registry, null, "\t")}\n`, { encoding: "utf-8", mode: 0o600 });
-	});
+	await withCrossProcessFileLock(filePath, () => atomicWriteJson(filePath, registry));
 }
 
 export async function updatePaneRegistry(
@@ -66,7 +68,7 @@ export async function updatePaneRegistry(
 ): Promise<PaneRegistry> {
 	const filePath = registryPath(runtimeRoot);
 	let registry: PaneRegistry = {};
-	await withFileMutationQueue(filePath, async () => {
+	await withCrossProcessFileLock(filePath, async () => {
 		try {
 			const content = await fs.promises.readFile(filePath, "utf-8");
 			const parsed = JSON.parse(content);
@@ -75,8 +77,7 @@ export async function updatePaneRegistry(
 			registry = {};
 		}
 		await mutator(registry);
-		await fs.promises.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
-		await fs.promises.writeFile(filePath, `${JSON.stringify(registry, null, "\t")}\n`, { encoding: "utf-8", mode: 0o600 });
+		await atomicWriteJson(filePath, registry);
 	});
 	return registry;
 }
@@ -96,16 +97,13 @@ export async function readTaskRegistry(runtimeRoot: string): Promise<PaneTaskReg
 
 export async function writeTaskRegistry(runtimeRoot: string, records: PaneTaskRegistry): Promise<void> {
 	const filePath = taskRegistryPath(runtimeRoot);
-	await withFileMutationQueue(filePath, async () => {
-		await fs.promises.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
-		await fs.promises.writeFile(filePath, `${JSON.stringify(records, null, "\t")}\n`, { encoding: "utf-8", mode: 0o600 });
-	});
+	await withCrossProcessFileLock(filePath, () => atomicWriteJson(filePath, records));
 }
 
 export async function updateTaskRegistry(runtimeRoot: string, mutator: (records: PaneTaskRegistry) => void): Promise<PaneTaskRegistry> {
 	const filePath = taskRegistryPath(runtimeRoot);
 	let records: PaneTaskRegistry = {};
-	await withFileMutationQueue(filePath, async () => {
+	await withCrossProcessFileLock(filePath, async () => {
 		try {
 			const content = await fs.promises.readFile(filePath, "utf-8");
 			const parsed = JSON.parse(content);
@@ -114,8 +112,7 @@ export async function updateTaskRegistry(runtimeRoot: string, mutator: (records:
 			records = {};
 		}
 		mutator(records);
-		await fs.promises.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
-		await fs.promises.writeFile(filePath, `${JSON.stringify(records, null, "\t")}\n`, { encoding: "utf-8", mode: 0o600 });
+		await atomicWriteJson(filePath, records);
 	});
 	return records;
 }

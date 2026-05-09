@@ -3,7 +3,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { Message } from "@earendil-works/pi-ai";
-import { withFileMutationQueue, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { atomicWriteFile } from "./file-lock.js";
 import type { AgentConfig } from "./agents.js";
 import { delay } from "./format.js";
 import { safeFileName, shellQuote } from "./names.js";
@@ -310,9 +311,7 @@ export async function writePromptToTempFile(agentName: string, prompt: string): 
 	const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pi-subagent-"));
 	const safeName = agentName.replace(/[^\w.-]+/g, "_");
 	const filePath = path.join(tmpDir, `prompt-${safeName}.md`);
-	await withFileMutationQueue(filePath, async () => {
-		await fs.promises.writeFile(filePath, prompt, { encoding: "utf-8", mode: 0o600 });
-	});
+	await atomicWriteFile(filePath, prompt);
 	return { dir: tmpDir, filePath };
 }
 
@@ -358,9 +357,7 @@ async function writeLauncher(
 	const promptFile = path.join(promptsDir, `${safeName}.md`);
 	const launcherFile = path.join(launchersDir, `${safeName}.sh`);
 
-	await withFileMutationQueue(promptFile, async () => {
-		await fs.promises.writeFile(promptFile, agent.systemPrompt, { encoding: "utf-8", mode: 0o600 });
-	});
+	await atomicWriteFile(promptFile, agent.systemPrompt);
 
 	const args = ["--session", sessionFile, "--append-system-prompt", promptFile];
 	const bridgeExtension = settingBoolean("forceSessionBridgeForPanes", true, cwd) ? resolveSessionBridgeExtension(cwd) : undefined;
@@ -388,9 +385,7 @@ if [ -z "\${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -r "/run/user/\$(id -u)/op-servi
 fi
 exec ${command}
 `;
-	await withFileMutationQueue(launcherFile, async () => {
-		await fs.promises.writeFile(launcherFile, script, { encoding: "utf-8", mode: 0o700 });
-	});
+	await atomicWriteFile(launcherFile, script, 0o700);
 
 	return { sessionFile, promptFile, launcherFile };
 }

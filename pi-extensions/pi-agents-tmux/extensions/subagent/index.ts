@@ -780,6 +780,11 @@ export default function (pi: ExtensionAPI) {
 					details: { agent: childAgentName, taskId, outboxFile, processingFile: activeTaskFile },
 					display: true,
 				});
+				// Intentionally do NOT clear childCurrentTaskFile: the inbox poll guard
+				// blocks new task pickup while it is set, which keeps a misbehaving agent
+				// pinned in needs_completion until a human resets the pane instead of
+				// silently piling up additional partial tasks. pendingChildCompletion is
+				// also left as-is; later completions are matched by taskId equality.
 				return;
 			}
 
