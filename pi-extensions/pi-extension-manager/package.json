@@ -1,6 +1,6 @@
 {
   "name": "@vanillagreen/pi-extension-manager",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Pi package manager with update/uninstall actions plus a separate schema-driven settings editor for vstack packages.",
   "license": "MIT",
   "keywords": [
