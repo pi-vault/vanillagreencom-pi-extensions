@@ -14,7 +14,7 @@ When NOT to use:
 
 Calling rules:
 - Default `agentScope` is `"project"`. Use `"both"` only when user-level agents at `~/.pi/agent/agents` are explicitly needed.
-- For persistent-pane agents (`pane: true`): save the returned `taskId`. Use `get_subagent_result` if you missed the completion event, `steer_subagent` only for mid-run correction, and `stop_subagent` to kill/close the pane.
+- For persistent-pane agents (`pane: true`): the dispatch returns immediately with a `taskId`. **End your turn after dispatching.** The pane runs asynchronously and the extension delivers the completion as a follow-up message that wakes you in a new turn — do not hold the current turn open by calling `get_subagent_result` with `wait: true` unless the user explicitly asked you to block. Save the `taskId` so you can call `get_subagent_result` later only if you suspect you missed the wake event. Use `steer_subagent` only for mid-run correction, and `stop_subagent` to kill/close the pane.
 - `stop_subagent` kills the live tmux process but preserves the pane session file. The next default `subagent` call or `/agents start <name>` resumes that saved session; use `forceSpawn: true` or `/agents new <name>` only when the user wants a fresh session. To restore an older archived pane session, pass `resumeSession: "latest"` (or an archive filename/path) to `subagent`.
 - `confirmProjectAgents: true` to gate any project-defined agent behind explicit user approval.
 - Provide a single, self-contained `task` string per delegation — the subagent cannot ask you follow-ups.
