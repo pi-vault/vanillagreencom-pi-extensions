@@ -589,6 +589,18 @@ locked_state_cleanup() {
     return 0
   fi
   rm -f "$WAKE_PENDING" "$EVENTS_FILE"
+  [[ -n "${WAKE_EVENTS_LOG:-}" ]] && rm -f "$WAKE_EVENTS_LOG"
+  shopt -s nullglob
+  local f
+  for f in "$EVENTS_FILE".draining.*; do
+    rm -f "$f"
+  done
+  if [[ -n "${WAKE_EVENTS_LOG:-}" ]]; then
+    for f in "$WAKE_EVENTS_LOG".draining.*; do
+      rm -f "$f"
+    done
+  fi
+  shopt -u nullglob
   exec 207>&-
 }
 
@@ -602,18 +614,19 @@ locked_cleanup_for_key() {
   local lock="$STATE_DIR/fd-daemon-${key}.session-lock"
   local wp="$STATE_DIR/fd-wake-pending-${key}"
   local ef="$STATE_DIR/fd-daemon-events-${key}.jsonl"
+  local wel="$STATE_DIR/fd-wake-events-${key}.log"
 
   if ! ( exec 208>"$lock" ) 2>/dev/null; then
     # Lock file unmakeable; best-effort direct rm.
-    rm -f "$wp" "$ef" "$ef".draining.*
+    rm -f "$wp" "$ef" "$wel" "$ef".draining.* "$wel".draining.*
     return
   fi
   exec 208>"$lock"
   if flock -n 208; then
-    rm -f "$wp" "$ef"
+    rm -f "$wp" "$ef" "$wel"
     shopt -s nullglob
     local f
-    for f in "$ef".draining.*; do
+    for f in "$ef".draining.* "$wel".draining.*; do
       rm -f "$f"
     done
     shopt -u nullglob
@@ -1257,14 +1270,37 @@ kill_all_oc_subscribers() {
   shopt -u nullglob
 }
 
+# Recover any stranded `${WAKE_EVENTS_LOG}.draining.<pid>` snapshots from
+# prior killed drains. Symmetric with recover_stranded_drains for
+# EVENTS_FILE: if the owning PID is dead (or 0/missing), fold the file
+# into our drain output so events from a crashed drain are not lost.
+recover_stranded_oc_drains() {
+  shopt -s nullglob
+  local f pid_part
+  for f in "${WAKE_EVENTS_LOG}".draining.*; do
+    pid_part="${f##*.draining.}"
+    if [[ ! "$pid_part" =~ ^[0-9]+$ ]]; then
+      cat "$f"
+      rm -f "$f"
+      continue
+    fi
+    if ! kill -0 "$pid_part" 2>/dev/null; then
+      cat "$f"
+      rm -f "$f"
+    fi
+  done
+  shopt -u nullglob
+}
+
 # Atomically drain the wake-events log under SESSION_LOCK. Each line is
 # emitted as a JSONL record; caller consumes line-by-line. Snapshot+rm
 # pattern matches drain_events: lock-held read+remove guarantees no
-# subscriber can append a record we miss.
+# subscriber can append a record we miss. Stranded snapshots from prior
+# killed drains are folded back in via recover_stranded_oc_drains.
 drain_oc_wake_events() {
-  [[ -f "$WAKE_EVENTS_LOG" ]] || return 0
   exec 212>"$SESSION_LOCK"
   flock 212
+  recover_stranded_oc_drains
   if [[ -f "$WAKE_EVENTS_LOG" ]]; then
     local snap="${WAKE_EVENTS_LOG}.draining.$$"
     if mv "$WAKE_EVENTS_LOG" "$snap" 2>/dev/null; then
