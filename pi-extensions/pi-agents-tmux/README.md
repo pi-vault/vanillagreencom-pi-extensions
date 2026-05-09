@@ -156,7 +156,7 @@ Supported agent frontmatter fields:
 
 Everything after the frontmatter is the agent's system prompt.
 
-The parent Pi session writes tasks to `inbox/<agent>/` and polls `outbox/<agent>/` under the session runtime directory. Sessions, prompt copies, launcher scripts, inbox/outbox, processed files, and pane registries are isolated by Pi session ID and never stored under the project's `.pi/` directory. Completions are surfaced back into the main conversation automatically.
+The parent Pi session writes tasks to `inbox/<agent>/` and polls `outbox/<agent>/` under the session runtime directory. Sessions, prompt copies, launcher scripts, inbox/outbox, processed files, and pane registries are isolated by Pi session ID and never stored under the project's `.pi/` directory. Completions are delivered as a follow-up message that wakes the parent in a new turn when idle, or queues into the active turn when the parent is mid-stream — the parent should dispatch and end its turn rather than blocking on the result.
 
 Persistent panes require running Pi inside tmux. Completion files are collected in polling batches and shown as one grouped notification when multiple agents finish together. The notification includes summary, files changed, validation, source/archive paths, and the pane session transcript path.
 
@@ -165,10 +165,10 @@ Pane tasks move through `queued → running → completed|blocked|failed`. If a 
 ## Result retrieval and steering
 
 ```json
-{ "taskId": "iced-...", "wait": true }
+{ "taskId": "iced-..." }
 ```
 
-Use `get_subagent_result` with either `taskId` or `agent` (latest task for that agent). It reads the durable `tasks.json` registry and can poll pending outbox files until a task reaches `completed`, `blocked`, `failed`, or diagnostic `needs_completion`. This is a recovery/status reader for persistent pane tasks; it does not create panes, steer agents, or change Flightdeck/Orchestration ownership rules.
+Use `get_subagent_result` with either `taskId` or `agent` (latest task for that agent). The expected flow is to dispatch, end the turn, and let the extension wake the parent on completion — then call `get_subagent_result` (without `wait`) only if you suspect a missed wake event. Pass `wait: true` (with optional `timeoutMs`) to block the current turn until the task reaches `completed`, `blocked`, `failed`, or diagnostic `needs_completion`; this is for cases where the user has explicitly asked the parent to hold the turn open. It reads the durable `tasks.json` registry. This is a recovery/status reader for persistent pane tasks; it does not create panes, steer agents, or change Flightdeck/Orchestration ownership rules.
 
 ```json
 { "taskId": "iced-...", "message": "Prioritize the failing layout test.", "deliverAs": "steer" }
