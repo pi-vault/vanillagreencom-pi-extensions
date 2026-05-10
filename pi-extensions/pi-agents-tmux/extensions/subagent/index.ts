@@ -1363,7 +1363,7 @@ export default function (pi: ExtensionAPI) {
 			.join("\n");
 
 		return {
-			systemPrompt: `${event.systemPrompt}\n\n## Project Agents\nUse the \`subagent\` tool when isolated context, specialist review, reconnaissance, planning, or parallel read-only investigation would help. Project-local agents are loaded from .pi/agents, with .claude/agents as a compatibility source. Agents with \`pane=true\` run in persistent tmux panes and can also be managed with \`/agents start|new|resume|send|attach|stop|status\`. Persistent-pane dispatches return immediately with a taskId; end your turn after dispatching and let the completion follow-up wake you in a new turn — do not call \`get_subagent_result\` with \`wait: true\` to block the current turn unless the user explicitly asked you to. Save the taskId so you can call \`get_subagent_result\` later only if you suspect a missed wake event. Use \`steer_subagent\` only for mid-run correction, and use \`stop_subagent\` to kill/close a pane. Stopping kills the live tmux process but preserves the session file; the next default \`subagent\` call or \`/agents start\` resumes the saved session. Use \`forceSpawn: true\` or \`/agents new\` only when the user asks for a fresh session. Available project agents:\n${agentLines}\n\nDefault \`agentScope\` is \"project\". Use \"both\" only when user-level agents are explicitly needed.`,
+			systemPrompt: `${event.systemPrompt}\n\n## Project Agents\nProject-local agents available to \`subagent\` (default \`agentScope: "project"\`; pass \`"both"\` only for user-level agents at \`~/.pi/agent/agents\`):\n${agentLines}`,
 		};
 	});
 

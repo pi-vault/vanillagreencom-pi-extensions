@@ -18,6 +18,7 @@
     "extensions": [
       "./src/index.ts"
     ],
+    "appendSystem": "./instructions.md",
     "image": "https://raw.githubusercontent.com/vanillagreencom/vstack/main/pi-extensions/pi-web-tools/assets/settings-panel.png"
   },
   "vstack": {
@@ -200,6 +201,7 @@
   "files": [
     "src/",
     "tests/",
+    "instructions.md",
     "README.md",
     "package.json",
     "tsconfig.json"

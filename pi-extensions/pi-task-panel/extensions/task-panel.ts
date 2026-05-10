@@ -621,8 +621,8 @@ function renderTaskToolSummary(summary: string, action: string, theme: Theme): s
 
 function workflowReminder(state: TaskPanelState): string {
 	const active = activeTask(state);
-	const activeText = active ? ` Current active task: ${quoteTask(active.content)}.` : "";
-	return `Task workflow reminder:${activeText} Keep the task panel current as work changes: start the task you are actually working, mark_done tasks promptly when completed, drop_task obsolete or out-of-scope tasks, and add_task discovered follow-ups. Before final replies, reconcile the panel and do not leave stale in_progress tasks; if the active task no longer matches the work, start_task or drop_task before continuing. mark_done auto-advances to the next pending task.`;
+	const head = active ? `active task ${quoteTask(active.content)}` : "no active task";
+	return `Task workflow reminder: ${head}. Keep the panel current; reconcile before final reply.`;
 }
 
 function taskContextMessage(state: TaskPanelState): string {
@@ -630,7 +630,7 @@ function taskContextMessage(state: TaskPanelState): string {
 	const active = activeTask(state);
 	const preview = remaining.slice(0, 8).map((task) => `${task.id === active?.id ? "*" : "-"} ${task.content} [${task.status}]`).join("\n");
 	const hidden = Math.max(0, remaining.length - 8);
-	return `<task_panel_state>\nActive task: ${active ? active.content : "(none)"}\nProgress: ${completedCount(state)}/${state.tasks.length} done; ${remaining.length} remaining\n${preview}${hidden ? `\n... ${hidden} more remaining` : ""}\n\nTask workflow requirements:\n- Keep tasks current throughout the turn, not only at the final reply.\n- When scope changes, update the panel: start_task for the task you are actually doing, add_task for discovered follow-ups, and drop_task for obsolete or out-of-scope tasks.\n- When a task is completed, call tasks_write mark_done promptly before moving to unrelated work.\n- Before final replies that claim work is done/fixed/committed/verified or no longer relevant, reconcile the panel: mark_done completed tasks, drop_task obsolete tasks, and add_task remaining follow-ups.\n- Do not leave stale in_progress tasks. If active work stops or no longer matches, call drop_task or start_task before continuing.\n- Prefer one tasks_write transition at a time; mark_done/drop_task automatically advances to the next pending task.\n</task_panel_state>`;
+	return `<task_panel_state>\nActive task: ${active ? active.content : "(none)"}\nProgress: ${completedCount(state)}/${state.tasks.length} done; ${remaining.length} remaining\n${preview}${hidden ? `\n... ${hidden} more remaining` : ""}\n</task_panel_state>`;
 }
 
 function toolResultContent(summary: string, state: TaskPanelState, cwd: string): string {
