@@ -7,15 +7,28 @@ Run a complete npm deployment pass for vstack Pi extensions. Optional package fi
 ## Intent
 Find every `pi-extensions/*/package.json` package whose source/docs/package contents changed since its last npm deployment tag, then validate, bump, publish, tag, push, refresh, and verify it. Leave no dirty/untracked files.
 
+vstack distribution is independent of npm. `vstack add`/`refresh` copies local source — npm publishing only populates the pi.dev gallery and lets external users run `pi install npm:@vanillagreen/<name>`. Skipping a publish never breaks vstack consumers.
+
 ## Hard rules
 - Publish only Pi extension packages that actually need a new npm version.
 - Use scoped npm names from `package.json` (normally `@vanillagreen/<name>`).
 - Per-package release tags use `<unscoped-name>-v<version>` (example: `pi-qol-v1.0.4`).
 - Never publish outside `op run --env-file=../../.env.npm -- npm publish --userconfig=../../.npmrc`.
-- Never write or log npm tokens.
+- Never write or log npm tokens. `.env.npm` only contains an `op://` reference, never a literal token; never commit `.env.npm` (gitignored).
+- Never use `op run --no-masking` outside one-off auth verification.
 - Stage only intended files. Preserve unrelated user dirty files; if unrelated dirt exists, stop and ask unless the user explicitly included it.
 - Version bump commits are separate from source/docs commits when source/docs changes are not already committed.
 - After any committed Pi package source change, run `vstack refresh -g`, then `vstack verify -g <changed packages...>`.
+
+## Skip publish for
+- Refactors with no behavior change.
+- Internal cleanup, comment/typo fixes.
+- README/doc edits unless gallery copy needs updating.
+
+Semver bump rules:
+- patch — bug fix, no API change.
+- minor — additive: new tool, new setting, backward-compatible feature.
+- major — breaking: removed/renamed tool, changed setting key, dropped Pi peerDependency support.
 
 ## Audit
 1. Inspect `git status --short --branch`.
