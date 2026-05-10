@@ -854,7 +854,7 @@ export default function flightdeck(pi: ExtensionAPI): void {
 						const padded = lines.slice(0, innerRows - 2);
 						padded.push(divider(innerWidth, theme));
 						padded.push(footer);
-						return framePopup(padded, safeWidth, theme, " Flightdeck — Mission Control ", innerRows);
+						return framePopup(padded, safeWidth, theme, " Flightdeck ", innerRows);
 					},
 				};
 			}, { overlay: true, overlayOptions: { anchor: "center", maxHeight: POPUP_MAX_HEIGHT, width: POPUP_WIDTH_PERCENT } });
