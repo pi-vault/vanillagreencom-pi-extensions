@@ -989,15 +989,9 @@ fn harness_frontmatter_defaults(
             "background".into(),
             default_claude_background(agent, config).to_string(),
         )],
-        crate::harness::Harness::OpenCode => vec![(
-            "mode".into(),
-            toml_inline_string(match agent.role {
-                crate::agent::AgentRole::Engineer => "all",
-                crate::agent::AgentRole::Analyst
-                | crate::agent::AgentRole::Reviewer
-                | crate::agent::AgentRole::Manager => "subagent",
-            }),
-        )],
+        crate::harness::Harness::OpenCode => {
+            vec![("mode".into(), toml_inline_string("subagent"))]
+        }
         crate::harness::Harness::Codex => vec![(
             "sandbox-mode".into(),
             toml_inline_string(match agent.role {
@@ -1123,6 +1117,22 @@ fn upsert_missing_inline_table_fields(
                         fields.iter_mut().find(|(field, _)| field == key)
                     {
                         *existing_value = value.clone();
+                    } else {
+                        fields.push((key.clone(), value.clone()));
+                    }
+                    continue;
+                }
+                if section == "[agent-frontmatter.opencode]" && key == "mode" {
+                    if let Some((_, existing_value)) =
+                        fields.iter_mut().find(|(field, _)| field == key)
+                    {
+                        if existing_value
+                            .trim()
+                            .trim_matches('"')
+                            .eq_ignore_ascii_case("all")
+                        {
+                            *existing_value = value.clone();
+                        }
                     } else {
                         fields.push((key.clone(), value.clone()));
                     }
@@ -2434,6 +2444,59 @@ planner = { background = true }
         let updated = std::fs::read_to_string(&path).unwrap();
         assert!(updated.contains("scout = { background = true"));
         assert!(updated.contains("planner = { background = false"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_agent_frontmatter_defaults_sets_opencode_subagent_mode_for_engineers() {
+        let dir = std::env::temp_dir().join(format!(
+            "vstack_test_agent_frontmatter_opencode_mode_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("vstack.toml");
+        std::fs::write(
+            &path,
+            "[agent-frontmatter.opencode]\nrust = { mode = \"all\" }\n",
+        )
+        .unwrap();
+
+        let rust = crate::agent::Agent {
+            name: "rust".into(),
+            description: "Rust agent".into(),
+            model: "opus".into(),
+            role: crate::agent::AgentRole::Engineer,
+            color: None,
+            body: String::new(),
+            source_path: std::path::PathBuf::new(),
+        };
+        let mut harnesses = HashMap::new();
+        harnesses.insert("rust".into(), vec![crate::harness::Harness::OpenCode]);
+
+        write_agent_frontmatter_defaults(&dir, &[rust], &harnesses);
+
+        let updated = std::fs::read_to_string(&path).unwrap();
+        assert!(updated.contains("rust = { mode = \"subagent\" }"));
+
+        std::fs::write(
+            &path,
+            "[agent-frontmatter.opencode]\nrust = { mode = \"primary\" }\n",
+        )
+        .unwrap();
+        let rust = crate::agent::Agent {
+            name: "rust".into(),
+            description: "Rust agent".into(),
+            model: "opus".into(),
+            role: crate::agent::AgentRole::Engineer,
+            color: None,
+            body: String::new(),
+            source_path: std::path::PathBuf::new(),
+        };
+        write_agent_frontmatter_defaults(&dir, &[rust], &harnesses);
+        let updated = std::fs::read_to_string(&path).unwrap();
+        assert!(updated.contains("rust = { mode = \"primary\" }"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

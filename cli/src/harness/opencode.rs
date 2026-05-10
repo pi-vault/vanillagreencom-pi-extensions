@@ -1,4 +1,4 @@
-use crate::agent::{self, Agent, AgentRole};
+use crate::agent::{self, Agent};
 use crate::hook::Hook;
 use anyhow::Result;
 use std::collections::HashSet;
@@ -21,13 +21,7 @@ pub fn generate_agent(
     let path = dir.join(format!("{}.md", agent.name));
 
     let frontmatter = extras.frontmatter_for("opencode");
-    // Determine mode based on role unless project config supplies an exact mode.
-    let mode = frontmatter.mode.as_deref().unwrap_or(match agent.role {
-        AgentRole::Engineer => "all",
-        AgentRole::Analyst => "subagent",
-        AgentRole::Reviewer => "subagent",
-        AgentRole::Manager => "subagent",
-    });
+    let mode = opencode_mode_for(&frontmatter);
 
     let model = frontmatter
         .model
@@ -102,6 +96,14 @@ fn opencode_reasoning_effort_for(
         .or_else(|| agent::effort_for_model(&agent.model).map(String::from))
         .filter(|effort| !is_none_value(effort))
         .map(|effort| agent::openai_effort_name(&effort))
+}
+
+fn opencode_mode_for(frontmatter: &agent::AgentFrontmatterOverrides) -> &str {
+    match frontmatter.mode.as_deref() {
+        Some(mode) if mode.trim().eq_ignore_ascii_case("all") => "subagent",
+        Some(mode) if !mode.trim().is_empty() => mode,
+        _ => "subagent",
+    }
 }
 
 fn is_none_value(value: &str) -> bool {
@@ -231,6 +233,7 @@ mod tests {
         let agent = agent_fixture("reviewer", AgentRole::Reviewer, "sonnet");
         let path = generate_agent(&agent, &dir, &[], &[], &[], &AgentExtras::default()).unwrap();
         let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("mode: subagent\n"));
         assert!(content.contains("color: \"#22c55e\"\n"));
         assert!(content.contains("options:\n"));
         assert!(content.contains("  reasoningEffort: high\n"));
@@ -239,6 +242,43 @@ mod tests {
         assert!(content.contains("permission:\n"));
         assert!(content.contains("  task: deny\n"));
         assert!(content.contains("  question: deny\n"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn generate_agent_defaults_engineers_to_subagent_mode_and_honors_override() {
+        let dir =
+            std::env::temp_dir().join(format!("vstack_opencode_agent_mode_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let agent = agent_fixture("rust", AgentRole::Engineer, "opus");
+        let path = generate_agent(&agent, &dir, &[], &[], &[], &AgentExtras::default()).unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("mode: subagent\n"));
+
+        let extras = AgentExtras {
+            frontmatter: agent::AgentFrontmatterOverrides {
+                mode: Some("primary".into()),
+                ..Default::default()
+            },
+            ..AgentExtras::default()
+        };
+        let path = generate_agent(&agent, &dir, &[], &[], &[], &extras).unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("mode: primary\n"));
+
+        let extras = AgentExtras {
+            frontmatter: agent::AgentFrontmatterOverrides {
+                mode: Some("all".into()),
+                ..Default::default()
+            },
+            ..AgentExtras::default()
+        };
+        let path = generate_agent(&agent, &dir, &[], &[], &[], &extras).unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("mode: subagent\n"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -141,7 +141,7 @@ rust = { color = "orange", model = "opus", effort = "xhigh", deny-tools = ["suba
 rust = { background = false }
 
 [agent-frontmatter.opencode]
-rust = { mode = "all" }
+rust = { mode = "subagent" }
 
 [agent-frontmatter.codex]
 rust = { sandbox-mode = "danger-full-access" }
@@ -164,7 +164,7 @@ trading-design = "Dark theme, green/red accents."
 
 ## Per-Harness Tool Overrides
 
-- Prefer `deny-tools`. Claude Code writes it as native `disallowedTools`, derives `background` from Pi `pane` (`pane = true` → `background = false`, `pane = false` → `background = true`), omits `isolation`/`memory` unless configured, and maps `xhigh` effort to Claude `max`. OpenAI-style harnesses (OpenCode, Codex, Pi) map `max` effort back to `xhigh`. Pi emits `deny-tools` for `pi-agents-tmux` (default = active parent tools minus denials). OpenCode emits `permission: <tool>: deny` entries from the same deny list, maps `color` to hex values, and writes reasoning under `options.reasoningEffort` with summary/verbosity defaults.
+- Prefer `deny-tools`. Claude Code writes it as native `disallowedTools`, derives `background` from Pi `pane` (`pane = true` → `background = false`, `pane = false` → `background = true`), omits `isolation`/`memory` unless configured, and maps `xhigh` effort to Claude `max`. OpenAI-style harnesses (OpenCode, Codex, Pi) map `max` effort back to `xhigh`. Pi emits `deny-tools` for `pi-agents-tmux` (default = active parent tools minus denials). OpenCode defaults generated agents to `mode: subagent`, still exposes `mode` for rare primary-agent overrides, emits `permission: <tool>: deny` entries from the same deny list, maps `color` to hex values, and writes reasoning under `options.reasoningEffort` with summary/verbosity defaults.
 - Cursor and Codex don't use the same per-agent tool-deny frontmatter; Codex subagents use sandbox/approval configuration instead.
 
 ## Rules
