@@ -8,7 +8,7 @@ These tests are local smoke tests for the `flightdeck` skill's harness adapters 
 - Real `pi` binary on `PATH` (or set `PI_BIN=/path/to/pi`) for Pi bridge tests
 - GNU bash 5+ (`bash --version`)
 - GNU date (`date --version` from coreutils)
-- `jq`, `git`, `cksum`/coreutils, and the relevant harness CLI for adapter-specific tests (`opencode`, `codex`, etc.)
+- `jq`, `git`, `sha256sum`/coreutils, and the relevant harness CLI for adapter-specific tests (`opencode`, `codex`, etc.)
 
 ## `live-wake.sh`
 

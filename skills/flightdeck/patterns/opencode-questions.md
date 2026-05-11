@@ -55,7 +55,7 @@ For free-text master input, send a regular user message via
 
 ## Wake-event flow
 
-1. Daemon's `oc_subscriber_loop` polls `GET /question` and `GET /session/<id>/message` at `FD_OC_POLL_SEC`, then exponentially backs off unchanged responses up to `FD_OC_BACKOFF_MAX_SEC` (default 16s). The sleep resets to `FD_OC_POLL_SEC` on response hash change or when the daemon's bell path touches the per-pane `oc-bell-<pane>` marker in `FD_STATE_DIR`.
+1. Daemon's `oc_subscriber_loop` polls `GET /question` and `GET /session/<id>/message` at `FD_OC_POLL_SEC`, then exponentially backs off unchanged responses up to `FD_OC_BACKOFF_MAX_SEC` (default 16s). The sleep resets to `FD_OC_POLL_SEC` on new question ids, response hash change, or when the daemon's bell path touches the per-pane `oc-bell-<pane>` marker in `FD_STATE_DIR`.
 2. For every request_id never seen before, emits one wake event under
    `SESSION_LOCK`:
 

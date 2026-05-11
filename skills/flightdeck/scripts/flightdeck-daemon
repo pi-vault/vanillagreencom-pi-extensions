@@ -197,7 +197,7 @@ done
 _check_deps_inline() {
   local missing=()
   local cmd
-  for cmd in tmux jq flock awk sha256sum cksum; do
+  for cmd in tmux jq flock awk sha256sum; do
     command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
   done
   if (( ${#missing[@]} > 0 )); then
@@ -403,16 +403,13 @@ capture_pane() {
 }
 
 capture_hash_12() {
-  # Fallback capture hashing is a hot path. Keep it to one cksum process
-  # instead of the previous sha256sum | cut | head pipeline. This rolling
-  # checksum only needs stable change detection within this daemon run;
-  # it is not a security boundary.
-  local sum crc len
-  sum=$(cksum <<< "$1" 2>/dev/null) || { printf '000000000000'; return; }
-  read -r crc len _ <<< "$sum"
-  [[ "$crc" =~ ^[0-9]+$ ]] || crc=0
-  [[ "$len" =~ ^[0-9]+$ ]] || len=0
-  printf '%08x%04x' "$crc" "$(( len & 0xffff ))"
+  # Fallback capture hashing is a hot path. Keep the hash in the same
+  # SHA-12 domain as adapter events and pane-poll output, but avoid the
+  # previous sha256sum | cut | head helper pipeline.
+  local sum
+  sum=$(sha256sum < <(printf '%s' "$1") 2>/dev/null) || { printf '000000000000'; return; }
+  sum=${sum%% *}
+  printf '%s' "${sum:0:12}"
 }
 
 stability_for_harness() {
@@ -1051,7 +1048,7 @@ oc_subscriber_loop() {
     # request_id with the full structured payload (header, question
     # text, options, multiple) so master can answer via
     # `pane-respond --question <id> --answer <label>`.
-    local qresp
+    local qresp question_changed=0
     qresp=$(curl -s --max-time 5 "$oc_url/question" 2>/dev/null)
     if [[ -n "$qresp" && "$qresp" != "[]" ]]; then
       while IFS= read -r qid; do
@@ -1062,6 +1059,7 @@ oc_subscriber_loop() {
           qpayload=$(jq -c --arg q "$qid" '.[] | select(.id == $q)' <<< "$qresp" 2>/dev/null)
           [[ -z "$qpayload" ]] && continue
           qhash=$(printf '%s' "$qid" | sha256sum | awk '{print substr($1,1,12)}')
+          question_changed=1
           printf '%s [oc-question-emit] pane=%s request_id=%s\n' \
             "$(date -Iseconds)" "$pane_id" "$qid" \
             >> "$sub_log" 2>/dev/null || true
@@ -1129,7 +1127,7 @@ oc_subscriber_loop() {
       bell_seen=1
       last_bell_mtime="$current_bell_mtime"
     fi
-    if (( response_changed == 1 || bell_seen == 1 )); then
+    if (( response_changed == 1 || question_changed == 1 || bell_seen == 1 )); then
       next_sleep="$base_sleep"
     else
       if (( next_sleep < max_sleep )); then
@@ -1138,11 +1136,26 @@ oc_subscriber_loop() {
       fi
     fi
     if [[ "$next_sleep" != "$prev_sleep" ]]; then
-      printf '%s [oc-sub-backoff] pane=%s sleep=%ss response_changed=%s bell_seen=%s max=%ss\n' \
-        "$(date -Iseconds)" "$pane_id" "$next_sleep" "$response_changed" "$bell_seen" "$max_sleep" \
+      printf '%s [oc-sub-backoff] pane=%s sleep=%ss response_changed=%s question_changed=%s bell_seen=%s max=%ss\n' \
+        "$(date -Iseconds)" "$pane_id" "$next_sleep" "$response_changed" "$question_changed" "$bell_seen" "$max_sleep" \
         >> "$sub_log" 2>/dev/null || true
     fi
-    sleep "$next_sleep"
+    local slept=0 sleep_chunk sleep_bell_mtime
+    while (( slept < next_sleep )); do
+      sleep_chunk=$(( next_sleep - slept ))
+      (( sleep_chunk > 1 )) && sleep_chunk=1
+      sleep "$sleep_chunk"
+      slept=$(( slept + sleep_chunk ))
+      sleep_bell_mtime=$(bell_marker_mtime "$bell_marker")
+      if [[ "$sleep_bell_mtime" =~ ^[0-9]+$ && "$last_bell_mtime" =~ ^[0-9]+$ && "$sleep_bell_mtime" -gt "$last_bell_mtime" ]]; then
+        last_bell_mtime="$sleep_bell_mtime"
+        next_sleep="$base_sleep"
+        printf '%s [oc-sub-backoff] pane=%s sleep=%ss response_changed=0 question_changed=0 bell_seen=1 interrupted=1 max=%ss\n' \
+          "$(date -Iseconds)" "$pane_id" "$next_sleep" "$max_sleep" \
+          >> "$sub_log" 2>/dev/null || true
+        break
+      fi
+    done
   done
 }
 
@@ -1943,7 +1956,12 @@ run_loop() {
           _sub_pid=$(cat "$_sub_pid_file" 2>/dev/null || echo "")
         fi
         if [[ "$_sub_pid" =~ ^[1-9][0-9]*$ ]] && kill -0 "$_sub_pid" 2>/dev/null; then
-          # Subscriber alive — skip fallback as before.
+          # Subscriber alive — skip expensive fallback capture/classify.
+          # OpenCode still needs the cheap cached bell check so a backed-off
+          # HTTP poller resets promptly when tmux rings the pane bell.
+          if [[ "$_sub_harness" == "opencode" ]] && (( $(bell_flag_for_pane "$inner_id") == 1 )); then
+            touch_oc_bell_marker "$inner_id"
+          fi
           continue
         fi
         log subscriber-dead "pane=$inner_id harness=$_sub_harness pid=${_sub_pid:-missing}; clearing OC_SUBSCRIBED and falling back to capture-pane"
