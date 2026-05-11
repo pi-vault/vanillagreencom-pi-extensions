@@ -143,7 +143,7 @@ When every tracked issue is `merged | aborted | dead` and no prompts pending acr
 3. Emits a single user-visible line summarizing counts (merged / aborted / new-issues / next-cycle-recommendations).
 4. Returns control to orchestration's dashboard.
 
-Panes are NOT closed — pane lifecycle stays with the user.
+Terminal issue panes are closed by `workflows/close-issue.md` after the two-signal terminal-state check updates master state and deregisters the pane. Non-terminal panes remain under user control; flightdeck does not respawn dead panes or manage panes outside the current session.
 
 The next-cycle recommendation is just a recommendation — the user decides whether to start a new flightdeck session on the proposed issues immediately or stick with their planned cycle.
 
