@@ -83,7 +83,9 @@ At the start of each § 2 cycle, fetch the registry once and batch-poll every no
 REGISTRY_JSON=$(.agents/skills/flightdeck/scripts/pane-registry list --format json)
 POLL_INPUT=$(jq '[.[]
   | select((.state // "waiting") as $s | ["waiting","prompting","submitting","merge-ready"] | index($s))
-  | {issue, pane_id, pane_target, harness, worktree, pr_number}
+  | {issue, pane_id, pane_target, harness, worktree, pr_number,
+      oc_url, oc_session_id, cc_url, cc_transcript,
+      pi_bridge_pid, pi_bridge_socket, cx_ws, cx_thread_id}
 ]' <<< "$REGISTRY_JSON")
 POLL_JSONL=$(printf '%s' "$POLL_INPUT" | .agents/skills/flightdeck/scripts/pane-poll --batch -)
 ```
@@ -95,7 +97,7 @@ For each tracked issue currently in a non-terminal state (`waiting | prompting |
 0.5. **Pane-hijack check** — only if `orchestration_started` is `false` for this issue:
    - If the orchestration workflow-state file exists at `tmp/workflow-state-<ISSUE>.json` (or wherever `ORCH_STATE_DIR` resolves to), set `orchestration_started: true` via `pane-registry set <ISSUE> orchestration_started true` and proceed to step 1.
    - Otherwise check `(now - spawned_at)`. If elapsed exceeds `FLIGHTDECK_HIJACK_GRACE_SECS` (default 90), the pane was either hijacked for unrelated work or orchestration silently failed to start. Escalate: `paused_for_user = {issue_id, reason: "orchestration-never-started", prompt_text: "<ISSUE> spawned <elapsed>s ago; no workflow-state file. Pane may have been hijacked or orchestration failed to start."}`. Skip the rest of § 2 for this issue.
-1. Read this issue's `pane-poll --batch` JSON object from `POLL_JSONL` (one object per issue, same schema as legacy single-pane mode plus `issue`). The batch input came from the registry's immutable `pane_id` when available and falls back to `pane_target` for legacy rows; it also passes `harness`, `worktree`, and `pr_number` so adapter reads and the orphan worktree-gone + PR-merged cross-check still run:
+1. Read this issue's `pane-poll --batch` JSON object from `POLL_JSONL` (one object per issue, same schema as legacy single-pane mode plus `issue`). The batch input came from the registry's immutable `pane_id` when available and falls back to `pane_target` for legacy rows; it also passes `harness`, `worktree`, `pr_number`, and per-harness adapter metadata (`oc_url`/`oc_session_id`, `cc_url`/`cc_transcript`, `pi_bridge_pid`/`pi_bridge_socket`, `cx_ws`/`cx_thread_id`) so adapter reads and the orphan worktree-gone + PR-merged cross-check still run without re-querying `pane-registry` per row:
    ```
    POLL=$(jq -c --arg issue "<ISSUE>" 'select(.issue == $issue)' <<< "$POLL_JSONL" | tail -n1)
    ```

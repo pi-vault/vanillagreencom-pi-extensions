@@ -85,7 +85,7 @@ Every script in `scripts/` appears in `SKILL.md`'s Scripts table. No hidden scri
 | `pane-respond` | Send to pane: free-text / `--option N` / `--option-multi` / `--keys` / `--question <reqID> --answer "<label>" \| --answer-multi "l1,l2" \| --answer-text "free text" \| --answers-json '[[...]]' \| --reject` (opencode/Pi structured question APIs; Pi free text requires `allowCustom=true`; `--answers-json` handles multi-tab requests). Per-harness adapters route via `opencode run --attach` / question API, channel POST, `pi-bridge send` / `answer|reject`, `codex-bridge send`; tmux paste-buffer fallback. Validates rebase payloads have preserve/apply/verify triplet |
 | `pane-clear-bell` | Atomic chained `select-window` cycle |
 | `pr-conflict-graph` | File-intersection adjacency for a PR list |
-| `prompt-classify` | Sentinel matcher → handler tag |
+| `prompt-classify` | Sentinel matcher → handler tag (`rendering`, `terminal-state-reached`, prompt/merge/review tags, or `idle`); daemon/event-only tags include `oc-question`, `pi-question`, and `pi-subagent-completion` |
 
 ## Patterns docs
 
