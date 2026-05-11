@@ -120,7 +120,7 @@ Per-harness adapters live in `pane-respond` (sending), `pane-poll` (reading), an
 | Harness | Adapter | Tmux fallback |
 |---------|---------|---------------|
 | Claude Code | Tail `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl` for assistant `stop_reason` events | `tmux capture-pane -p -S -200` |
-| opencode | `GET /session/<id>/message` → last assistant text. Daemon also polls `GET /question` for the question tool, backing off unchanged polls up to `FD_OC_BACKOFF_MAX_SEC` and resetting on new question ids, hash change, or bell marker. | `tmux capture-pane -p -S -200` |
+| opencode | `GET /session/<id>/message` → last assistant text. Daemon also polls `GET /question` for the question tool, backing off unchanged polls up to `FD_OC_BACKOFF_MAX_SEC` and resetting on new question ids, hash change, or a cached bell marker (the daemon clears that bell flag after touching the marker to avoid repeated resets). | `tmux capture-pane -p -S -200` |
 | pi | `pi-bridge history` / `pi-bridge stream` filtered for assistant `turn_end`; `pi-questions` opens emit canonical `pi-question` events; blocked/failed/needs-completion `pi-agents-tmux` inner completions emit advisory `pi-subagent-completion` events for the outer orchestrator only. Flightdeck must not route tools or bridge sends directly to inner agent panes. | `tmux capture-pane -p -S -200` |
 | codex | `codex-bridge turns` / stream filtered for `thread/status/changed → idle` | `tmux capture-pane -p -S -200` |
 
