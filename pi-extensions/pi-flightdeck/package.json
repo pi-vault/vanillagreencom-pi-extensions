@@ -83,6 +83,15 @@
           "apply": "live"
         },
         {
+          "key": "dashboardStaleAfterMin",
+          "label": "Dashboard stale-after (min)",
+          "description": "Treat the dashboard as stale (suppress issue tree, show a one-line hint) when the daemon is dead AND the most recent issue poll is older than this many minutes. Set 0 to disable stale detection and always render leftover state as live.",
+          "type": "number",
+          "default": 5,
+          "category": "Dashboard",
+          "apply": "live"
+        },
+        {
           "key": "pauseBanner",
           "label": "Show pause banner",
           "description": "Render a high-contrast banner above the editor whenever flightdeck master sets paused_for_user. Banner clears automatically when master resumes.",

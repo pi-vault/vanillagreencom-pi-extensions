@@ -545,6 +545,51 @@ export function isFlightdeckActive(snapshot: FlightdeckSnapshot | undefined): bo
 	return false;
 }
 
+export type FlightdeckSessionStatus = "live" | "stale" | "inactive";
+
+const TERMINAL_ISSUE_STATES = new Set<IssueState>(["merged", "aborted", "dead"]);
+
+// Most recent `last_polled_at` (ms epoch) across non-terminal issues. Used
+// by both the stale-state predicate and the stale-hint renderer.
+export function mostRecentPollMs(snapshot: FlightdeckSnapshot | undefined): number | undefined {
+	const issues = snapshot?.master?.issues;
+	if (!issues) return undefined;
+	let best: number | undefined;
+	for (const issue of Object.values(issues)) {
+		if (issue.state && TERMINAL_ISSUE_STATES.has(issue.state)) continue;
+		const t = Date.parse(issue.last_polled_at ?? "");
+		if (!Number.isFinite(t)) continue;
+		if (best === undefined || t > best) best = t;
+	}
+	return best;
+}
+
+// Classify a snapshot for the dashboard renderer. A state file with
+// non-terminal issues and no live daemon is treated as `stale` once the
+// most recent poll is older than `staleAfterMin` minutes — past that
+// window the daemon is not coming back on its own and the dashboard would
+// otherwise render leftover data from a prior session. Pass
+// `staleAfterMin: 0` to disable the staleness check entirely (legacy
+// `isFlightdeckActive` behavior).
+export function flightdeckSessionStatus(
+	snapshot: FlightdeckSnapshot | undefined,
+	options?: { staleAfterMin?: number; now?: number },
+): FlightdeckSessionStatus {
+	if (!snapshot) return "inactive";
+	const master = snapshot.master;
+	const hasIssues = !!master && !master.terminated && Object.keys(master.issues).length > 0;
+	const daemonAlive = snapshot.daemon.pidAlive;
+	if (!hasIssues && !daemonAlive) return "inactive";
+	if (daemonAlive) return "live";
+	const staleAfterMin = options?.staleAfterMin ?? 5;
+	if (staleAfterMin <= 0) return "live";
+	const now = options?.now ?? Date.now();
+	const latest = mostRecentPollMs(snapshot);
+	if (latest === undefined) return "stale";
+	const ageSec = Math.max(0, Math.floor((now - latest) / 1000));
+	return ageSec > staleAfterMin * 60 ? "stale" : "live";
+}
+
 export function sortedIssues(state: MasterState | undefined): IssueRecord[] {
 	if (!state) return [];
 	return Object.values(state.issues).sort((a, b) => {

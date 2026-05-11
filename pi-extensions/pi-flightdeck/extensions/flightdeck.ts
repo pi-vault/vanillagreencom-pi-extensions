@@ -28,9 +28,10 @@ import {
 	ageSecondsSince,
 	buildSnapshot,
 	flatDecisionsLog,
+	flightdeckSessionStatus,
 	foldWakeEventsIntoConversations,
 	formatAge,
-	isFlightdeckActive,
+	mostRecentPollMs,
 	type SettingsLike,
 	sortedIssues,
 } from "./state.js";
@@ -245,6 +246,15 @@ function renderPauseBannerLines(snapshot: FlightdeckSnapshot, theme: Theme, widt
 	lines.push("");
 	lines.push(hint);
 	return framePanel(lines, width, theme, "warning", " PAUSE — awaiting user ");
+}
+
+function renderStaleHintLine(snapshot: FlightdeckSnapshot, theme: Theme, width: number): string[] {
+	const latest = mostRecentPollMs(snapshot);
+	const ageSec = latest === undefined ? undefined : Math.max(0, Math.floor((Date.now() - latest) / 1000));
+	const ageText = ageSec === undefined ? "unknown age" : `${formatAge(ageSec)} ago`;
+	const daemon = daemonHealthChip(theme, snapshot.daemon.pidAlive, snapshot.daemon.heartbeatAgeSec);
+	const line = `${daemon} ${theme.fg("dim", "·")} ${theme.fg("dim", `Flightdeck · stale state from ${ageText} — restart with /skill:flightdeck start, or archive state file to dismiss`)}`;
+	return [truncateToWidth(line, Math.max(1, width), "…")];
 }
 
 function renderDashboardLines(snapshot: FlightdeckSnapshot, theme: Theme, width: number, state: DashboardState, cwd: string, paneMap: Map<string, string>): string[] {
@@ -920,8 +930,9 @@ export default function flightdeck(pi: ExtensionAPI): void {
 		const inChildPane = Boolean(process.env.PI_SUBAGENT_CHILD_AGENT);
 		const showBanner = settingBoolean("pauseBanner", true, ctx.cwd) && Boolean(snapshot?.master?.paused_for_user);
 		const dashboardEnabled = !inChildPane && settingBoolean("dashboard", true, ctx.cwd) && cache.state !== "hidden";
-		const active = isFlightdeckActive(snapshot);
-		if (!active && !showBanner) {
+		const staleAfterMin = Math.max(0, Math.floor(settingNumber("dashboardStaleAfterMin", 5, ctx.cwd)));
+		const status = flightdeckSessionStatus(snapshot, { staleAfterMin });
+		if (status === "inactive" && !showBanner) {
 			ctx.ui.setWidget(WIDGET_KEY, undefined);
 			return;
 		}
@@ -930,9 +941,14 @@ export default function flightdeck(pi: ExtensionAPI): void {
 			render(width: number): string[] {
 				const lines: string[] = [];
 				if (showBanner && snapshot) lines.push(...renderPauseBannerLines(snapshot, theme, width));
-				if (dashboardEnabled && active && snapshot) {
-					if (lines.length > 0) lines.push("");
-					lines.push(...renderDashboardLines(snapshot, theme, width, cache.state, ctx.cwd, cache.paneTargetToId));
+				if (dashboardEnabled && snapshot) {
+					if (status === "live") {
+						if (lines.length > 0) lines.push("");
+						lines.push(...renderDashboardLines(snapshot, theme, width, cache.state, ctx.cwd, cache.paneTargetToId));
+					} else if (status === "stale") {
+						if (lines.length > 0) lines.push("");
+						lines.push(...renderStaleHintLine(snapshot, theme, width));
+					}
 				}
 				return lines;
 			},

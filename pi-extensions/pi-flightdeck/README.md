@@ -9,7 +9,7 @@ When Pi is running as the flightdeck **master agent** in a tmux session, this ex
 ## What it shows
 
 - **Pause banner** — when flightdeck master sets `paused_for_user`, a high-contrast yellow-framed banner appears above the editor with the issue id, reason, and prompt excerpt. Clears automatically when master resumes.
-- **Persistent dashboard widget** — compact tree of tracked issues with state badges, harness chip, launch model/effort when available, PR number, last decision, age, and per-pane cost/turns/tokens (sourced from pi-agents-tmux via the `vstack.pi.agents` bridge when both extensions are installed). Rendered only in the master/coordinator pane; suppressed in child subagent panes (detected via `PI_SUBAGENT_CHILD_AGENT`) so the same project state isn't echoed inside each agent. Daemon health collapses into a single dot+label chip — only shown explicitly when stale (≥ 30s) or dead.
+- **Persistent dashboard widget** — compact tree of tracked issues with state badges, harness chip, launch model/effort when available, PR number, last decision, age, and per-pane cost/turns/tokens (sourced from pi-agents-tmux via the `vstack.pi.agents` bridge when both extensions are installed). Rendered only in the master/coordinator pane; suppressed in child subagent panes (detected via `PI_SUBAGENT_CHILD_AGENT`) so the same project state isn't echoed inside each agent. Daemon health collapses into a single dot+label chip — only shown explicitly when stale (≥ 30s) or dead. If the daemon is gone AND the most recent issue poll is older than `dashboardStaleAfterMin` minutes (default `5`), the issue tree is replaced by a single-line hint inviting the operator to restart flightdeck or archive the leftover state file — prevents a dead session's state file from rendering a phantom dashboard a day later. Set `dashboardStaleAfterMin` to `0` to disable the stale check.
 - **`/flightdeck` popup** (F6) — full mission-control view with six tabs:
   - **Overview** — one row per tracked issue with `STATE / PROMPT` (combined), harness, PR, cost/turns/tokens, and age; detail block for the selected issue includes usage + model.
   - **Live feed** — chronologically sorted daemon log + pending events + adapter wake events + decisions, with consecutive `[heartbeat]` lines folded into a single summary row and `↑/↓` scrollback through the full backlog.
@@ -36,6 +36,7 @@ Configurable in `/extensions:settings` under `Flightdeck Dashboard`.
 | `dashboard` | `true` | Render the persistent widget above the editor |
 | `dashboardDefaultState` | `compact` | `hidden` / `compact` / `expanded` on first appearance |
 | `dashboardMaxItems` | `8` | Max issue rows in the widget |
+| `dashboardStaleAfterMin` | `5` | Suppress the issue tree (show a one-line hint instead) when the daemon is dead AND the most recent poll is older than this many minutes. `0` disables the check |
 | `pauseBanner` | `true` | Show the pause-for-user banner |
 | `pauseBeep` | `true` | Ring the terminal bell when master first pauses |
 | `autoOpenOnPause` | `false` | Auto-open the popup once when master pauses |
