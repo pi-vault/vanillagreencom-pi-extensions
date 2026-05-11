@@ -275,7 +275,7 @@ The daemon (`flightdeck-daemon`) drives wake delivery; the master agent only run
 Master state is persisted on every state mutation. On `watch` re-entry:
 1. Read `tmp/flightdeck-state-<SESSION>.json`.
 2. Re-fingerprint each registered window's pane 0 (TUIs may have re-laid-out).
-3. Recompute per-pane `state` from a fresh capture-pane — never trust the persisted `state` value alone.
+3. Recompute per-pane `state` from a fresh `pane-poll --batch -` registry snapshot — adapter reads remain primary, tmux capture-pane is only the documented fallback, and persisted state is only a hint.
 4. Resume the merge queue from where it left off; recompute the conflict graph against current PR file lists (PRs may have moved).
 5. Re-evaluate any `paused_for_user` entry — if the user has acted in the pane in the meantime, reclassify and proceed.
 
