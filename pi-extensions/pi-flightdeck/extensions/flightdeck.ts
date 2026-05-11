@@ -707,12 +707,32 @@ function isActiveIssue(issue: IssueRecord): boolean {
 	return issue.state !== "merged" && issue.state !== "aborted" && issue.state !== "dead";
 }
 
+// An issue is "adapter-eligible" only when its registry record carries
+// the adapter metadata fields the daemon's spawn_<h>_subscriber path
+// reads. Without this gate, expectedSubscribers counted every active
+// pi/claude/codex issue as needing a subscriber even when the spawn
+// failed gracefully and the pane is intentionally on tmux fallback
+// (cross-harness review finding #5).
+function issueIsAdapterEligible(issue: IssueRecord, harness: HarnessKey): boolean {
+	const rec = issue as Record<string, unknown>;
+	const hasField = (k: string): boolean => {
+		const v = rec[k];
+		return typeof v === "string" ? v.length > 0 : v !== null && v !== undefined && v !== "";
+	};
+	switch (harness) {
+		case "opencode": return hasField("oc_url") && hasField("oc_session_id");
+		case "claude":   return hasField("cc_url") && hasField("cc_transcript");
+		case "pi":       return hasField("pi_bridge_socket") || hasField("pi_bridge_pid");
+		case "codex":    return hasField("cx_ws") && hasField("cx_thread_id");
+	}
+}
+
 function expectedSubscribersByHarness(snapshot: FlightdeckSnapshot): Record<HarnessKey, number> {
 	const out: Record<HarnessKey, number> = { opencode: 0, claude: 0, pi: 0, codex: 0 };
 	for (const issue of Object.values(snapshot.master?.issues ?? {})) {
 		if (!isActiveIssue(issue)) continue;
 		const key = HARNESS_KEY_BY_NAME[issue.harness ?? ""];
-		if (key) out[key] += 1;
+		if (key && issueIsAdapterEligible(issue, key)) out[key] += 1;
 	}
 	return out;
 }
@@ -736,10 +756,12 @@ function formatSubscriberCounts(theme: Theme, counts: Record<HarnessKey, number>
 }
 
 function unsubscribedPanes(snapshot: FlightdeckSnapshot, expected: Record<HarnessKey, number>, counts: Record<HarnessKey, number>): IssueRecord[] {
-	// Heuristic: if a harness has fewer subscribers than active tracked issues
-	// of that harness, surface all active issues for that harness so the user
-	// can spot which one is missing its adapter (e.g., pi-bridge not running).
-	const missingHarnesses = new Set<string>();
+	// Only surface adapter-eligible issues whose harness is short on
+	// subscribers. Panes intentionally on tmux fallback (no adapter
+	// metadata recorded) are not surfaced as "unsubscribed" since the
+	// daemon never tried to subscribe them in the first place
+	// (cross-harness review finding #5).
+	const missingHarnesses = new Set<HarnessKey>();
 	for (const key of Object.keys(expected) as HarnessKey[]) {
 		if (expected[key] > counts[key]) missingHarnesses.add(key);
 	}
@@ -748,7 +770,7 @@ function unsubscribedPanes(snapshot: FlightdeckSnapshot, expected: Record<Harnes
 	for (const issue of Object.values(snapshot.master?.issues ?? {})) {
 		if (!isActiveIssue(issue)) continue;
 		const key = HARNESS_KEY_BY_NAME[issue.harness ?? ""];
-		if (key && missingHarnesses.has(key)) out.push(issue);
+		if (key && missingHarnesses.has(key) && issueIsAdapterEligible(issue, key)) out.push(issue);
 	}
 	return out;
 }
