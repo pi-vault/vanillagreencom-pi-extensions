@@ -104,7 +104,7 @@ tmux list-windows -t <session> -F '#{window_index}:#{window_name} bell=#{window_
 
 ## Per-harness signals
 
-Per-harness adapters live in `pane-respond` (sending), `pane-poll` (reading), and the daemon's per-pane subscribers. With an adapter wired, structured input/output replaces tmux capture-pane / send-keys for that pane; tmux remains the documented fallback.
+Per-harness adapters live in `pane-respond` (sending), `pane-poll` (reading), and the daemon's per-pane subscribers. The watch loop calls `pane-poll --batch -` once per cycle with the registry JSON so tmux metadata is resolved once, then uses legacy single-pane mode only for targeted drift re-polls/manual debugging. With an adapter wired, structured input/output replaces tmux capture-pane / send-keys for that pane; tmux remains the documented fallback.
 
 ### Send path (script: `pane-respond`)
 

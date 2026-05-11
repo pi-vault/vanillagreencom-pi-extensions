@@ -77,6 +77,17 @@ Master mode entry point. Polls every spawned issue pane, classifies their prompt
 
 ## § 2: Poll
 
+At the start of each § 2 cycle, fetch the registry once and batch-poll every non-terminal pane once. Keep the JSONL result in memory for the per-issue loop; use legacy single-pane `pane-poll` only for targeted re-polls after drift recovery or manual debugging:
+
+```
+REGISTRY_JSON=$(.agents/skills/flightdeck/scripts/pane-registry list --format json)
+POLL_INPUT=$(jq '[.[]
+  | select((.state // "waiting") as $s | ["waiting","prompting","submitting","merge-ready"] | index($s))
+  | {issue, pane_id, pane_target, harness, worktree, pr_number}
+]' <<< "$REGISTRY_JSON")
+POLL_JSONL=$(printf '%s' "$POLL_INPUT" | .agents/skills/flightdeck/scripts/pane-poll --batch -)
+```
+
 For each tracked issue currently in a non-terminal state (`waiting | prompting | submitting | merge-ready`):
 
 0. **Structured-question event check** — if `PENDING` contains an event for this issue's pane with `tag == "oc-question"` or `tag == "pi-question"`, set state to `prompting`, substate to that tag, and carry `details.request_id` + `details.question` into `handle-prompt.md`. Do not try to rediscover this by `capture-pane`; the inline/modal question may not appear in plain assistant text.
@@ -84,20 +95,18 @@ For each tracked issue currently in a non-terminal state (`waiting | prompting |
 0.5. **Pane-hijack check** — only if `orchestration_started` is `false` for this issue:
    - If the orchestration workflow-state file exists at `tmp/workflow-state-<ISSUE>.json` (or wherever `ORCH_STATE_DIR` resolves to), set `orchestration_started: true` via `pane-registry set <ISSUE> orchestration_started true` and proceed to step 1.
    - Otherwise check `(now - spawned_at)`. If elapsed exceeds `FLIGHTDECK_HIJACK_GRACE_SECS` (default 90), the pane was either hijacked for unrelated work or orchestration silently failed to start. Escalate: `paused_for_user = {issue_id, reason: "orchestration-never-started", prompt_text: "<ISSUE> spawned <elapsed>s ago; no workflow-state file. Pane may have been hijacked or orchestration failed to start."}`. Skip the rest of § 2 for this issue.
-1. Run `pane-poll`. Prefer the registry's immutable `pane_id` (`%N`) as the first argument; fall back to `<session>:<window> <pinned-pane-index>` only for legacy entries without `pane_id`. Pass `--harness <h>`, `--worktree <path>`, and `--pr <N>` from the registry so harness-specific capture quirks (e.g., opencode viewport scroll) are handled and the orphan cross-check can synthesize `terminal-state-reached` when the buffer's own sentinels miss but the worktree is gone + PR merged:
+1. Read this issue's `pane-poll --batch` JSON object from `POLL_JSONL` (one object per issue, same schema as legacy single-pane mode plus `issue`). The batch input came from the registry's immutable `pane_id` when available and falls back to `pane_target` for legacy rows; it also passes `harness`, `worktree`, and `pr_number` so adapter reads and the orphan worktree-gone + PR-merged cross-check still run:
    ```
-   .agents/skills/flightdeck/scripts/pane-poll <pane_id-from-registry> \
-     --harness <h> \
-     --worktree <worktree-path-from-registry> \
-     --pr <pr-number-from-registry>
-
-   # legacy fallback when pane_id is absent:
-   .agents/skills/flightdeck/scripts/pane-poll <session>:<window> <pinned-pane-index> \
+   POLL=$(jq -c --arg issue "<ISSUE>" 'select(.issue == $issue)' <<< "$POLL_JSONL" | tail -n1)
+   ```
+   If a targeted re-poll is needed after fingerprint drift recovery, call legacy single-pane mode with the corrected target:
+   ```
+   .agents/skills/flightdeck/scripts/pane-poll <pane_id-or-session-window> [pinned-pane-index] \
      --harness <h> \
      --worktree <worktree-path-from-registry> \
      --pr <pr-number-from-registry>
    ```
-2. Parse JSON. If `dead: true` → `pane-registry set-state <ISSUE> dead` and continue.
+2. Parse `POLL`. If `dead: true` → `pane-registry set-state <ISSUE> dead` and continue.
 
    **Pane-fingerprint drift recovery**: if `fingerprint_match: false` AND `pane_index_suggest` is non-null, the orchestrator pane moved (sub-agent restart, layout reflow, harness restart). Re-resolve both the human-readable `pane_target` AND the immutable `pane_id` (the daemon now keys liveness on `pane_id` — see x-harness review finding #4; updating only `pane_target` would leave the daemon watching the old pane id):
    ```
@@ -238,7 +247,7 @@ Master state persists on every mutation. On `watch` re-entry after compaction (o
 
 1. `flightdeck-state init` is idempotent — it loads the existing state file.
 2. Re-fingerprint each registered window's pane 0 (TUIs may have re-laid-out across compaction).
-3. Recompute every issue's `state` from a fresh `pane-poll`. Persisted state is a hint, not truth.
+3. Recompute every issue's `state` from a fresh `pane-poll --batch -` registry snapshot. Persisted state is a hint, not truth.
 4. The `unknown_since` timer is preserved across compaction, so the force-merge clock does not reset.
 5. The daemon may have continued running through compaction; § 1 step 5's `flightdeck-daemon start` is idempotent (flock-protected) and is a no-op when the daemon is already alive.
 6. Resume from § 2.
