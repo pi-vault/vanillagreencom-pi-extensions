@@ -24,6 +24,7 @@ import {
 	dashboardStatusFor,
 	isDashboardWorkingStatus,
 	renderDashboardWidgetLines,
+	sortDashboardItems,
 } from "./dashboard.js";
 import {
 	addArtifactPathSection,
@@ -306,6 +307,8 @@ export default function (pi: ExtensionAPI) {
 	let agentCommandCompletions: Array<{ value: string; label: string; description: string; pane: boolean }> = [];
 	let dashboardState: SubagentDashboardState = { collapsed: false, mode: "normal", visible: true, items: {} };
 	let dashboardCtx: ExtensionContext | undefined;
+	let dashboardBatchDepth = 0;
+	let dashboardSyncPending = false;
 	const lastRuntimeSnapshotFingerprintBySession = new Map<string, string>();
 
 	const toStatsItem = (item: SubagentDashboardItem): SubagentStatsItem => ({
@@ -423,8 +426,28 @@ export default function (pi: ExtensionAPI) {
 			};
 		}, { placement: "aboveEditor" });
 	};
+	const requestDashboardSync = () => {
+		if (dashboardBatchDepth > 0) {
+			dashboardSyncPending = true;
+			return;
+		}
+		syncDashboard();
+	};
+	const withDashboardBatch = async <T>(fn: () => Promise<T>): Promise<T> => {
+		dashboardBatchDepth += 1;
+		try {
+			return await fn();
+		} finally {
+			dashboardBatchDepth = Math.max(0, dashboardBatchDepth - 1);
+			if (dashboardBatchDepth === 0 && dashboardSyncPending) {
+				dashboardSyncPending = false;
+				syncDashboard();
+			}
+		}
+	};
 
-	const dashboardItemKey = (item: Pick<SubagentDashboardItem, "agent" | "kind" | "taskId">) => (item.kind === "pane" ? `pane:${item.agent}` : item.taskId);
+	const dashboardPaneIdentity = (item: Pick<SubagentDashboardItem, "agent" | "kind" | "taskId" | "transcriptPath" | "paneId">) => item.transcriptPath || item.paneId || item.taskId || item.agent;
+	const dashboardItemKey = (item: Pick<SubagentDashboardItem, "agent" | "kind" | "taskId" | "transcriptPath" | "paneId">) => item.kind === "pane" ? `pane:${item.agent}:${dashboardPaneIdentity(item)}` : item.taskId || `${item.kind}:${item.agent}`;
 	const dashboardKeyForTask = (taskId: string | undefined): string | undefined => {
 		if (!taskId) return undefined;
 		if (dashboardState.items[taskId]) return taskId;
@@ -433,12 +456,18 @@ export default function (pi: ExtensionAPI) {
 
 	const updateDashboard = (item: SubagentDashboardItem) => {
 		const key = dashboardItemKey(item);
-		const existing = dashboardState.items[key];
-		if (item.kind === "pane") {
-			for (const [existingKey, existingPane] of Object.entries(dashboardState.items)) {
-				if (existingKey !== key && existingPane.kind === "pane" && existingPane.agent === item.agent) delete dashboardState.items[existingKey];
-			}
-		}
+		const duplicateKeys = Object.entries(dashboardState.items)
+			.filter(([existingKey, existingItem]) => {
+				if (existingKey === key) return false;
+				if (existingItem.taskId === item.taskId) return true;
+				return item.kind === "pane"
+					&& existingItem.kind === "pane"
+					&& existingItem.agent === item.agent
+					&& dashboardPaneIdentity(existingItem) === dashboardPaneIdentity(item);
+			})
+			.map(([existingKey]) => existingKey);
+		const existing = dashboardState.items[key] ?? (duplicateKeys[0] ? dashboardState.items[duplicateKeys[0]] : undefined);
+		for (const duplicateKey of duplicateKeys) delete dashboardState.items[duplicateKey];
 		// Carry lifecycle timestamps forward when the caller omitted them. Bg
 		// updaters in parallel/single/chain mode (updateOneshotDashboard, the
 		// post-await dashboard refreshes) write only status/message/usage and
@@ -453,10 +482,14 @@ export default function (pi: ExtensionAPI) {
 		const sorted = Object.values(dashboardState.items).sort((a, b) => {
 			const activeRank = Number(isDashboardWorkingStatus(b.status)) - Number(isDashboardWorkingStatus(a.status));
 			if (activeRank !== 0) return activeRank;
-			return b.updatedAt.localeCompare(a.updatedAt);
+			const aTime = a.completedAt ?? a.startedAt ?? a.updatedAt;
+			const bTime = b.completedAt ?? b.startedAt ?? b.updatedAt;
+			const timeRank = bTime.localeCompare(aTime);
+			if (timeRank !== 0) return timeRank;
+			return sortDashboardItems([a, b])[0] === a ? -1 : 1;
 		});
 		dashboardState.items = Object.fromEntries(sorted.slice(0, maxKeep).map((entry) => [dashboardItemKey(entry), entry]));
-		syncDashboard();
+		requestDashboardSync();
 	};
 
 	const patchDashboard = (taskId: string | undefined, patch: Partial<SubagentDashboardItem>) => {
@@ -477,14 +510,15 @@ export default function (pi: ExtensionAPI) {
 
 	const updateDashboardFromTaskRecord = (record: PaneTaskRecord) => {
 		const kind = inferRecordDashboardKind(record);
-		const existingKey = dashboardKeyForTask(record.taskId) ?? (kind === "pane" ? `pane:${record.agent}` : undefined);
+		const candidateKey = dashboardItemKey({ agent: record.agent, kind, taskId: record.taskId, transcriptPath: record.transcriptPath, paneId: record.paneId });
+		const existingKey = dashboardKeyForTask(record.taskId) ?? (dashboardState.items[candidateKey] ? candidateKey : undefined);
 		const existing = existingKey ? dashboardState.items[existingKey] : undefined;
 		if (record.status === "unknown") {
 			if (existing && isLiveDashboardStatus(existing.status) && timestampMs(record.updatedAt ?? record.completedAt ?? record.createdAt) < timestampMs(existing.updatedAt)) return;
 			if (kind === "oneshot") {
 				if (existingKey) {
 					delete dashboardState.items[existingKey];
-					syncDashboard();
+					requestDashboardSync();
 				}
 				return;
 			}
@@ -509,16 +543,18 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	const syncDashboardFromTaskRegistry = async (ctx: ExtensionContext, runtimeRoot: string) => {
-		const records = await readTaskRegistry(runtimeRoot);
-		const registry = await readPaneRegistry(runtimeRoot);
-		const sorted = Object.values(records).sort((a, b) => (a.updatedAt ?? a.completedAt ?? a.createdAt).localeCompare(b.updatedAt ?? b.completedAt ?? b.createdAt));
-		for (const record of sorted) {
-			if (!record.taskId || !record.agent) continue;
-			if (record.paneId && isTerminalTaskStatus(record.status) && !registry[record.agent]) continue;
-			const refreshed = await refreshTaskDiagnostics(runtimeRoot, record);
-			if (refreshed.record.status === "needs_completion") dashboardState.visible = true;
-			updateDashboardFromTaskRecord(refreshed.record);
-		}
+		await withDashboardBatch(async () => {
+			const records = await readTaskRegistry(runtimeRoot);
+			const registry = await readPaneRegistry(runtimeRoot);
+			const sorted = Object.values(records).sort((a, b) => (a.createdAt ?? a.completedAt ?? a.updatedAt).localeCompare(b.createdAt ?? b.completedAt ?? b.updatedAt));
+			for (const record of sorted) {
+				if (!record.taskId || !record.agent) continue;
+				if (record.paneId && isTerminalTaskStatus(record.status) && !registry[record.agent]) continue;
+				const refreshed = await refreshTaskDiagnostics(runtimeRoot, record);
+				if (refreshed.record.status === "needs_completion") dashboardState.visible = true;
+				updateDashboardFromTaskRecord(refreshed.record);
+			}
+		});
 		await persistRuntimeSnapshot(ctx, runtimeRoot);
 	};
 
@@ -883,21 +919,23 @@ export default function (pi: ExtensionAPI) {
 		await migrateLegacyProjectRuntime(ctx.cwd, runtimeRoot);
 		await restoreRuntimeSnapshot(ctx, runtimeRoot);
 		try {
-			const records = await readTaskRegistry(runtimeRoot);
-			const sortedRecords = Object.values(records).sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
-			for (const record of sortedRecords) {
-				if (!record.taskId || !record.agent) continue;
-				const refreshed = await refreshTaskDiagnostics(runtimeRoot, record);
-				updateDashboardFromTaskRecord(refreshed.record);
-				if (refreshed.record.transcriptPath && (refreshed.record.status === "completed" || refreshed.record.status === "failed" || refreshed.record.status === "blocked")) {
-					const capturedTaskId = refreshed.record.taskId;
-					parseTranscriptUsage(refreshed.record.transcriptPath)
-						.then((parsed) => {
-							if (parsed) patchDashboard(capturedTaskId, { usage: parsed.usage, model: parsed.model });
-						})
-						.catch(() => undefined);
+			await withDashboardBatch(async () => {
+				const records = await readTaskRegistry(runtimeRoot);
+				const sortedRecords = Object.values(records).sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
+				for (const record of sortedRecords) {
+					if (!record.taskId || !record.agent) continue;
+					const refreshed = await refreshTaskDiagnostics(runtimeRoot, record);
+					updateDashboardFromTaskRecord(refreshed.record);
+					if (refreshed.record.transcriptPath && (refreshed.record.status === "completed" || refreshed.record.status === "failed" || refreshed.record.status === "blocked")) {
+						const capturedTaskId = refreshed.record.taskId;
+						parseTranscriptUsage(refreshed.record.transcriptPath)
+							.then((parsed) => {
+								if (parsed) patchDashboard(capturedTaskId, { usage: parsed.usage, model: parsed.model });
+							})
+							.catch(() => undefined);
+					}
 				}
-			}
+			});
 		} catch {
 			// Dashboard is best-effort; registry lookup may fail before first pane task.
 		}

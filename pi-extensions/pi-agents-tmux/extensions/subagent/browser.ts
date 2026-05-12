@@ -561,13 +561,50 @@ function agentStatusLabel(agent: AgentConfig, status: AgentPaneStatus | undefine
 	const state = agentStatus(agent, status);
 	if (state === "live") return theme.fg("success", "live");
 	if (state === "dead") return theme.fg("warning", "dead");
-	if (state === "pane") return theme.fg("muted", "pane-ready/startable");
+	if (state === "pane") return theme.fg("muted", "startable");
 	return theme.fg("dim", "bg");
 }
 
-function activeItemForAgent(agent: AgentConfig | undefined, items: SubagentDashboardItem[]): SubagentDashboardItem | undefined {
-	if (!agent) return undefined;
-	return sortDashboardItems(items).find((item) => item.agent === agent.name);
+interface AgentBrowserRow {
+	agent: AgentConfig;
+	item?: SubagentDashboardItem;
+	label: string;
+}
+
+function dashboardItemSearchText(item: SubagentDashboardItem, label: string): string {
+	return [
+		label,
+		item.agent,
+		item.kind,
+		item.status,
+		item.taskId,
+		item.task ?? "",
+		item.message ?? "",
+		item.transcriptPath ?? "",
+	].join(" ").toLowerCase();
+}
+
+function buildAgentRows(agents: AgentConfig[], query: string, statuses: Map<string, AgentPaneStatus>, activeItems: SubagentDashboardItem[]): AgentBrowserRow[] {
+	const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+	const agentByName = new Map(agents.map((agent) => [agent.name, agent]));
+	const labels = dashboardDisplayLabels(activeItems);
+	const rows: AgentBrowserRow[] = [];
+	const agentsWithActivity = new Set<string>();
+	for (const item of sortDashboardItems(activeItems)) {
+		const agent = agentByName.get(item.agent);
+		if (!agent) continue;
+		const label = labels.get(item.taskId) ?? item.agent;
+		const searchText = `${agentSearchText(agent, statuses.get(agent.name))} ${dashboardItemSearchText(item, label)}`;
+		if (tokens.length > 0 && !tokens.every((token) => searchText.includes(token))) continue;
+		agentsWithActivity.add(agent.name);
+		rows.push({ agent, item, label });
+	}
+	const catalogAgents = sortAgentsForUnifiedView(filterAgentsForBrowser(agents, query, statuses), statuses, activeItems);
+	for (const agent of catalogAgents) {
+		if (agentsWithActivity.has(agent.name)) continue;
+		rows.push({ agent, label: agent.name });
+	}
+	return rows;
 }
 
 function activeItemsByAgent(items: SubagentDashboardItem[]): Map<string, SubagentDashboardItem> {
@@ -599,29 +636,29 @@ function sortAgentsForUnifiedView(agents: AgentConfig[], statuses: Map<string, A
 }
 
 function agentLegend(theme: Theme): string {
-	return `${theme.fg("muted", "Legend")}: ${theme.fg("success", ICONS.circleFilled)} live pane · ${theme.fg("warning", ICONS.circleOpen)} pane-ready/startable · ${theme.fg("warning", ICONS.times)} stale pane · ${theme.fg("dim", "·")} bg`;
+	return `${theme.fg("muted", "Legend")}: ${theme.fg("success", ICONS.circleFilled)} live · ${theme.fg("warning", ICONS.circleOpen)} startable · ${theme.fg("warning", ICONS.times)} stale`;
 }
 
-function renderAgentList(agents: AgentConfig[], statuses: Map<string, AgentPaneStatus>, activeByAgent: Map<string, SubagentDashboardItem>, ui: AgentBrowserUiState, width: number, theme: Theme, listRows: number): string[] {
-	const lines = [`${agentPaneTitle(theme, "Agents", ui.pane === "list")} ${theme.fg("dim", `(${agents.length})`)}`, ""];
-	if (agents.length === 0) {
+function renderAgentList(rows: AgentBrowserRow[], statuses: Map<string, AgentPaneStatus>, ui: AgentBrowserUiState, width: number, theme: Theme, listRows: number): string[] {
+	const lines = [`${agentPaneTitle(theme, "Agents", ui.pane === "list")} ${theme.fg("dim", `(${rows.length})`)}`, ""];
+	if (rows.length === 0) {
 		lines.push(theme.fg("dim", "No matching agents."));
 		return lines;
 	}
 	if (ui.scroll > 0) lines.push(theme.fg("dim", `↑ ${ui.scroll} earlier`));
-	for (const [visibleIndex, agent] of agents.slice(ui.scroll, ui.scroll + listRows).entries()) {
+	for (const [visibleIndex, rowInfo] of rows.slice(ui.scroll, ui.scroll + listRows).entries()) {
 		const index = ui.scroll + visibleIndex;
 		const selected = index === ui.selected;
-		const active = activeByAgent.get(agent.name);
+		const agent = rowInfo.agent;
 		const status = agentStatus(agent, statuses.get(agent.name));
 		const marker = " ";
-		const name = ansiMagenta(selected ? theme.bold(agent.name) : agent.name);
-		const icon = active ? dashboardStatusIcon(active.status, theme) : agentStatusIcon(status, theme);
-		const meta = active ? `${theme.fg("dim", " · ")}${dashboardStatusText(active, theme)}` : "";
+		const name = ansiMagenta(selected ? theme.bold(rowInfo.label) : rowInfo.label);
+		const icon = rowInfo.item ? dashboardStatusIcon(rowInfo.item.status, theme) : agentStatusIcon(status, theme);
+		const meta = rowInfo.item ? `${theme.fg("dim", " · ")}${dashboardStatusText(rowInfo.item, theme)}` : "";
 		const row = truncateToWidth(`${marker}${icon} ${name}${meta}`, width, "…");
 		lines.push(selected ? theme.bg("selectedBg", agentPad(row, width)) : row);
 	}
-	const hidden = Math.max(0, agents.length - (ui.scroll + listRows));
+	const hidden = Math.max(0, rows.length - (ui.scroll + listRows));
 	if (hidden > 0) lines.push(theme.fg("dim", `↓ ${hidden} more`));
 	return lines;
 }
@@ -1369,7 +1406,7 @@ function renderUnifiedAgentDetail(
 
 function renderAgentsBody(
 	discovery: ReturnType<typeof discoverAgents>,
-	agents: AgentConfig[],
+	rowsForList: AgentBrowserRow[],
 	statuses: Map<string, AgentPaneStatus>,
 	activeItems: SubagentDashboardItem[],
 	runtimeRoot: string,
@@ -1378,10 +1415,9 @@ function renderAgentsBody(
 	theme: Theme,
 	layout: AgentBrowserLayout,
 ): string[] {
-	const selected = agents[ui.selected];
-	const activeByAgent = activeItemsByAgent(activeItems);
-	const activeItem = activeItemForAgent(selected, activeItems);
-	const labels = dashboardDisplayLabels(activeItems);
+	const selectedRow = rowsForList[ui.selected];
+	const selected = selectedRow?.agent;
+	const activeItem = selectedRow?.item;
 	const maxLeftWidth = Math.max(10, width - 13);
 	const desiredLeftWidth = Math.min(AGENTS_LEFT_MAX_WIDTH, Math.floor(width * 0.38), maxLeftWidth);
 	const leftWidth = Math.max(10, Math.min(maxLeftWidth, Math.max(Math.min(AGENTS_LEFT_MIN_WIDTH, maxLeftWidth), desiredLeftWidth)));
@@ -1389,12 +1425,12 @@ function renderAgentsBody(
 	const bodyRows = layout.bodyRows;
 	const liveCount = [...statuses.values()].filter((status) => status.live).length;
 	const paneCount = discovery.agents.filter((agent) => agent.pane).length;
-	const left = renderAgentList(agents, statuses, activeByAgent, ui, leftWidth, theme, layout.listRows);
-	const right = renderUnifiedAgentDetail(selected, activeItem, activeItem ? labels.get(activeItem.taskId) : undefined, statuses, activeItems, runtimeRoot, ui, rightWidth, bodyRows, theme);
+	const left = renderAgentList(rowsForList, statuses, ui, leftWidth, theme, layout.listRows);
+	const right = renderUnifiedAgentDetail(selected, activeItem, selectedRow?.label, statuses, activeItems, runtimeRoot, ui, rightWidth, bodyRows, theme);
 	const rows = bodyRows;
 	const searchLine = theme.bg("toolPendingBg", agentPad(` > ${ui.search}${theme.inverse(" ")}`, width));
 	const workingCount = activeItems.filter((item) => isDashboardWorkingStatus(item.status)).length;
-	const filterLine = `${theme.fg("muted", "all scopes")}: ${agents.length}/${discovery.agents.length} shown · ${workingCount} working · ${paneCount} pane · ${liveCount} live`;
+	const filterLine = `${theme.fg("muted", "all scopes")}: ${rowsForList.length} rows · ${discovery.agents.length} agents · ${workingCount} working · ${paneCount} pane · ${liveCount} live`;
 	const filterLines = wrapTextWithAnsi(filterLine, width);
 	const lines = [searchLine, ...filterLines, agentDivider(width, theme)];
 	for (let i = 0; i < rows; i += 1) {
@@ -1445,8 +1481,9 @@ function createAgentsBrowserComponent(
 		done(action);
 	};
 	process.on("SIGWINCH", scheduleResizeRender);
-	const filtered = () => sortAgentsForUnifiedView(filterAgentsForBrowser(discovery.agents, ui.search, statuses), statuses, getActiveItems());
-	const selectedAgent = () => filtered()[ui.selected];
+	const filtered = () => buildAgentRows(discovery.agents, ui.search, statuses, getActiveItems());
+	const selectedRow = () => filtered()[ui.selected];
+	const selectedAgent = () => selectedRow()?.agent;
 	const clamp = () => {
 		const layout = getLayout();
 		const list = filtered();
@@ -1561,7 +1598,7 @@ function createAgentsBrowserComponent(
 					requestRender();
 					return;
 				}
-				if (activeItemForAgent(selectedAgent(), getActiveItems()) && ui.agentSubtab < 2) {
+				if (selectedRow()?.item && ui.agentSubtab < 2) {
 					ui.agentSubtab += 1;
 					ui.inspectorScroll = 0;
 					requestRender();

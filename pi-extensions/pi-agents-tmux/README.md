@@ -106,7 +106,7 @@ Each row shows agent name, kind (`pane` or `bg`), turn count, input/output token
 
 Rows are bucketed for stability: queued/running/waiting agents stay above attention states, and all of those stay above completed agents. Within each bucket, rows keep start-time order so token/usage updates do not reshuffle the list. The header always shows completed and working counts, even when either count is zero. Missing pane artifacts render as `stale` attention rows; stale bg-only records are dropped because bg agents do not use pane handoff files.
 
-The popup has two top-level tabs: **Agents** (unified project/user/active list, sorted by current status, with Live/Chat/Inspector subtabs on the right) and **History** (completed task traces with Summary/Completion/Task subtabs; transcript paths appear in Summary). Running agents use an animated spinner in both mini-dashboard and popup views.
+The popup has two top-level tabs: **Agents** (unified project/user/active list, sorted by current status, with Live/Chat/Inspector subtabs on the right) and **History** (completed task traces with Summary/Completion/Task subtabs; transcript paths appear in Summary). Running agents use an animated spinner in both mini-dashboard and popup views. Repeated launches of the same agent render as stable session rows (`agent`, `agent 2`, ...); resumed pane work in the same transcript stays on one row.
 
 When the dashboard is on, inline tool output stays quiet — pane calls render as launch breadcrumbs, bg/one-shot calls show a result preview.
 
