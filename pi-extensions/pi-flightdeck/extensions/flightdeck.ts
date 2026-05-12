@@ -393,16 +393,20 @@ const TABS: Array<{ id: Tab; label: string }> = [
 	{ id: TAB_DAEMON, label: "Daemon" },
 ];
 
+type DecisionEntry = ReturnType<typeof flatDecisionsLog>[number];
+
 interface PopupUiState {
 	tab: Tab;
 	scroll: number;
 	selected: number;
 	search: string;
 	showHelp: boolean;
+	decisionDetail?: DecisionEntry;
+	decisionDetailScroll: number;
 }
 
 function makeInitialPopupState(): PopupUiState {
-	return { scroll: 0, search: "", selected: 0, showHelp: false, tab: TAB_OVERVIEW };
+	return { decisionDetailScroll: 0, scroll: 0, search: "", selected: 0, showHelp: false, tab: TAB_OVERVIEW };
 }
 
 function renderTabBar(active: Tab, width: number, theme: Theme): string {
@@ -746,32 +750,80 @@ function renderConflictsTab(snapshot: FlightdeckSnapshot, _ui: PopupUiState, wid
 	return lines.flatMap((line) => wrapLine(line, width));
 }
 
-function renderDecisionsTab(snapshot: FlightdeckSnapshot, ui: PopupUiState, width: number, theme: Theme, viewportRows: number, cwd: string): string[] {
+function filteredDecisions(snapshot: FlightdeckSnapshot, ui: PopupUiState, cwd: string): DecisionEntry[] {
 	const max = Math.max(50, Math.floor(settingNumber("liveFeedLines", 200, cwd)));
 	const decisions = flatDecisionsLog(snapshot.master, max);
-	const filtered = ui.search.trim()
-		? decisions.filter((d) => `${d.issue} ${d.prompt_tag} ${d.answer}`.toLowerCase().includes(ui.search.trim().toLowerCase()))
-		: decisions;
-	clampSelection(ui, filtered.length, viewportRows);
+	if (!ui.search.trim()) return decisions;
+	const query = ui.search.trim().toLowerCase();
+	return decisions.filter((d) => `${d.issue} ${d.prompt_tag} ${d.answer}`.toLowerCase().includes(query));
+}
+
+function selectedDecision(snapshot: FlightdeckSnapshot, ui: PopupUiState, cwd: string): DecisionEntry | undefined {
+	const decisions = filteredDecisions(snapshot, ui, cwd);
+	if (decisions.length === 0) return undefined;
+	ui.selected = Math.max(0, Math.min(ui.selected, decisions.length - 1));
+	return decisions[ui.selected];
+}
+
+function renderDecisionsTab(snapshot: FlightdeckSnapshot, ui: PopupUiState, width: number, theme: Theme, viewportRows: number, cwd: string): string[] {
+	const all = flatDecisionsLog(snapshot.master, Math.max(50, Math.floor(settingNumber("liveFeedLines", 200, cwd))));
+	const filtered = filteredDecisions(snapshot, ui, cwd);
 	const lines: string[] = [];
 	lines.push(searchRow(theme, ui.search, width));
 	lines.push("");
 	if (filtered.length === 0) {
-		lines.push(theme.fg("dim", decisions.length === 0 ? "No decisions logged yet." : "No matches for current search."));
+		lines.push(theme.fg("dim", all.length === 0 ? "No decisions logged yet." : "No matches for current search."));
 		return lines;
 	}
 	lines.push(`${pad(label(theme, "TIME"), 10)} ${pad(label(theme, "ISSUE"), 16)} ${pad(label(theme, "PROMPT TAG"), 26)} ${label(theme, "ANSWER")}`);
 	lines.push(divider(width, theme));
-	const rows = Math.max(1, viewportRows - lines.length);
-	const sliceStart = Math.max(0, filtered.length - rows);
-	for (const d of filtered.slice(sliceStart)) {
+	const rows = Math.max(1, viewportRows - lines.length - 2);
+	clampSelection(ui, filtered.length, rows);
+	const start = Math.max(0, Math.min(ui.scroll, Math.max(0, filtered.length - rows)));
+	const end = Math.min(filtered.length, start + rows);
+	if (start > 0) lines.push(theme.fg("dim", `↑ ${start} earlier`));
+	for (const [vi, d] of filtered.slice(start, end).entries()) {
+		const idx = start + vi;
 		const time = pad(theme.fg("dim", d.ts.slice(11, 19)), 10);
 		const issue = pad(theme.fg("text", d.issue), 16);
 		const tag = pad(tagBadge(theme, d.prompt_tag), 26);
 		const answer = theme.fg("text", d.answer);
-		lines.push(truncateToWidth(`${time} ${issue} ${tag} ${answer}`, width, ""));
+		const row = truncateToWidth(`${time} ${issue} ${tag} ${answer}`, width, "");
+		lines.push(idx === ui.selected ? selectedRow(theme, row, width) : row);
 	}
+	const tail = Math.max(0, filtered.length - end);
+	if (tail > 0) lines.push(theme.fg("dim", `↓ ${tail} more`));
 	return lines;
+}
+
+function wrapDecisionAnswer(answer: string, width: number, theme: Theme): string[] {
+	const rows = wrapLine(answer || "(empty answer)", width);
+	return rows.map((row) => theme.fg(row ? "text" : "dim", row));
+}
+
+function renderDecisionDetailView(decision: DecisionEntry, ui: PopupUiState, width: number, theme: Theme, innerRows: number): string[] {
+	const header = [
+		`${theme.fg("customMessageLabel", theme.bold(decision.issue))} ${theme.fg("dim", "·")} ${tagBadge(theme, decision.prompt_tag)}`,
+		`${label(theme, "time:")} ${theme.fg("text", decision.ts)} ${theme.fg("dim", "·")} ${label(theme, "answer chars:")} ${theme.fg("text", String(decision.answer.length))}`,
+		divider(width, theme),
+		label(theme, "answer"),
+	];
+	const footerRows = 2;
+	const answerRows = wrapDecisionAnswer(decision.answer, width, theme);
+	const answerWindowRows = Math.max(1, innerRows - header.length - footerRows);
+	const maxScroll = Math.max(0, answerRows.length - answerWindowRows);
+	ui.decisionDetailScroll = Math.max(0, Math.min(ui.decisionDetailScroll, maxScroll));
+	const start = ui.decisionDetailScroll;
+	const end = Math.min(answerRows.length, start + answerWindowRows);
+	const lines = [...header, ...answerRows.slice(start, end)];
+	while (lines.length < innerRows - footerRows) lines.push("");
+	const lineInfo = answerRows.length > answerWindowRows
+		? `${start + 1}-${end}/${answerRows.length}`
+		: `${answerRows.length}/${answerRows.length}`;
+	const footer = `${ansiYellow("↑/↓")} ${theme.fg("dim", "scroll · ")}${ansiYellow("-/=")} ${theme.fg("dim", "page · ")}${ansiYellow("home/end")} ${theme.fg("dim", "ends · ")}${ansiYellow("esc/backspace")} ${theme.fg("dim", "back · ")}${theme.fg("dim", `lines ${lineInfo}`)}`;
+	lines.push(divider(width, theme));
+	lines.push(truncateToWidth(footer, width, ""));
+	return lines.slice(0, innerRows);
 }
 
 type HarnessKey = "opencode" | "claude" | "pi" | "codex";
@@ -1086,6 +1138,48 @@ export default function flightdeck(pi: ExtensionAPI): void {
 				popupTui = tui;
 				return {
 					handleInput(data: string) {
+						if (ui.decisionDetail) {
+							if (matchesKey(data, "ctrl+c")) {
+								done(undefined);
+								return;
+							}
+							if (matchesKey(data, "escape") || matchesKey(data, "backspace")) {
+								ui.decisionDetail = undefined;
+								ui.decisionDetailScroll = 0;
+								tui.requestRender();
+								return;
+							}
+							if (matchesKey(data, "up")) {
+								ui.decisionDetailScroll = Math.max(0, ui.decisionDetailScroll - 1);
+								tui.requestRender();
+								return;
+							}
+							if (matchesKey(data, "down")) {
+								ui.decisionDetailScroll += 1;
+								tui.requestRender();
+								return;
+							}
+							if (matchesKey(data, "pageUp") || matchesKey(data, "-")) {
+								ui.decisionDetailScroll = Math.max(0, ui.decisionDetailScroll - 10);
+								tui.requestRender();
+								return;
+							}
+							if (matchesKey(data, "pageDown") || matchesKey(data, "=")) {
+								ui.decisionDetailScroll += 10;
+								tui.requestRender();
+								return;
+							}
+							if (matchesKey(data, "home")) {
+								ui.decisionDetailScroll = 0;
+								tui.requestRender();
+								return;
+							}
+							if (matchesKey(data, "end")) {
+								ui.decisionDetailScroll = Number.MAX_SAFE_INTEGER;
+								tui.requestRender();
+							}
+							return;
+						}
 						if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c")) {
 							done(undefined);
 							return;
@@ -1139,6 +1233,16 @@ export default function flightdeck(pi: ExtensionAPI): void {
 							tui.requestRender();
 							return;
 						}
+						if ((matchesKey(data, "enter") || matchesKey(data, "return")) && ui.tab === TAB_DECISIONS) {
+							const snapshot = cache.lastSnapshot ?? refreshSnapshot(activePopupCwd(ctx));
+							const decision = snapshot ? selectedDecision(snapshot, ui, activePopupCwd(ctx)) : undefined;
+							if (decision) {
+								ui.decisionDetail = decision;
+								ui.decisionDetailScroll = 0;
+								tui.requestRender();
+							}
+							return;
+						}
 						if (matchesKey(data, "backspace")) {
 							ui.search = ui.search.slice(0, -1);
 							ui.selected = 0;
@@ -1177,6 +1281,9 @@ export default function flightdeck(pi: ExtensionAPI): void {
 							lines.push(theme.fg("warning", "Not running inside a tmux session — flightdeck has nothing to show."));
 							lines.push(theme.fg("dim", "Run pi from inside the tmux session that hosts flightdeck."));
 							return framePopup(lines, safeWidth, theme, "Flightdeck", innerRows);
+						}
+						if (ui.decisionDetail) {
+							return framePopup(renderDecisionDetailView(ui.decisionDetail, ui, innerWidth, theme, innerRows), safeWidth, theme, " Flightdeck · Decision ", innerRows);
 						}
 						lines.push(renderTabBar(ui.tab, innerWidth, theme));
 						lines.push("");
@@ -1233,7 +1340,8 @@ export default function flightdeck(pi: ExtensionAPI): void {
 
 	function renderPopupFooter(theme: Theme, _width: number, ui: PopupUiState): string {
 		const tabHint = `${ansiYellow("tab")} ${theme.fg("dim", "next tab · ")}${ansiYellow("shift+tab")} ${theme.fg("dim", "prev")}`;
-		const navHint = `${ansiYellow("↑/↓")} ${theme.fg("dim", "select · ")}${ansiYellow("-/=")} ${theme.fg("dim", "page · ")}${ansiYellow("home/end")} ${theme.fg("dim", "ends")}`;
+		const viewHint = ui.tab === TAB_DECISIONS ? `${theme.fg("dim", " · ")}${ansiYellow("enter")} ${theme.fg("dim", "view")}` : "";
+		const navHint = `${ansiYellow("↑/↓")} ${theme.fg("dim", "select · ")}${ansiYellow("-/=")} ${theme.fg("dim", "page · ")}${ansiYellow("home/end")} ${theme.fg("dim", "ends")}${viewHint}`;
 		const searchHint = ui.search ? `${ansiYellow("ctrl+u")} ${theme.fg("dim", "clear search")}` : `${theme.fg("dim", "type to filter")}`;
 		const closeHint = `${ansiYellow("esc")} ${theme.fg("dim", "close")}`;
 		return `${tabHint}  ${theme.fg("dim", "·")}  ${navHint}  ${theme.fg("dim", "·")}  ${searchHint}  ${theme.fg("dim", "·")}  ${closeHint}`;
