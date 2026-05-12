@@ -60,6 +60,7 @@ export async function openDashboard(
 				let taskScroll = 0;
 				let outputScroll = 0;
 				let followOutput = true;
+				let commandExpanded = false;
 				let activePane: "tasks" | "output" = "tasks";
 				let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -105,7 +106,7 @@ export async function openDashboard(
 					const wrapped = wrapTextWithAnsi(sanitized, Math.max(1, targetWidth));
 					return wrapped.length > 0 ? wrapped : [""];
 				};
-				const pushDetail = (target: string[], label: string, value: string, detailWidth: number, maxLines = 6) => {
+				const pushDetail = (target: string[], label: string, value: string, detailWidth: number, maxLines = 6): number => {
 					const prefix = `${theme.fg("muted", label)}: `;
 					const indent = " ".repeat(Math.max(0, `${label}: `.length));
 					const chunks = String(value).split(/\r?\n/);
@@ -121,9 +122,10 @@ export async function openDashboard(
 					if (lines.length > maxLines) {
 						target.push(...lines.slice(0, Math.max(1, maxLines - 1)));
 						target.push(`${theme.fg("muted", indent)}… ${lines.length - (maxLines - 1)} more line(s)`);
-						return;
+						return lines.length - (maxLines - 1);
 					}
 					target.push(...lines);
+					return 0;
 				};
 
 				const syncTaskScroll = () => {
@@ -150,6 +152,7 @@ export async function openDashboard(
 					}
 					const currentIndex = Math.max(0, sorted.findIndex((task) => task.id === selectedId));
 					selectedId = sorted[clamp(currentIndex + delta, 0, sorted.length - 1)]?.id ?? null;
+					commandExpanded = false;
 					syncTaskScroll();
 					syncOutputScroll(true);
 					tui.requestRender();
@@ -172,12 +175,19 @@ export async function openDashboard(
 					syncOutputScroll();
 
 					const lines: string[] = [];
-					const footer = `${ansiYellow("←/→ tab")} ${theme.fg("dim", "pane · ")}${ansiYellow("s")} ${theme.fg("dim", "stop · ")}${ansiYellow("c")} ${theme.fg("dim", "clear · ")}${ansiYellow("f")} ${theme.fg("dim", "follow · ")}${ansiYellow("-/=")} ${theme.fg("dim", "page output")}`;
+					const footerFor = (commandHidden = 0) => {
+						const commandHint = commandExpanded
+							? `${theme.fg("dim", " · ")}${ansiYellow("x")} ${theme.fg("dim", "collapse command")}`
+							: commandHidden > 0
+								? `${theme.fg("dim", " · ")}${ansiYellow("x")} ${theme.fg("dim", "expand command")}`
+								: "";
+						return `${ansiYellow("←/→ tab")} ${theme.fg("dim", "pane · ")}${ansiYellow("s")} ${theme.fg("dim", "stop · ")}${ansiYellow("c")} ${theme.fg("dim", "clear · ")}${ansiYellow("f")} ${theme.fg("dim", "follow · ")}${ansiYellow("-/=")} ${theme.fg("dim", "page output")}${commandHint}`;
+					};
 
 					if (sorted.length === 0) {
 						lines.push(theme.fg("dim", "No background tasks yet. Use /bg run <command> or the bg_task tool."));
 						while (lines.length < bodyRows) lines.push("");
-						lines.push("", ...wrapTextWithAnsi(footer, Math.max(1, width)));
+						lines.push("", ...wrapTextWithAnsi(footerFor(), Math.max(1, width)));
 						return lines.map((line) => truncateToWidth(line, width, ""));
 					}
 
@@ -185,6 +195,7 @@ export async function openDashboard(
 					const detailPaneWidth = Math.max(24, width - taskPaneWidth - 3);
 					const left: string[] = [];
 					const right: string[] = [];
+					let commandHidden = 0;
 
 					left.push(`${activePane === "tasks" ? activePill(theme, " Tasks ") : inactivePill(theme, " Tasks ")} ${theme.fg("dim", `(${sorted.length})`)}`);
 					left.push("");
@@ -210,7 +221,7 @@ export async function openDashboard(
 						right.push(`${theme.fg("muted", "Status")}: ${bgStatusText(taskSnapshot(selected), theme)} · pid ${selected.pid}`);
 						right.push(`${theme.fg("muted", "Started")}: ${formatRelativeTime(selected.startedAt)} · ${formatDuration(taskElapsedMs(selected))} elapsed`);
 						if (selected.expiresAt != null) right.push(`${theme.fg("muted", "Expiry")}: ${formatRelativeTime(selected.expiresAt)}`);
-						pushDetail(right, "Command", selected.command, detailPaneWidth, 4);
+						commandHidden = pushDetail(right, "Command", selected.command, detailPaneWidth, commandExpanded ? Number.MAX_SAFE_INTEGER : 4);
 						pushDetail(right, "Cwd", selected.cwd, detailPaneWidth, 2);
 						pushDetail(right, "Log", selected.logFile, detailPaneWidth, 2);
 						pushDetail(right, "Wakeups", `exit=${selected.notifyOnExit ? "yes" : "no"}, output=${selected.notifyOnOutput ? (selected.notifyPattern ?? "yes") : "no"}`, detailPaneWidth, 2);
@@ -226,7 +237,7 @@ export async function openDashboard(
 						lines.push(`${padAnsi(left[i] ?? "", taskPaneWidth)}${theme.fg("dim", " │ ")}${truncateToWidth(right[i] ?? "", detailPaneWidth, "")}`);
 					}
 					while (lines.length < bodyRows) lines.push("");
-					lines.push("", ...wrapTextWithAnsi(footer, Math.max(1, width)));
+					lines.push("", ...wrapTextWithAnsi(footerFor(commandHidden), Math.max(1, width)));
 					return lines.map((line) => truncateToWidth(line, width, ""));
 				};
 
@@ -266,6 +277,11 @@ export async function openDashboard(
 							tui.requestRender();
 							return;
 						}
+						if (data === "x") {
+							if (selectedTask()) commandExpanded = !commandExpanded;
+							tui.requestRender();
+							return;
+						}
 						if (data === "s") {
 							deps.requestStop(selectedTask(), "user");
 							tui.requestRender();
@@ -281,7 +297,7 @@ export async function openDashboard(
 						ensureDashboardTimer();
 						const sorted = deps.sortedTasks();
 						const running = sorted.filter((task) => task.status === "running").length;
-						return frameDashboard(renderLines(dashboardContentWidth(width)), width, theme, "Background Tasks", `${running} running · ${sorted.length - running} finished`);
+						return frameDashboard(renderLines(dashboardContentWidth(width)), width, theme, "Background Tasks", `${running} running · ${sorted.length - running} finished`, { paddingBottom: 0 });
 					},
 				};
 			},

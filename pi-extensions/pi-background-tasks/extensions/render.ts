@@ -65,12 +65,14 @@ export function dashboardContentWidth(width: number): number {
 	return Math.max(1, width - 2 - DASHBOARD_PADDING_X * 2);
 }
 
-export function frameDashboard(lines: string[], width: number, theme: Theme, title = "", right = ""): string[] {
+export function frameDashboard(lines: string[], width: number, theme: Theme, title = "", right = "", options: { paddingBottom?: number; paddingTop?: number } = {}): string[] {
 	if (width < 8) return lines.map((line) => truncateToWidth(line, width, ""));
 
 	const border = (text: string) => theme.fg("borderAccent", text);
 	const contentWidth = dashboardContentWidth(width);
 	const blank = `${border("┃")}${" ".repeat(width - 2)}${border("┃")}`;
+	const paddingTop = options.paddingTop ?? DASHBOARD_PADDING_Y;
+	const paddingBottom = options.paddingBottom ?? DASHBOARD_PADDING_Y;
 	const top = () => {
 		if (!title) return `${border("┏")}${border("━".repeat(width - 2))}${border("┓")}`;
 		const rightPlain = right ? ` ${right} ` : "";
@@ -81,12 +83,12 @@ export function frameDashboard(lines: string[], width: number, theme: Theme, tit
 	};
 	const framed = [top()];
 
-	for (let i = 0; i < DASHBOARD_PADDING_Y; i += 1) framed.push(blank);
+	for (let i = 0; i < paddingTop; i += 1) framed.push(blank);
 	for (const line of lines) {
 		const content = padAnsi(line, contentWidth);
 		framed.push(`${border("┃")}${" ".repeat(DASHBOARD_PADDING_X)}${content}${" ".repeat(DASHBOARD_PADDING_X)}${border("┃")}`);
 	}
-	for (let i = 0; i < DASHBOARD_PADDING_Y; i += 1) framed.push(blank);
+	for (let i = 0; i < paddingBottom; i += 1) framed.push(blank);
 	framed.push(`${border("┗")}${border("━".repeat(width - 2))}${border("┛")}`);
 	return framed.map((line) => truncateToWidth(line, width, ""));
 }
