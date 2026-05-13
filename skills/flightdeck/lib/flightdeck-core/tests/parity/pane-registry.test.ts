@@ -46,6 +46,11 @@ function readIssues(repo: string, session = process.env.TMUX_PARITY_SESSION ?? s
 	return JSON.parse(readFileSync(file, "utf8")).issues;
 }
 
+function readEntries(repo: string, session = process.env.TMUX_PARITY_SESSION ?? sessionName()): unknown {
+	const file = join(repo, "tmp", `flightdeck-state-${session}.json`);
+	return JSON.parse(readFileSync(file, "utf8")).entries;
+}
+
 function sessionName(): string {
 	const r = spawnSync("tmux", ["display-message", "-p", "#S"], { encoding: "utf8" });
 	return (r.stdout ?? "").trim();
@@ -154,19 +159,140 @@ describe("pane-registry parity", () => {
 		expect(b.stdout.trim().split(",").sort()).toEqual(a.stdout.trim().split(",").sort());
 	});
 
+	test("init-entry writes normalized adhoc entry without legacy issue projection", () => {
+		for (const repo of [bashRepo, tsRepo]) {
+			const useTs = repo === tsRepo;
+			const r = run(useTs, repo, [
+				"init-entry", "adhoc.one",
+				"--title", "Scratch Session",
+				"--kind", "adhoc",
+				"--cwd", "/tmp/scratch",
+				"--window", "7",
+				"--harness", "pi",
+				"--pane-target", "test:7.0",
+				"--pane-id", "%777",
+			]);
+			expect(r.status).toBe(0);
+		}
+		const bEntries = readEntries(bashRepo) as Record<string, Record<string, unknown>>;
+		const tEntries = readEntries(tsRepo) as Record<string, Record<string, unknown>>;
+		expect(tEntries["adhoc.one"]!.kind).toBe("adhoc");
+		expect(tEntries["adhoc.one"]!.pane_id).toBe("%777");
+		expect(normalize(tEntries)).toEqual(normalize(bEntries));
+		expect(readIssues(tsRepo)).toEqual({});
+		expect(readIssues(bashRepo)).toEqual({});
+	});
+
+	test("init-entry kind=issue dual-writes .entries and .issues", () => {
+		for (const repo of [bashRepo, tsRepo]) {
+			const useTs = repo === tsRepo;
+			const r = run(useTs, repo, [
+				"init-entry", "ISSUE-42",
+				"--title", "Issue 42",
+				"--kind", "issue",
+				"--cwd", "/tmp/wt42",
+				"--window", "issue-42",
+				"--harness", "opencode",
+				"--worktree", "/tmp/wt42",
+				"--pr", "42",
+			]);
+			expect(r.status).toBe(0);
+		}
+		const bIssues = readIssues(bashRepo) as Record<string, Record<string, unknown>>;
+		const tIssues = readIssues(tsRepo) as Record<string, Record<string, unknown>>;
+		const tEntries = readEntries(tsRepo) as Record<string, Record<string, unknown>>;
+		expect(tEntries["ISSUE-42"]!.kind).toBe("issue");
+		expect(tIssues["ISSUE-42"]!.pr_number).toBe(42);
+		expect(normalize(tIssues)).toEqual(normalize(bIssues));
+	});
+
+	test("list --format json returns normalized entries with legacy issue fields", () => {
+		for (const repo of [bashRepo, tsRepo]) {
+			const useTs = repo === tsRepo;
+			run(useTs, repo, ["init-entry", "adhoc-json", "--title", "Adhoc", "--kind", "adhoc", "--cwd", "/tmp/a", "--window", "10", "--harness", "pi", "--pane-id", "%10"]);
+			run(useTs, repo, ["init", "JSON-9", "--window", "json-9", "--harness", "codex", "--worktree", "/tmp/json-9", "--pr", "9"]);
+		}
+		const a = JSON.parse(run(false, bashRepo, ["list", "--format", "json"]).stdout) as Array<Record<string, unknown>>;
+		const b = JSON.parse(run(true, tsRepo, ["list", "--format", "json"]).stdout) as Array<Record<string, unknown>>;
+		const normRows = (rows: Array<Record<string, unknown>>) => rows.map((row) => ({
+			id: row.id,
+			issue: row.issue,
+			kind: row.kind,
+			pane_id: row.pane_id,
+			pr_number: row.pr_number,
+			worktree: row.worktree,
+		})).sort((x, y) => String(x.id).localeCompare(String(y.id)));
+		expect(normRows(b)).toEqual(normRows(a));
+		expect(normRows(b)).toContainEqual({ id: "JSON-9", issue: "JSON-9", kind: "issue", pane_id: null, pr_number: 9, worktree: "/tmp/json-9" });
+		expect(normRows(b)).toContainEqual({ id: "adhoc-json", issue: null, kind: "adhoc", pane_id: "%10", pr_number: null, worktree: "/tmp/a" });
+	});
+
+	test("init-entry rejects bad input with parity", () => {
+		const cases = [
+			{ args: ["init-entry"], stderr: "Usage: pane-registry init-entry" },
+			{ args: ["init-entry", "BAD-KIND", "--title", "Bad", "--kind", "bogus", "--cwd", "/tmp/bad", "--window", "1", "--harness", "pi"], stderr: "init-entry requires --kind" },
+			{ args: ["init-entry", "NO-CWD", "--title", "Missing", "--kind", "adhoc", "--window", "1", "--harness", "pi"], stderr: "init-entry requires --title" },
+			{ args: ["init-entry", "NO-HARNESS", "--title", "Missing", "--kind", "adhoc", "--cwd", "/tmp/missing", "--window", "1"], stderr: "init-entry requires --title" },
+		];
+		for (const c of cases) {
+			const bash = run(false, bashRepo, c.args);
+			const ts = run(true, tsRepo, c.args);
+			expect(ts.status).toBe(2);
+			expect(bash.status).toBe(2);
+			expect(ts.stderr).toContain(c.stderr);
+			expect(bash.stderr).toContain(c.stderr);
+		}
+	});
+
 	test("find-by-pane resolves an issue", () => {
 		for (const repo of [bashRepo, tsRepo]) {
 			const useTs = repo === tsRepo;
-			// Pin --pane-index 0 so the test target is deterministic across
-			// tmux configs that set pane-base-index to 1.
-			run(useTs, repo, ["init", "FBP-001", "--window", "wF", "--harness", "pi", "--worktree", "/tmp/wt", "--pane-index", "0"]);
+			const statePath = makeShimState(repo, {
+				panes: {
+					"%210": { pane_index: 0, path: "/tmp/wt", window_id: "@21", window_index: 21, window_name: "wF" },
+				},
+				session: "test-session",
+				windows: { "@21": { index: 21, name: "wF" } },
+			});
+			runShim(useTs, repo, statePath, ["init", "FBP-001", "--window", "21", "--harness", "pi", "--worktree", "/tmp/wt", "--pane-index", "0"]);
 		}
-		const session = sessionName();
-		const target = `${session}:wF.0`;
-		const a = run(false, bashRepo, ["find-by-pane", target]);
-		const b = run(true, tsRepo, ["find-by-pane", target]);
-		expect(b.stdout.trim()).toBe("FBP-001");
-		expect(a.stdout.trim()).toBe("FBP-001");
+		const target = "test-session:21.0";
+		const a = runShim(false, bashRepo, join(bashRepo, "shim-state.json"), ["find-by-pane", target]);
+		const b = runShim(true, tsRepo, join(tsRepo, "shim-state.json"), ["find-by-pane", target]);
+		expect(JSON.parse(b.stdout)).toEqual({ id: "FBP-001", kind: "issue" });
+		expect(JSON.parse(a.stdout)).toEqual({ id: "FBP-001", kind: "issue" });
+	});
+
+	test("find-by-pane resolves entry rows and legacy issue rows", () => {
+		for (const repo of [bashRepo, tsRepo]) {
+			const useTs = repo === tsRepo;
+			const statePath = makeShimState(repo, {
+				panes: {
+					"%110": { pane_index: 0, path: "/tmp/a", window_id: "@11", window_index: 11, window_name: "adhoc" },
+					"%120": { pane_index: 0, path: "/tmp/l", window_id: "@12", window_index: 12, window_name: "legacy" },
+				},
+				session: "test-session",
+				windows: { "@11": { index: 11, name: "adhoc" }, "@12": { index: 12, name: "legacy" } },
+			});
+			runShim(useTs, repo, statePath, ["init-entry", "adhoc-fbp", "--title", "Adhoc FBP", "--kind", "adhoc", "--cwd", "/tmp/a", "--window", "11", "--harness", "pi", "--pane-id", "%110", "--pane-target", "test-session:11.0"]);
+			runShim(useTs, repo, statePath, ["init", "LEGACY-1", "--window", "12", "--harness", "pi", "--worktree", "/tmp/l", "--pane-index", "0"]);
+		}
+		expect(JSON.parse(runShim(false, bashRepo, join(bashRepo, "shim-state.json"), ["find-by-pane", "%110"]).stdout)).toEqual({ id: "adhoc-fbp", kind: "adhoc" });
+		expect(JSON.parse(runShim(true, tsRepo, join(tsRepo, "shim-state.json"), ["find-by-pane", "%110"]).stdout)).toEqual({ id: "adhoc-fbp", kind: "adhoc" });
+		expect(JSON.parse(runShim(false, bashRepo, join(bashRepo, "shim-state.json"), ["find-by-pane", "test-session:12.0"]).stdout)).toEqual({ id: "LEGACY-1", kind: "issue" });
+		expect(JSON.parse(runShim(true, tsRepo, join(tsRepo, "shim-state.json"), ["find-by-pane", "test-session:12.0"]).stdout)).toEqual({ id: "LEGACY-1", kind: "issue" });
+	});
+
+	test("find-by-pane treats stale pane_id as no match and warns", () => {
+		for (const repo of [bashRepo, tsRepo]) {
+			const useTs = repo === tsRepo;
+			const statePath = makeShimState(repo, baseShim("test-session"));
+			runShim(useTs, repo, statePath, ["init-entry", "stale-fbp", "--title", "Stale", "--kind", "adhoc", "--cwd", "/tmp/stale", "--window", "99", "--harness", "pi", "--pane-id", "%999", "--pane-target", "test-session:99.0"]);
+			const r = runShim(useTs, repo, statePath, ["find-by-pane", "%999"]);
+			expect(r.status).toBe(1);
+			expect(r.stdout).toBe("");
+			expect(r.stderr).toContain("Warning: find-by-pane match %999 is stale");
+		}
 	});
 
 	test("remove drops the issue from .issues", () => {
