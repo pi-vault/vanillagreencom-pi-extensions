@@ -1,8 +1,14 @@
 # Tmux monitoring patterns
 
-Pane targeting, bell handling, and capture-pane idioms for safely observing the per-issue panes spawned by orchestration.
+Pane targeting, bell handling, and capture-pane idioms for safely observing any tracked entry (adhoc session or issue pane) launched via `flightdeck-session` or `open-terminal`.
 
 > **Fallback path notice:** all four supported harnesses (opencode, claude code, pi, codex) have a wired adapter — `pane-poll` and `pane-respond` route data through HTTP / Unix-socket / WS rather than tmux capture-pane / send-keys. The tmux primitives below remain the **fallback path** for panes whose bridge metadata is absent OR whose recorded metadata is stale. Adapter args (`pane-registry oc-attach-args` / `cc-channel-args` / `pi-bridge-args` / `cx-bridge-args`) gate on per-harness freshness probes — `oc_adapter_is_fresh` (oc server pid alive + `GET /session/<id>/message` succeeds), `cc_adapter_is_fresh` (transcript exists + webhook `/healthz` succeeds), `pi_bridge_is_fresh` (pid alive + socket exists + protocol matches), `cx_adapter_is_fresh` (`codex-bridge list --url <ws>` succeeds). HTTP/WebSocket results are cached for `FD_ADAPTER_FRESHNESS_TTL` seconds. The default TS `pane-poll` additionally caps each adapter read subprocess at `FD_ADAPTER_READ_TIMEOUT_SEC` (default 2s, fractional values honored) so a stale adapter cannot dominate a poll tick; the timeout is independent of — and applies after — the freshness probe cache. `pane-poll` applies the same probes to its direct spawn-file fallback before using metadata from `oc-spawn-*`, `cc-spawn-*`, `pi-spawn-*`, or `cx-spawn-*`. When a probe fails, args are empty and the daemon falls back to capture-pane polling rather than marking the pane subscribed against a dead adapter. Daemon and scripts log `<adapter>-unavailable: <reason>` before falling through, never silent.
+
+## New tmux tab/window requests
+
+When the user asks to test in a "new tmux tab" or "new tmux window", create a new tmux window in the current tmux session. Never split the active pane for a managed Flightdeck session: splits make ownership and pane-index assumptions ambiguous, and the active pane can drift when harnesses spawn child panes.
+
+Use `scripts/flightdeck-session start` for ad-hoc launches and `scripts/flightdeck-session attach` for existing panes. The launcher uses `tmux new-window`, records immutable `%pane_id` and `#{window_id}` metadata, sets `FLIGHTDECK_MANAGED=1` / `FLIGHTDECK_CHILD_PANE=1`, and registers a `TrackedEntry` through `pane-registry init-entry`. Communicate through the recorded harness adapter (`pi-bridge`, OpenCode HTTP, Claude channels, Codex bridge) before falling back to tmux capture/send-keys.
 
 ## Pane-0 rule
 

@@ -11,6 +11,14 @@ The scripts under `scripts/` ship as bash trampolines that exec the TypeScript p
 - **`flightdeck-daemon start` still defaults to the bash sibling.** The TS run-loop + subscriber lifecycle is fully ported and parity-tested, but the `start` sub-action keeps a separate gate (`FLIGHTDECK_USE_TS_DAEMON_START=1` or `FLIGHTDECK_USE_TS=1`) until one full production cycle. Other daemon CLI actions (`status`, `events`, `ack`, `health`, `stop`, `find-window`) run through TS by default.
 - **Parity tests** under `lib/flightdeck-core/tests/parity/` are the baseline. Live wake (`tests/live-wake.sh`) under the same gate is the production gate before flipping a default.
 
+## Session model and schema boundary
+
+Flightdeck core is the generic tmux-session manager. It owns `TrackedEntry` lifecycle, owner metadata, daemon wake routing, generic prompt handling, and stable pane/window ids for any harness session. Issue orchestration is a domain layer on top: it adds GitHub/Linear/worktree metadata under `domain.issue`, legacy issue states, PR conflict graphs, merge queues, and next-cycle recommendations.
+
+Master-state schema `1.1` is the compatibility bridge toward the v2 entries model. `flightdeck-state init` keeps v1 `.issues`, `.merge_queue`, and `.conflict_graph`, adds `schema_version: 1.1`, `owner`, and additive `.entries`, and projects `kind="issue"` writes back into `.issues` so older issue workflows continue to run. Future schema v2 makes `.entries` canonical and moves issue-only data under `domain.issue`, but readers must keep v1 projection until the compatibility window closes.
+
+Use the TrackedEntry seam everywhere new code reads tracked sessions. Core helpers (`readTrackedEntries`, `writeTrackedEntry`, `entryIdForIssue`, `issueIdForEntry`) live under `lib/flightdeck-core/src/state/`; `pane-registry list --format json` and `flightdeck-state tracked-entries` expose the same normalized view to scripts. `pi-flightdeck` mirrors the seam with read-only `TrackedSession` / `TrackedState` render types, prefers schema-1.1 `.entries`, folds legacy `.issues`, and uses `owner.pane_id` for default owner-scoped rendering. Do not add fresh direct `.issues` reads outside compatibility code.
+
 ## Tests
 
 ### Bun parity suite
@@ -76,7 +84,7 @@ Detailed list of what each script does, for debugging or porting work:
 | `open-terminal` | Launches a new tmux window with the chosen harness running on the chosen issue worktree. |
 | `flightdeck-state` | Reads/writes the session's master state file, including schema `1.1` tracked-entry normalization (`tracked-entries`, `write-entry`). |
 | `flightdeck-daemon` | Background poller. Wakes the master when an agent needs attention. |
-| `pane-registry` | Tracks which issue lives in which tmux pane and how to talk to its agent. |
+| `pane-registry` | Tracks which tracked entry (issue or adhoc session) lives in which tmux pane and how to talk to its agent. |
 | `pane-poll` | Reads an agent's current state (via native channel where possible). |
 | `pane-respond` | Sends a reply or option pick into an agent. |
 | `prompt-classify` | Pattern-matches an agent's last output against known prompt shapes. |
