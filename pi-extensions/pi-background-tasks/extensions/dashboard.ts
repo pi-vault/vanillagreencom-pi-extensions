@@ -58,8 +58,9 @@ export async function openDashboard(
 			(tui, theme, _keybindings, done) => {
 				let selectedId: string | null = initialTask?.id ?? deps.sortedTasks()[0]?.id ?? null;
 				let taskScroll = 0;
-				let outputScroll = 0;
-				let followOutput = true;
+				let rightScroll = 0;
+				let lastRightMaxScroll = 0;
+				let followOutput = false;
 				let commandExpanded = false;
 				let activePane: "tasks" | "output" = "tasks";
 				let timer: ReturnType<typeof setInterval> | null = null;
@@ -92,10 +93,7 @@ export async function openDashboard(
 				const dashboardInnerRows = (): number => Math.max(4, dashboardFrameRows() - DASHBOARD_FRAME_VERTICAL_OVERHEAD);
 				const dashboardBodyRows = (): number => Math.max(1, dashboardInnerRows() - 2);
 				const taskRows = (): number => Math.max(1, dashboardBodyRows() - 1);
-				const outputRows = (): number => Math.max(3, dashboardBodyRows() - 10);
-
 				const getOutputLines = (task: ManagedTask | null): string[] => splitOutputLines(task ? deps.getTaskOutput(task) : "");
-				const maxOutputScroll = (task: ManagedTask | null): number => Math.max(0, getOutputLines(task).length - outputRows());
 				const sanitizeDashboardLine = (line: string): string => line
 					.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
 					.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
@@ -138,12 +136,6 @@ export async function openDashboard(
 					taskScroll = clamp(taskScroll, 0, max);
 				};
 
-				const syncOutputScroll = (forceBottom = false) => {
-					const max = maxOutputScroll(selectedTask());
-					if (forceBottom || followOutput) outputScroll = max;
-					else outputScroll = clamp(outputScroll, 0, max);
-				};
-
 				const moveSelection = (delta: number) => {
 					const sorted = deps.sortedTasks();
 					if (sorted.length === 0) {
@@ -153,15 +145,15 @@ export async function openDashboard(
 					const currentIndex = Math.max(0, sorted.findIndex((task) => task.id === selectedId));
 					selectedId = sorted[clamp(currentIndex + delta, 0, sorted.length - 1)]?.id ?? null;
 					commandExpanded = false;
+					rightScroll = 0;
+					followOutput = false;
 					syncTaskScroll();
-					syncOutputScroll(true);
 					tui.requestRender();
 				};
 
-				const moveOutput = (delta: number) => {
+				const moveRightPane = (delta: number) => {
 					followOutput = false;
-					outputScroll = clamp(outputScroll + delta, 0, maxOutputScroll(selectedTask()));
-					if (outputScroll >= maxOutputScroll(selectedTask())) followOutput = true;
+					rightScroll = clamp(rightScroll + delta, 0, lastRightMaxScroll);
 					tui.requestRender();
 				};
 
@@ -170,9 +162,7 @@ export async function openDashboard(
 					const selected = selectedTask();
 					const bodyRows = dashboardBodyRows();
 					const taskViewportRows = taskRows();
-					const outputViewportRows = outputRows();
 					syncTaskScroll();
-					syncOutputScroll();
 
 					const lines: string[] = [];
 					const footerFor = (commandHidden = 0) => {
@@ -181,7 +171,7 @@ export async function openDashboard(
 							: commandHidden > 0
 								? `${theme.fg("dim", " · ")}${ansiYellow("x")} ${theme.fg("dim", "expand command")}`
 								: "";
-						return `${ansiYellow("←/→ tab")} ${theme.fg("dim", "pane · ")}${ansiYellow("s")} ${theme.fg("dim", "stop · ")}${ansiYellow("c")} ${theme.fg("dim", "clear · ")}${ansiYellow("f")} ${theme.fg("dim", "follow · ")}${ansiYellow("-/=")} ${theme.fg("dim", "page output")}${commandHint}`;
+						return `${ansiYellow("←/→ tab")} ${theme.fg("dim", "pane · ")}${ansiYellow("s")} ${theme.fg("dim", "stop · ")}${ansiYellow("c")} ${theme.fg("dim", "clear · ")}${ansiYellow("f")} ${theme.fg("dim", "follow · ")}${ansiYellow("-/=")} ${theme.fg("dim", "page right")}${commandHint}`;
 					};
 
 					if (sorted.length === 0) {
@@ -215,8 +205,7 @@ export async function openDashboard(
 						right.push(theme.fg("dim", "Select a task to inspect output."));
 					} else {
 						const outputLines = getOutputLines(selected).map(sanitizeDashboardLine);
-						const visibleOutput = outputLines.slice(outputScroll, outputScroll + outputViewportRows);
-						right.push(`${activePane === "output" ? activePill(theme, ` Watch ${selected.id} `) : inactivePill(theme, ` Watch ${selected.id} `)} ${theme.fg("dim", followOutput ? "follow" : `line ${outputScroll + 1}`)}`);
+						right.push(`${activePane === "output" ? activePill(theme, ` Watch ${selected.id} `) : inactivePill(theme, ` Watch ${selected.id} `)} ${theme.fg("dim", followOutput ? "follow" : rightScroll > 0 ? `line ${rightScroll + 1}` : "top")}`);
 						right.push("");
 						right.push(`${theme.fg("muted", "Status")}: ${bgStatusText(taskSnapshot(selected), theme)} · pid ${selected.pid}`);
 						right.push(`${theme.fg("muted", "Started")}: ${formatRelativeTime(selected.startedAt)} · ${formatDuration(taskElapsedMs(selected))} elapsed`);
@@ -226,15 +215,16 @@ export async function openDashboard(
 						pushDetail(right, "Log", selected.logFile, detailPaneWidth, 2);
 						pushDetail(right, "Wakeups", `exit=${selected.notifyOnExit ? "yes" : "no"}, output=${selected.notifyOnOutput ? (selected.notifyPattern ?? "yes") : "no"}`, detailPaneWidth, 2);
 						right.push("", theme.fg("muted", theme.bold("Output")));
-						if (outputScroll > 0) right.push(theme.fg("dim", `↑ ${outputScroll} older line(s)`));
-						right.push(...visibleOutput);
-						const below = Math.max(0, outputLines.length - (outputScroll + outputViewportRows));
-						if (below > 0) right.push(theme.fg("dim", `↓ ${below} newer line(s)`));
+						right.push(...outputLines);
 					}
+					lastRightMaxScroll = Math.max(0, right.length - bodyRows);
+					if (followOutput) rightScroll = lastRightMaxScroll;
+					rightScroll = clamp(rightScroll, 0, lastRightMaxScroll);
+					const visibleRight = right.slice(rightScroll, rightScroll + bodyRows);
 
-					const rowCount = Math.min(bodyRows, Math.max(left.length, right.length));
+					const rowCount = Math.min(bodyRows, Math.max(left.length, visibleRight.length));
 					for (let i = 0; i < rowCount; i += 1) {
-						lines.push(`${padAnsi(left[i] ?? "", taskPaneWidth)}${theme.fg("dim", " │ ")}${truncateToWidth(right[i] ?? "", detailPaneWidth, "")}`);
+						lines.push(`${padAnsi(left[i] ?? "", taskPaneWidth)}${theme.fg("dim", " │ ")}${truncateToWidth(visibleRight[i] ?? "", detailPaneWidth, "")}`);
 					}
 					while (lines.length < bodyRows) lines.push("");
 					lines.push("", ...wrapTextWithAnsi(footerFor(commandHidden), Math.max(1, width)));
@@ -254,26 +244,27 @@ export async function openDashboard(
 						if (matchesKey(data, "left")) { activePane = "tasks"; tui.requestRender(); return; }
 						if (matchesKey(data, "right")) { activePane = "output"; tui.requestRender(); return; }
 						if (matchesKey(data, "tab")) { activePane = activePane === "tasks" ? "output" : "tasks"; tui.requestRender(); return; }
-						if (matchesKey(data, "up")) return activePane === "tasks" ? moveSelection(-1) : moveOutput(-1);
-						if (matchesKey(data, "down")) return activePane === "tasks" ? moveSelection(1) : moveOutput(1);
+						if (matchesKey(data, "up")) return activePane === "tasks" ? moveSelection(-1) : moveRightPane(-1);
+						if (matchesKey(data, "down")) return activePane === "tasks" ? moveSelection(1) : moveRightPane(1);
 						if (matchesKey(data, "home")) {
 							if (activePane === "tasks") return moveSelection(-Number.MAX_SAFE_INTEGER);
 							followOutput = false;
-							outputScroll = 0;
+							rightScroll = 0;
 							tui.requestRender();
 							return;
 						}
 						if (matchesKey(data, "end")) {
 							if (activePane === "tasks") return moveSelection(Number.MAX_SAFE_INTEGER);
-							syncOutputScroll(true);
+							followOutput = true;
+							rightScroll = lastRightMaxScroll;
 							tui.requestRender();
 							return;
 						}
-						if (matchesKey(data, "-") || matchesKey(data, "pageup") || matchesKey(data, "shift+up")) return moveOutput(-outputRows());
-						if (matchesKey(data, "=") || matchesKey(data, "pagedown") || matchesKey(data, "shift+down")) return moveOutput(outputRows());
+						if (matchesKey(data, "-") || matchesKey(data, "pageup") || matchesKey(data, "shift+up")) return moveRightPane(-dashboardBodyRows());
+						if (matchesKey(data, "=") || matchesKey(data, "pagedown") || matchesKey(data, "shift+down")) return moveRightPane(dashboardBodyRows());
 						if (data === "f") {
 							followOutput = !followOutput;
-							syncOutputScroll(followOutput);
+							if (followOutput) rightScroll = lastRightMaxScroll;
 							tui.requestRender();
 							return;
 						}
