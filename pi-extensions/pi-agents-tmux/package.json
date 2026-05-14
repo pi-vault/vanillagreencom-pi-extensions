@@ -295,6 +295,11 @@
           "description": "Steer a live persistent pane agent through pi-session-bridge or queue a fallback steering note."
         },
         {
+          "kind": "tool",
+          "name": "stop_subagent",
+          "description": "Stop a persistent pane agent, kill its tmux pane, and preserve the saved pane session for later resume."
+        },
+        {
           "kind": "command",
           "name": "/agents",
           "description": "List, inspect, and manage agent panes."

@@ -188,7 +188,7 @@ export function registerAgentsCommands(deps: AgentsCommandDeps): void {
 							})
 							.join("\n"),
 						"",
-						"Commands: `/agents show <name>`, `/agents:start <name>` (resume/reuse), `/agents:new <name>` (fresh session), `/agents:send <name> <task>`, `/agents:attach <name>`, `/agents:stop <name>`, `/agents status`, `/agents:trace <ref>`, `/agents:toggle`. The popup's History tab browses past tasks visually.",
+						"Commands: `/agents show <name>`, `/agents:start <name>` (resume/reuse), `/agents:new <name>` (fresh session), `/agents:resume <name> [latest|archive-file]`, `/agents:send <name> <task>`, `/agents:attach <name>`, `/agents:stop <name>`, `/agents status`, `/agents:trace <ref>`, `/agents:toggle`. The popup's History tab browses past tasks visually.",
 					].join("\n");
 					messageDetails = { action: "list", count: scopedDiscovery.agents.length };
 				}
@@ -241,10 +241,11 @@ export function registerAgentsCommands(deps: AgentsCommandDeps): void {
 		handler: async (_args, ctx) => agentsHandler("toggle", ctx),
 	});
 
-	for (const sub of ["start", "new", "send", "attach", "stop"] as const) {
+	for (const sub of ["start", "new", "resume", "send", "attach", "stop"] as const) {
 		const description =
 			sub === "start" ? "Start or reuse a persistent pane: /agents:start <name>" :
 			sub === "new" ? "Start a persistent pane with a fresh session: /agents:new <name>" :
+			sub === "resume" ? "Restore an archived pane session: /agents:resume <name> [latest|archive-file]" :
 			sub === "send" ? "Queue a task for a persistent pane: /agents:send <name> <task>" :
 			sub === "attach" ? "Focus an existing agent pane: /agents:attach <name>" :
 			"Stop an agent pane: /agents:stop <name>";
