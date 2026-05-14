@@ -129,7 +129,7 @@ export function renderPaneCompletionMessage(message: { content: string; details?
 	if (!expanded) {
 		const lines: string[] = [];
 		for (const detail of completions) {
-			lines.push(agentStatusLine(theme, detail.agent, detail.status, paneCompletionTone(detail.status), theme.fg("dim", ` · ${shortTaskId(detail.taskId)} · ctrl+o`)));
+			lines.push(agentStatusLine(theme, detail.agent, detail.status, paneCompletionTone(detail.status), theme.fg("dim", ` · ${shortTaskId(detail.taskId)} · ctrl+o expand`)));
 			lines.push(`${subagentBranch(theme, "└")}${theme.fg("toolOutput", oneLinePreview(detail.summary, 120) || "No summary provided.")}`);
 		}
 		return framedMessage(lines.join("\n"), theme);

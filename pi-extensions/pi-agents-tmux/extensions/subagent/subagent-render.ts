@@ -16,6 +16,7 @@ import {
 	formatUsageStats,
 	getDisplayItems,
 	getFinalOutput,
+	highlightInlinePreview,
 	oneLinePreview,
 	subagentBranch,
 	wrappedText,
@@ -222,8 +223,8 @@ export const subagentToolRenderers = {
 					: r.task
 						? oneLinePreview(r.task, 140)
 						: "completed";
-				let text = `${theme.fg("toolTitle", theme.bold("Result from"))} ${ansiMagenta(theme.bold(r.agent))}${theme.fg("dim", " · bg · ctrl+o")}${truncationBadge(r)}`;
-				if (preview) text += `\n${subagentBranch(theme, "└", cwd)}${theme.fg("toolOutput", preview)}`;
+				let text = `${theme.fg("toolTitle", theme.bold("Result from"))} ${ansiMagenta(theme.bold(r.agent))}${theme.fg("dim", " · bg · ctrl+o expand")}${truncationBadge(r)}`;
+				if (preview) text += `\n${subagentBranch(theme, "└", cwd)}${highlightInlinePreview(preview, theme)}`;
 				const outputPath = fullOutputLine(r);
 				if (outputPath) text += `\n${outputPath}`;
 				return wrappedText(text);
@@ -231,7 +232,7 @@ export const subagentToolRenderers = {
 
 			const compactStatusLabel = isRunning ? "working" : needsCompletion ? "needs completion" : isError ? "failed" : "completed";
 			const compactStatusTone = isRunning || needsCompletion ? "warning" : isError ? "error" : "success";
-			let text = queued || agentStatusLine(theme, r.agent, compactStatusLabel, compactStatusTone, `${theme.fg("dim", " · bg")}${theme.fg("dim", " · ctrl+o")}`);
+			let text = queued || agentStatusLine(theme, r.agent, compactStatusLabel, compactStatusTone, `${theme.fg("dim", " · bg")}${theme.fg("dim", " · ctrl+o expand")}`);
 			if (isError && r.stopReason) text += ` ${theme.fg("error", `[${r.stopReason}]`)}`;
 			if (needsCompletion && r.needsCompletionReason) text += ` ${theme.fg("warning", `[${r.needsCompletionReason}]`)}`;
 			text += truncationBadge(r);
@@ -242,7 +243,7 @@ export const subagentToolRenderers = {
 			else {
 				if (r.task) text += `\n${subagentBranch(theme, "├", cwd)}${theme.fg("dim", oneLinePreview(r.task, 120))}`;
 				text += `\n${renderDisplayItems(displayItems, collapsedItemCount)}`;
-				if (displayItems.length > collapsedItemCount) text += `\n${theme.fg("muted", "… more in ctrl+o")}`;
+				if (displayItems.length > collapsedItemCount) text += `\n${theme.fg("muted", "… more in ctrl+o expand")}`;
 			}
 			const outputPath = queued ? "" : fullOutputLine(r);
 			if (outputPath) text += `\n${outputPath}`;

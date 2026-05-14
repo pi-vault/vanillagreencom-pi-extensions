@@ -60,6 +60,34 @@ export function formatTokens(count: number): string {
 	return `${(count / 1000000).toFixed(1)}M`;
 }
 
+// Highlight common JSON keys + status verdict tokens in one-line subagent
+// previews. Untouched runs stay in the terminal default; matched tokens get
+// semantic colors so reviewer-style outputs (`verdict: approve`, `failed`,
+// etc.) are scannable without expanding the row. Order matters: JSON keys
+// match first so a `"verdict":` field name doesn't get re-tokenized by the
+// status passes below.
+export function highlightInlinePreview(text: string, theme: Theme): string {
+	if (!text) return text;
+	let result = text;
+	// JSON keys: "name":
+	result = result.replace(/"([A-Za-z_][\w-]*)"(\s*):/g, (_full, key: string, ws: string) =>
+		`${theme.fg("accent", `"${key}"`)}${ws}${theme.fg("dim", ":")}`,
+	);
+	// Success-tone status values inside quoted strings.
+	result = result.replace(/"(approve|approved|success|completed|merged|ok|done|clean|passed)"/g, (_full, w: string) =>
+		`${theme.fg("dim", '"')}${theme.fg("success", w)}${theme.fg("dim", '"')}`,
+	);
+	// Warning-tone status values.
+	result = result.replace(/"(changes[-_]requested|action[-_]required|warning|needs[-_]completion|pending|skip)"/g, (_full, w: string) =>
+		`${theme.fg("dim", '"')}${theme.fg("warning", w)}${theme.fg("dim", '"')}`,
+	);
+	// Error-tone status values.
+	result = result.replace(/"(failed|failure|error|aborted|blocked|rejected)"/g, (_full, w: string) =>
+		`${theme.fg("dim", '"')}${theme.fg("error", w)}${theme.fg("dim", '"')}`,
+	);
+	return result;
+}
+
 export function oneLinePreview(text: string | undefined, maxChars: number): string {
 	const compact = (text ?? "").replace(/\s+/g, " ").trim();
 	return compact.length > maxChars ? `${compact.slice(0, Math.max(0, maxChars - 1))}…` : compact;
