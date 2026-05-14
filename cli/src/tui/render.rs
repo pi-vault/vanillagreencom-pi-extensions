@@ -922,6 +922,7 @@ fn build_inspector_rows(
     item: &SelectItem,
     inner_w: usize,
     scope_global: bool,
+    reinstall_harnesses: &str,
 ) -> Vec<InspectorRow> {
     let mut rows: Vec<InspectorRow> = Vec::new();
 
@@ -1008,6 +1009,18 @@ fn build_inspector_rows(
             Span::styled(scope.label(), Style::default().fg(theme::TEXT_PRIMARY)),
         ]));
     }
+    if item.installed {
+        let current_scope = if scope_global { "global" } else { "project" };
+        let detail = format!(
+            "Reinstall with current \"{current_scope}\" scope and {reinstall_harnesses} harnesses"
+        );
+        for line in wrap_text(&detail, inner_w) {
+            rows.push(InspectorRow::Text(vec![Span::styled(
+                line,
+                Style::default().fg(theme::TEXT_SECONDARY),
+            )]));
+        }
+    }
     if let Some(suffix) = item.suffix.as_deref()
         && !suffix.is_empty()
     {
@@ -1059,8 +1072,9 @@ fn draw_inspector(frame: &mut Frame, area: Rect, select: &mut TabbedSelect) {
 
     let inner_w = inner.width as usize;
     let scope_global = select.scope_global;
+    let reinstall_harnesses = reinstall_harnesses_label(select);
     let rows = match select.cursor_item() {
-        Some(item) => build_inspector_rows(item, inner_w, scope_global),
+        Some(item) => build_inspector_rows(item, inner_w, scope_global, &reinstall_harnesses),
         None => {
             select.inspector_total_rows = 0;
             select.inspector_visible_rows = inner.height;
@@ -1202,11 +1216,16 @@ impl InspectorButton {
         }
     }
 
-    fn install(scope_global: bool) -> Self {
+    fn install(scope_global: bool, reinstall: bool) -> Self {
         // Install matches "installed" badge color (STATUS_OK / Green).
         let scope_word = if scope_global { "global" } else { "project" };
+        let label = if reinstall {
+            "Reinstall package".to_string()
+        } else {
+            format!("Install {scope_word}")
+        };
         Self {
-            label: format!("Install {scope_word}"),
+            label,
             action: ActionButton::InspectorInstall,
             bg: theme::STATUS_OK,
             fg: theme::ON_DARK,
@@ -1270,18 +1289,42 @@ fn inspector_buttons(item: &SelectItem, scope_global: bool) -> Vec<InspectorButt
     let mut out = vec![InspectorButton::select(item.selected)];
 
     if item.is_duplicate() {
+        out.push(InspectorButton::install(scope_global, true));
         out.push(InspectorButton::drop_project());
         out.push(InspectorButton::drop_global());
         out.push(InspectorButton::dismiss());
     } else if item.outdated {
         out.push(InspectorButton::update());
+        out.push(InspectorButton::install(scope_global, item.installed));
         out.push(InspectorButton::remove());
     } else if item.installed {
+        out.push(InspectorButton::install(scope_global, true));
         out.push(InspectorButton::remove());
     } else {
-        out.push(InspectorButton::install(scope_global));
+        out.push(InspectorButton::install(scope_global, false));
     }
     out
+}
+
+fn reinstall_harnesses_label(select: &TabbedSelect) -> String {
+    let active: Vec<&str> = Harness::ALL
+        .iter()
+        .filter(|h| {
+            let disabled = select.scope_global && !h.supports_global_scope();
+            !disabled
+                && select
+                    .harness_selection
+                    .get(h.id())
+                    .copied()
+                    .unwrap_or(false)
+        })
+        .map(|h| h.name())
+        .collect();
+    if active.is_empty() {
+        "no".into()
+    } else {
+        active.join(", ")
+    }
 }
 
 // ── Action bar ──────────────────────────────────────────
@@ -1291,6 +1334,7 @@ fn draw_action_bar(frame: &mut Frame, area: Rect, select: &mut TabbedSelect) {
     // outdated item is also removable). Each verb-button surfaces the count
     // of items the verb can act on; the user picks which verb to run.
     let mut install_n = 0usize;
+    let mut reinstall_n = 0usize;
     let mut update_n = 0usize;
     let mut remove_n = 0usize;
     // Move counts are direction-specific. project-only selected items can
@@ -1300,8 +1344,12 @@ fn draw_action_bar(frame: &mut Frame, area: Rect, select: &mut TabbedSelect) {
     let mut move_to_global_n = 0usize;
     let mut move_to_project_n = 0usize;
     for item in select.marked_items() {
-        if !item.installed {
-            install_n += 1;
+        if item.kind.is_some() {
+            if item.installed {
+                reinstall_n += 1;
+            } else {
+                install_n += 1;
+            }
         }
         if item.outdated {
             update_n += 1;
@@ -1352,14 +1400,23 @@ fn draw_action_bar(frame: &mut Frame, area: Rect, select: &mut TabbedSelect) {
     // Tuple: (label, action, fg, bg, primary)
     // — primary buttons get bold colored fills; secondary get a softer style.
     let mut buttons: Vec<(String, ActionButton, Color, Color, bool)> = Vec::new();
-    if install_n > 0 {
-        let scope_word = if select.scope_global {
-            "global"
-        } else {
-            "project"
+    let install_action_n = install_n + reinstall_n;
+    if install_action_n > 0 {
+        let label = match (install_n > 0, reinstall_n > 0) {
+            (true, true) => format!(" Install/reinstall packages ({install_action_n}) "),
+            (true, false) => {
+                let scope_word = if select.scope_global {
+                    "global"
+                } else {
+                    "project"
+                };
+                format!(" Install {scope_word} ({install_action_n}) ")
+            }
+            (false, true) => format!(" Reinstall packages ({install_action_n}) "),
+            (false, false) => format!(" Install packages ({install_action_n}) "),
         };
         buttons.push((
-            format!(" Install {scope_word} ({install_n}) "),
+            label,
             ActionButton::BatchInstall,
             theme::ON_DARK,
             theme::STATUS_OK,
@@ -1721,7 +1778,7 @@ fn draw_help_overlay(frame: &mut Frame, select: &mut TabbedSelect) {
         (
             "Act",
             &[
-                ("i", "Install selected"),
+                ("i", "Install/reinstall selected"),
                 ("u / U", "Update selected / all outdated"),
                 ("d / D", "Remove selected / ALL installed"),
                 ("v", "Move selected to other scope"),
@@ -1957,17 +2014,23 @@ fn draw_harness_dialog(frame: &mut Frame, select: &mut TabbedSelect) {
         y += 1;
     }
 
-    // Save button (clickable) + cancel hint
+    // Save button (clickable + keyboard focus target) + cancel hint
     if y < max_y {
+        let save_focused = cursor >= entries.len();
         let save_label = " Save ";
         let save_w = save_label.chars().count() as u16;
         let save_rect = Rect::new(inner.x, y, save_w, 1);
         select.harness_dialog_save_area = save_rect;
+        let save_style = if save_focused {
+            Style::default()
+                .fg(theme::ON_DARK)
+                .bg(theme::DIALOG_CURSOR_BG)
+                .bold()
+        } else {
+            Style::default().fg(theme::ON_DARK).bg(theme::ACCENT).bold()
+        };
         frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                save_label,
-                Style::default().fg(theme::ON_DARK).bg(theme::ACCENT).bold(),
-            ))),
+            Paragraph::new(Line::from(Span::styled(save_label, save_style))),
             save_rect,
         );
         let hint_x = inner.x.saturating_add(save_w + 2);
@@ -2501,6 +2564,17 @@ mod tests {
         }
     }
 
+    fn buffer_text(buf: &ratatui::buffer::Buffer) -> String {
+        let mut out = String::new();
+        for y in 0..buf.area.height {
+            for x in 0..buf.area.width {
+                out.push_str(buf[(x, y)].symbol());
+            }
+            out.push('\n');
+        }
+        out
+    }
+
     #[test]
     fn draw_records_tab_hit_areas() {
         let mut select = TabbedSelect::new(
@@ -2610,6 +2684,7 @@ mod tests {
         let mut item = item("foo", "");
         item.installed = false;
         item.selected = true;
+        item.kind = Some(crate::config::ItemKind::Agent);
         let mut select = TabbedSelect::new("x", vec![source_tab("Agents", vec![item])]);
 
         let backend = TestBackend::new(120, 24);
@@ -2623,6 +2698,72 @@ mod tests {
             .iter()
             .any(|b| b.action == ActionButton::BatchInstall && b.enabled);
         assert!(install_btn, "install button should be enabled with 1 mark");
+    }
+
+    #[test]
+    fn action_bar_renders_reinstall_for_installed_marks() {
+        let mut item = item("foo", "");
+        item.installed = true;
+        item.installed_scope = Some(Scope::Project);
+        item.selected = true;
+        item.kind = Some(crate::config::ItemKind::Agent);
+        let mut select = TabbedSelect::new("x", vec![source_tab("Agents", vec![item])]);
+
+        let backend = TestBackend::new(120, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| draw_tabbed_select(f, &mut select))
+            .unwrap();
+
+        let install_btn = select
+            .button_hits
+            .iter()
+            .any(|b| b.action == ActionButton::BatchInstall && b.enabled);
+        assert!(
+            install_btn,
+            "reinstall button should be enabled for installed marks"
+        );
+        let rendered = buffer_text(terminal.backend().buffer());
+        assert!(
+            rendered.contains("Reinstall packages (1)"),
+            "action bar should name installed marks as packages: {rendered}"
+        );
+    }
+
+    #[test]
+    fn inspector_shows_reinstall_package_and_current_scope_harnesses() {
+        let mut item = item("foo", "");
+        item.installed = true;
+        item.installed_scope = Some(Scope::Project);
+        item.kind = Some(crate::config::ItemKind::Agent);
+        let mut select = TabbedSelect::new("x", vec![source_tab("Agents", vec![item])]);
+        select.scope_global = true;
+        select.harness_selection.insert("claude-code".into(), true);
+        select.harness_selection.insert("cursor".into(), true);
+        select.harness_selection.insert("opencode".into(), true);
+        select.harness_selection.insert("pi".into(), true);
+
+        let backend = TestBackend::new(180, 28);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| draw_tabbed_select(f, &mut select))
+            .unwrap();
+        let rendered = buffer_text(terminal.backend().buffer());
+
+        assert!(rendered.contains("Reinstall package"));
+        assert!(
+            rendered.contains("Reinstall with current \"global\""),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("scope and Claude Code, OpenCode, Pi"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("harnesses"), "{rendered}");
+        assert!(
+            !rendered.contains("Cursor harnesses"),
+            "project-only Cursor should be omitted for current global scope"
+        );
     }
 
     #[test]

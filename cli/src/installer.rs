@@ -596,9 +596,7 @@ fn enable_codex_hooks_feature(config_path: &Path) -> Result<()> {
 
     // Locate the [features] table header, if any.
     let mut lines: Vec<String> = original.lines().map(|s| s.to_string()).collect();
-    let features_idx = lines
-        .iter()
-        .position(|line| line.trim() == "[features]");
+    let features_idx = lines.iter().position(|line| line.trim() == "[features]");
 
     match features_idx {
         Some(idx) => {
@@ -1032,6 +1030,7 @@ pub fn record_install(
                 existing.harnesses.push(harness_id);
             }
             existing.source = source.into();
+            existing.method = method;
             existing.installed_at = now.clone();
             existing.source_hash = crate::config::compute_source_hash(existing);
         } else {
@@ -1145,12 +1144,14 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
                 })?;
             } else if target.is_dir() {
                 std::fs::remove_dir_all(&target).with_context(|| {
-                    format!("removing existing dir {} for symlink replace", target.display())
+                    format!(
+                        "removing existing dir {} for symlink replace",
+                        target.display()
+                    )
                 })?;
             }
-            let link_target = std::fs::read_link(entry.path()).with_context(|| {
-                format!("reading symlink target at {}", entry.path().display())
-            })?;
+            let link_target = std::fs::read_link(entry.path())
+                .with_context(|| format!("reading symlink target at {}", entry.path().display()))?;
             std::os::unix::fs::symlink(&link_target, &target).with_context(|| {
                 format!(
                     "recreating symlink {} → {}",
@@ -1200,6 +1201,39 @@ mod tests {
     }
 
     #[test]
+    fn record_install_updates_method_for_existing_entry() {
+        let mut lock = LockFile::default();
+        lock.add(LockEntry {
+            name: "rust".into(),
+            kind: ItemKind::Agent,
+            source: "old-source".into(),
+            harnesses: vec![Harness::Pi.id().to_string()],
+            method: InstallMethod::Symlink,
+            installed_at: "2026-05-01T00:00:00Z".into(),
+            source_hash: String::new(),
+        });
+        let results = vec![InstallResult {
+            name: "rust".into(),
+            kind: ItemKind::Agent,
+            harness: Harness::ClaudeCode,
+            path: PathBuf::new(),
+            detail: String::new(),
+        }];
+
+        record_install(&mut lock, &results, "new-source", InstallMethod::Copy);
+
+        let entry = lock.entries.get("rust").expect("entry should exist");
+        assert_eq!(entry.method, InstallMethod::Copy);
+        assert_eq!(entry.source, "new-source");
+        assert!(entry.harnesses.contains(&Harness::Pi.id().to_string()));
+        assert!(
+            entry
+                .harnesses
+                .contains(&Harness::ClaudeCode.id().to_string())
+        );
+    }
+
+    #[test]
     fn codex_event_for_known_events() {
         assert_eq!(codex_event_for("PreToolUse"), Some("PreToolUse"));
         assert_eq!(codex_event_for("PostToolUse"), Some("PostToolUse"));
@@ -1233,15 +1267,11 @@ mod tests {
             Some("Bash")
         );
         assert_eq!(
-            arr[0]
-                .pointer("/hooks/0/command")
-                .and_then(|v| v.as_str()),
+            arr[0].pointer("/hooks/0/command").and_then(|v| v.as_str()),
             Some(command)
         );
         assert_eq!(
-            arr[0]
-                .pointer("/hooks/0/timeout")
-                .and_then(|v| v.as_u64()),
+            arr[0].pointer("/hooks/0/timeout").and_then(|v| v.as_u64()),
             Some(30)
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -1288,8 +1318,13 @@ mod tests {
         )
         .unwrap();
         let hook = hook_fixture("foo", "PreToolUse", Some("Bash"));
-        merge_codex_hooks_json(&hooks_json, "PreToolUse", &hook, "bash /home/.codex/hooks/foo.sh")
-            .unwrap();
+        merge_codex_hooks_json(
+            &hooks_json,
+            "PreToolUse",
+            &hook,
+            "bash /home/.codex/hooks/foo.sh",
+        )
+        .unwrap();
 
         let doc: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&hooks_json).unwrap()).unwrap();
@@ -1297,7 +1332,11 @@ mod tests {
             .pointer("/hooks/PreToolUse")
             .and_then(|v| v.as_array())
             .unwrap();
-        assert_eq!(arr.len(), 2, "`foo.sh` must not collide with existing `notfoo.sh`");
+        assert_eq!(
+            arr.len(),
+            2,
+            "`foo.sh` must not collide with existing `notfoo.sh`"
+        );
     }
 
     #[test]
@@ -1391,7 +1430,11 @@ mod tests {
             result.pointer("/hooks/PostToolUse").is_none(),
             "empty PostToolUse should be pruned"
         );
-        let pre = result.pointer("/hooks/PreToolUse").unwrap().as_array().unwrap();
+        let pre = result
+            .pointer("/hooks/PreToolUse")
+            .unwrap()
+            .as_array()
+            .unwrap();
         assert_eq!(pre.len(), 2, "unrelated PreToolUse entries preserved");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1640,10 +1683,7 @@ mod tests {
             "symlink target must round-trip"
         );
         // Reading through the symlink still resolves to the real file.
-        assert_eq!(
-            std::fs::read(&dst_latest).unwrap(),
-            b"line one\nline two\n"
-        );
+        assert_eq!(std::fs::read(&dst_latest).unwrap(), b"line one\nline two\n");
 
         let _ = std::fs::remove_dir_all(&root);
     }

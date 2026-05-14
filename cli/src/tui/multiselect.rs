@@ -77,7 +77,7 @@ pub struct Tab {
 /// A confirmable action with itemized context.
 #[derive(Clone, PartialEq)]
 pub enum ConfirmAction {
-    /// Install the marked source items.
+    /// Install or reinstall the marked package items.
     InstallMarked,
     /// Update the named items in place.
     UpdateMarked(Vec<String>),
@@ -318,6 +318,7 @@ pub struct TabbedSelect {
 }
 
 pub struct HarnessDialog {
+    /// Focus index. `0..entries.len()` = entry row, `entries.len()` = Save button.
     pub cursor: usize,
     pub entries: Vec<HarnessEntry>,
 }

@@ -418,17 +418,7 @@ fn handle_dialog_click(
             return Ok(None);
         }
         if state.select.harness_dialog_save_area.contains(pos) {
-            if let Some(dialog) = state.select.harness_dialog.as_ref() {
-                let entries: Vec<(String, bool)> = dialog
-                    .entries
-                    .iter()
-                    .map(|e| (e.id.clone(), e.enabled))
-                    .collect();
-                for (id, enabled) in entries {
-                    state.select.harness_selection.insert(id, enabled);
-                }
-            }
-            state.select.harness_dialog = None;
+            save_harness_dialog(&mut state.select);
             return Ok(None);
         }
         let area_idx = state
@@ -614,32 +604,51 @@ fn handle_key(
     if let Some(dialog) = state.select.harness_dialog.as_mut() {
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => state.select.harness_dialog = None,
+            KeyCode::BackTab => {
+                let save_idx = dialog.entries.len();
+                if dialog.cursor == 0 {
+                    dialog.cursor = save_idx;
+                } else {
+                    dialog.cursor -= 1;
+                }
+            }
+            KeyCode::Tab => {
+                let save_idx = dialog.entries.len();
+                if dialog.cursor < save_idx {
+                    dialog.cursor += 1;
+                } else {
+                    dialog.cursor = 0;
+                }
+            }
             KeyCode::Up => {
                 if dialog.cursor > 0 {
                     dialog.cursor -= 1;
                 }
             }
             KeyCode::Down => {
-                if dialog.cursor + 1 < dialog.entries.len() {
+                if dialog.cursor < dialog.entries.len() {
                     dialog.cursor += 1;
                 }
             }
-            KeyCode::Char(' ') | KeyCode::Enter => {
-                if let Some(entry) = dialog.entries.get_mut(dialog.cursor)
+            KeyCode::Char(' ') => {
+                if dialog.cursor < dialog.entries.len()
+                    && let Some(entry) = dialog.entries.get_mut(dialog.cursor)
+                    && entry.disabled_reason.is_none()
+                {
+                    entry.enabled = !entry.enabled;
+                }
+            }
+            KeyCode::Enter => {
+                if dialog.cursor >= dialog.entries.len() {
+                    save_harness_dialog(&mut state.select);
+                } else if let Some(entry) = dialog.entries.get_mut(dialog.cursor)
                     && entry.disabled_reason.is_none()
                 {
                     entry.enabled = !entry.enabled;
                 }
             }
             KeyCode::Char('s') => {
-                // Save and close
-                for entry in &dialog.entries {
-                    state
-                        .select
-                        .harness_selection
-                        .insert(entry.id.clone(), entry.enabled);
-                }
-                state.select.harness_dialog = None;
+                save_harness_dialog(&mut state.select);
             }
             _ => {}
         }
@@ -869,6 +878,20 @@ fn handle_key(
     Ok(None)
 }
 
+fn save_harness_dialog(select: &mut TabbedSelect) {
+    if let Some(dialog) = select.harness_dialog.as_ref() {
+        let entries: Vec<(String, bool)> = dialog
+            .entries
+            .iter()
+            .map(|e| (e.id.clone(), e.enabled))
+            .collect();
+        for (id, enabled) in entries {
+            select.harness_selection.insert(id, enabled);
+        }
+    }
+    select.harness_dialog = None;
+}
+
 /// Returns (move_to_global_count, move_to_project_count) for the current
 /// selection. A `project`-only item is eligible to move to global; a
 /// `global`-only item is eligible to move to project. `both` items are
@@ -1058,22 +1081,11 @@ fn unlock_orphan_deps(select: &mut TabbedSelect, graph: &HashMap<String, Vec<Str
 // ── Confirm dialog construction ──────────────────────────────
 
 fn open_install_confirm(state: &mut FlowState) {
-    let mut to_install: Vec<&SelectItem> = state
-        .select
-        .marked_items()
-        .into_iter()
-        .filter(|i| {
-            // Only items from Source tabs that aren't installed (or if outdated, allow update)
-            !i.installed || i.outdated
-        })
-        .collect();
-    // Deduplicate by label (same name may appear in multiple tabs)
-    to_install.sort_by(|a, b| a.label.cmp(&b.label));
-    to_install.dedup_by(|a, b| a.label == b.label);
+    let to_install = marked_install_items(&state.select);
 
     if to_install.is_empty() {
         state.select.flash_message =
-            Some("No new packages selected. Use space to select, then i to install.".into());
+            Some("No packages selected. Use space to select, then i to install/reinstall.".into());
         return;
     }
 
@@ -1099,26 +1111,18 @@ fn open_install_confirm(state: &mut FlowState) {
     }
 
     let mut body = Vec::new();
-    body.push(format!("{} item(s) to install", to_install.len()));
+    body.push(install_count_summary(&to_install));
     body.push(String::new());
     let max_label = to_install.iter().map(|i| i.label.len()).max().unwrap_or(0);
     for item in &to_install {
         let kind = crate::config::ItemKind::label_short_or_item(item.kind);
-        let dup_warn = if item.installed && item.installed_scope != Some(target_scope) {
-            format!(
-                " ⚠ already installed at {}",
-                item.installed_scope.map(|s| s.label()).unwrap_or("?")
-            )
-        } else if item.outdated {
-            "  (replaces outdated)".to_string()
-        } else {
-            String::new()
-        };
+        let marker = if item.installed { "↻" } else { "+" };
+        let note = install_item_note(item, target_scope);
         body.push(format!(
-            "  + {:<width$}  {}{}",
+            "  {marker} {:<width$}  {}{}",
             item.label,
             kind,
-            dup_warn,
+            note,
             width = max_label
         ));
     }
@@ -1144,13 +1148,83 @@ fn open_install_confirm(state: &mut FlowState) {
         body.push("   These will appear in the Duplicates tab; resolve later with p/g.".into());
     }
 
+    let title = install_dialog_title(&to_install);
     state.select.confirm_dialog = Some(ConfirmDialog::new(
         ConfirmAction::InstallMarked,
-        "Install",
-        "Install",
+        title,
+        title,
         body,
         super::render::theme::STATUS_OK,
     ));
+}
+
+fn is_install_candidate(item: &SelectItem) -> bool {
+    // CLI update rows live in the Updates tab and use `kind = None`.
+    // The install action is package-only; CLI updates stay on `u`.
+    item.kind.is_some()
+}
+
+fn marked_install_items(select: &TabbedSelect) -> Vec<&SelectItem> {
+    let mut items: Vec<&SelectItem> = select
+        .marked_items()
+        .into_iter()
+        .filter(|item| is_install_candidate(item))
+        .collect();
+    // Deduplicate by label — the same package can be marked in Source,
+    // Installed, Updates, or Duplicates tabs.
+    items.sort_by(|a, b| a.label.cmp(&b.label));
+    items.dedup_by(|a, b| a.label == b.label);
+    items
+}
+
+fn marked_install_names(select: &TabbedSelect) -> HashSet<String> {
+    marked_install_items(select)
+        .into_iter()
+        .map(|item| item.label.clone())
+        .collect()
+}
+
+fn install_count_summary(items: &[&SelectItem]) -> String {
+    let reinstall = items.iter().filter(|item| item.installed).count();
+    let install = items.len().saturating_sub(reinstall);
+    match (install, reinstall) {
+        (0, n) => format!("{n} item(s) to reinstall"),
+        (n, 0) => format!("{n} item(s) to install"),
+        _ => format!("{} item(s) to install/reinstall", items.len()),
+    }
+}
+
+fn install_dialog_title(items: &[&SelectItem]) -> &'static str {
+    if items.iter().all(|item| item.installed) {
+        "Reinstall"
+    } else {
+        "Install"
+    }
+}
+
+fn install_item_note(item: &SelectItem, target_scope: Scope) -> String {
+    let mut notes = Vec::new();
+    if item.installed
+        && item
+            .installed_scope
+            .is_some_and(|scope| scope != target_scope && scope != Scope::Both)
+    {
+        notes.push(format!(
+            "⚠ already installed at {}",
+            item.installed_scope.map(|s| s.label()).unwrap_or("?")
+        ));
+    }
+    if item.outdated {
+        notes.push("replaces outdated".to_string());
+    } else if item.installed {
+        notes.push("reinstall".to_string());
+    }
+
+    if notes.is_empty() {
+        String::new()
+    } else {
+        format!("  ({})", notes.join(" · "))
+    }
 }
 
 fn open_remove_confirm(state: &mut FlowState) {
@@ -1693,15 +1767,9 @@ fn execute_action(
 // ── Build install selections ──────────────────────────────
 
 fn build_install_selections(state: &FlowState) -> InstallSelections {
-    let marked_names: HashSet<String> = state
-        .select
-        .marked_items()
-        .iter()
-        .filter(|i| !i.installed || i.outdated)
-        .map(|i| i.label.clone())
-        .collect();
-
-    let update_cli = marked_names.contains("vstack (cli)");
+    let marked_names = marked_install_names(&state.select);
+    // CLI update rows are not package install candidates; `u` handles them inline.
+    let update_cli = false;
 
     let selected_agents: Vec<Agent> = state
         .items
@@ -2088,7 +2156,160 @@ fn kind_label(kind: Option<crate::config::ItemKind>) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::super::multiselect::{HarnessDialog, HarnessEntry, ItemGroup, Tab};
     use super::*;
+
+    fn key(code: KeyCode) -> crossterm::event::KeyEvent {
+        crossterm::event::KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn agent_fixture(name: &str) -> Agent {
+        Agent {
+            name: name.to_string(),
+            description: format!("{name} agent"),
+            model: "sonnet".into(),
+            role: crate::agent::AgentRole::Engineer,
+            color: None,
+            effort: None,
+            body: String::new(),
+            source_path: std::path::PathBuf::new(),
+        }
+    }
+
+    fn selected_installed_agent(name: &str) -> SelectItem {
+        SelectItem {
+            label: name.to_string(),
+            description: "[pi]".into(),
+            selected: true,
+            suffix: None,
+            locked: false,
+            installed: true,
+            installed_scope: Some(Scope::Project),
+            outdated: false,
+            kind: Some(crate::config::ItemKind::Agent),
+            search_haystack: String::new(),
+        }
+    }
+
+    #[test]
+    fn install_action_includes_installed_tab_marks_for_reinstall() {
+        let discovered = DiscoveredItems {
+            agents: vec![agent_fixture("rust")],
+            skills: Vec::new(),
+            hooks: Vec::new(),
+            pi_extensions: Vec::new(),
+        };
+        let source_selector = SourceSelectorData {
+            current_label: "local".into(),
+            options: Vec::new(),
+        };
+        let select = TabbedSelect::new(
+            "x",
+            vec![Tab {
+                name: "Installed".into(),
+                kind: TabKind::Installed,
+                groups: vec![ItemGroup {
+                    label: "Project / Agents".into(),
+                    items: vec![selected_installed_agent("rust")],
+                }],
+            }],
+        )
+        .with_harness_selection(HashMap::from([
+            ("claude-code".to_string(), true),
+            ("pi".to_string(), true),
+        ]));
+
+        let mut state = FlowState {
+            items: &discovered,
+            dep_graph: HashMap::new(),
+            dep_display: HashMap::new(),
+            installed: InstalledState::new(),
+            prev_harnesses: HashSet::new(),
+            select,
+            source_selector: &source_selector,
+            cli_update: None,
+        };
+
+        open_install_confirm(&mut state);
+        let dialog = state
+            .select
+            .confirm_dialog
+            .as_ref()
+            .expect("installed marks should open reinstall confirm");
+        assert_eq!(dialog.title, "Reinstall");
+        assert_eq!(dialog.body[0], "1 item(s) to reinstall");
+        assert!(dialog.body.iter().any(|line| line.contains("reinstall")));
+
+        let selections = build_install_selections(&state);
+        assert_eq!(selections.agents.len(), 1);
+        assert_eq!(selections.agents[0].name, "rust");
+        assert_eq!(selections.harnesses, vec![Harness::ClaudeCode, Harness::Pi]);
+        assert!(!selections.global);
+    }
+
+    #[test]
+    fn harness_dialog_down_focuses_save_and_enter_persists() {
+        let discovered = DiscoveredItems {
+            agents: Vec::new(),
+            skills: Vec::new(),
+            hooks: Vec::new(),
+            pi_extensions: Vec::new(),
+        };
+        let source_selector = SourceSelectorData {
+            current_label: "local".into(),
+            options: Vec::new(),
+        };
+        let mut select = TabbedSelect::new(
+            "x",
+            vec![Tab {
+                name: "Agents".into(),
+                kind: TabKind::Source,
+                groups: Vec::new(),
+            }],
+        );
+        select.harness_dialog = Some(HarnessDialog {
+            cursor: 1,
+            entries: vec![
+                HarnessEntry {
+                    id: "claude-code".into(),
+                    label: "Claude Code".into(),
+                    detected: true,
+                    previously_used: false,
+                    disabled_reason: None,
+                    enabled: false,
+                },
+                HarnessEntry {
+                    id: "pi".into(),
+                    label: "Pi".into(),
+                    detected: true,
+                    previously_used: true,
+                    disabled_reason: None,
+                    enabled: true,
+                },
+            ],
+        });
+        let mut state = FlowState {
+            items: &discovered,
+            dep_graph: HashMap::new(),
+            dep_display: HashMap::new(),
+            installed: InstalledState::new(),
+            prev_harnesses: HashSet::new(),
+            select,
+            source_selector: &source_selector,
+            cli_update: None,
+        };
+
+        handle_key(&mut state, key(KeyCode::Down)).unwrap();
+        assert_eq!(state.select.harness_dialog.as_ref().unwrap().cursor, 2);
+
+        handle_key(&mut state, key(KeyCode::Enter)).unwrap();
+        assert!(state.select.harness_dialog.is_none());
+        assert_eq!(
+            state.select.harness_selection.get("claude-code"),
+            Some(&false)
+        );
+        assert_eq!(state.select.harness_selection.get("pi"), Some(&true));
+    }
 
     #[test]
     fn filter_harnesses_drops_cursor_when_moving_to_global() {
