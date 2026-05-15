@@ -1,0 +1,59 @@
+# Flightdeck dashboard bundled pricing.
+# Verified 2026-05-15 against Anthropic Claude API pricing and OpenAI API pricing pages.
+# Per-million-token rates in USD.
+
+[[models]]
+name = "claude-opus-4-20250514"
+input_per_m = 15.00
+output_per_m = 75.00
+cache_creation_per_m = 18.75
+cache_read_per_m = 1.50
+
+[[models]]
+name = "claude-opus-4-1-20250805"
+input_per_m = 15.00
+output_per_m = 75.00
+cache_creation_per_m = 18.75
+cache_read_per_m = 1.50
+
+[[models]]
+name = "claude-sonnet-4-20250514"
+input_per_m = 3.00
+output_per_m = 15.00
+cache_creation_per_m = 3.75
+cache_read_per_m = 0.30
+
+[[models]]
+name = "claude-3-5-sonnet-20241022"
+input_per_m = 3.00
+output_per_m = 15.00
+cache_creation_per_m = 3.75
+cache_read_per_m = 0.30
+
+[[models]]
+name = "claude-3-5-haiku-20241022"
+input_per_m = 0.80
+output_per_m = 4.00
+cache_creation_per_m = 1.00
+cache_read_per_m = 0.08
+
+[[models]]
+name = "gpt-5.5"
+input_per_m = 5.00
+output_per_m = 30.00
+cache_creation_per_m = 0.00
+cache_read_per_m = 0.50
+
+[[models]]
+name = "gpt-5.4"
+input_per_m = 2.50
+output_per_m = 15.00
+cache_creation_per_m = 0.00
+cache_read_per_m = 0.25
+
+[[models]]
+name = "gpt-5.4-mini"
+input_per_m = 0.75
+output_per_m = 4.50
+cache_creation_per_m = 0.00
+cache_read_per_m = 0.075

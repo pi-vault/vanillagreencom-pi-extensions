@@ -1,5 +1,6 @@
 pub mod app;
 pub mod cli;
+pub mod cost;
 pub mod daemon;
 pub mod events;
 pub mod fixtures;
