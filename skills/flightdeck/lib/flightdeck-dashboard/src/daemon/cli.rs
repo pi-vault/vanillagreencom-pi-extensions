@@ -14,6 +14,7 @@ use crate::daemon::lifecycle::{
 };
 use crate::daemon::socket;
 use crate::daemon::state::{self, DaemonSnapshotSource};
+use crate::daemon::subscribers::SubscriberRuntime;
 use crate::state::tracked_entries::{self, SessionResolution};
 use crate::util::paths::{
     dashboard_socket_file, fd_resolve_state_dir, fd_session_key_from_id, resolve_session_key,
@@ -73,6 +74,19 @@ async fn run_foreground(source: DaemonSnapshotSource, paths: RuntimePaths) -> Re
     remove_socket(&paths);
     append_log(&paths.log, "dashboard daemon starting");
     let state_runtime = state::start_state_runtime(source, paths.clone()).await?;
+    let _subscriber_runtime = if rust_wake_enabled() {
+        append_log(&paths.log, "dashboard daemon rust wake side active");
+        Some(SubscriberRuntime::spawn(
+            paths.clone(),
+            state_runtime.shared.clone(),
+        ))
+    } else {
+        append_log(
+            &paths.log,
+            "dashboard daemon rust wake side inactive gate=FLIGHTDECK_DAEMON_RUST",
+        );
+        None
+    };
     let (shutdown_signal_tx, shutdown_signal_rx) = tokio::sync::oneshot::channel();
     let (shutdown_tx, mut shutdown_rx) = broadcast::channel::<()>(4);
     let socket_path = paths.socket.clone();
@@ -204,6 +218,10 @@ async fn tail(session: Option<&str>, source: DaemonTailSource) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn rust_wake_enabled() -> bool {
+    std::env::var("FLIGHTDECK_DAEMON_RUST").is_ok_and(|value| value == "1")
 }
 
 fn wait_for_path_removed(path: &Path, grace: Duration) {

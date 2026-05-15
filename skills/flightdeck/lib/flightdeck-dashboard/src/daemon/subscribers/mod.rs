@@ -56,13 +56,8 @@ impl SubscriberHandle {
     }
 
     #[must_use]
-    pub fn completed(label: &'static str) -> Self {
-        Self::new(tokio::spawn(async move {
-            tracing::warn!(
-                subscriber = label,
-                "subscriber not implemented in Rust daemon yet"
-            );
-        }))
+    pub fn completed(_label: &'static str) -> Self {
+        Self::new(tokio::spawn(async {}))
     }
 
     pub fn abort(&self) {
