@@ -213,7 +213,7 @@ test("compact dashboard renders 'pane gone' chip when entry pane is missing from
 	const snap = snapshot([entry], { livePaneIds: new Set(["%1", "%2"]) });
 	const text = joinRendered(renderDashboardLines(snap, plainTheme() as never, 140, "compact", ENV_CWD, new Map()));
 	assert.match(text, /pane gone/);
-	assert.match(text, /press.+p.+to prune/);
+	assert.match(text, /press.+p.*del.+to prune/);
 });
 
 test("compact dashboard does NOT mark entry as gone when pane is alive", () => {

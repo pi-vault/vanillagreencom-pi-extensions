@@ -335,7 +335,7 @@ export function renderDashboardLines(snapshot: FlightdeckSnapshot, theme: Theme,
 			const pre = theme.fg("dim", "pane gone — open ");
 			const shortcut = ansiYellow(formatShortcutHint(popupShortcut));
 			const mid = theme.fg("dim", ", select the row, press ");
-			const keyHint = ansiYellow("p");
+			const keyHint = `${ansiYellow("p")}${theme.fg("dim", "/")}${ansiYellow("del")}`;
 			const post = theme.fg("dim", " to prune");
 			lines.push(`${panelBranch(theme, "└", treeStyle)}${pre}${shortcut}${mid}${keyHint}${post}`);
 		}
@@ -363,7 +363,7 @@ export function renderDashboardLines(snapshot: FlightdeckSnapshot, theme: Theme,
 		const pre = theme.fg("dim", "pane gone — open ");
 		const shortcut = ansiYellow(formatShortcutHint(popupShortcut));
 		const mid = theme.fg("dim", ", select the row, press ");
-		const keyHint = ansiYellow("p");
+		const keyHint = `${ansiYellow("p")}${theme.fg("dim", "/")}${ansiYellow("del")}`;
 		const post = theme.fg("dim", " to prune");
 		lines.push(`${panelBranch(theme, "└", treeStyle)}${pre}${shortcut}${mid}${keyHint}${post}`);
 	}
@@ -1652,7 +1652,7 @@ export default function flightdeck(pi: ExtensionAPI): void {
 							tui.requestRender();
 							return;
 						}
-						if (matchesKey(data, "p") && ui.tab === TAB_OVERVIEW) {
+						if ((matchesKey(data, "p") || matchesKey(data, "delete")) && ui.tab === TAB_OVERVIEW) {
 							const snapshot = cache.lastSnapshot ?? refreshSnapshot(activePopupCwd(ctx));
 							const sessions = snapshot ? readTrackedEntries(snapshot.master) : [];
 							const filtered = ui.search.trim()
@@ -1758,7 +1758,7 @@ export default function flightdeck(pi: ExtensionAPI): void {
 		const viewHint = ui.tab === TAB_DECISIONS || ui.tab === TAB_LIVE || ui.tab === TAB_CONVERSATIONS ? `${theme.fg("dim", " · ")}${ansiYellow("enter")} ${theme.fg("dim", "details")}` : "";
 		const navVerb = ui.tab === TAB_DAEMON ? "scroll" : "select";
 		const noiseHint = ui.tab === TAB_LIVE ? `${theme.fg("dim", " · ")}${ansiYellow("ctrl+n")} ${theme.fg("dim", ui.liveShowNoisy ? "important" : "all")}` : "";
-		const pruneHint = ui.tab === TAB_OVERVIEW ? `${theme.fg("dim", " · ")}${ansiYellow("p")} ${theme.fg("dim", "prune dead")}` : "";
+		const pruneHint = ui.tab === TAB_OVERVIEW ? `${theme.fg("dim", " · ")}${ansiYellow("p")}${theme.fg("dim", "/")}${ansiYellow("del")} ${theme.fg("dim", "prune dead")}` : "";
 		const navHint = `${ansiYellow("↑/↓")} ${theme.fg("dim", `${navVerb} · `)}${ansiYellow("-/=")} ${theme.fg("dim", "page · ")}${ansiYellow("home/end")} ${theme.fg("dim", "ends")}${viewHint}${noiseHint}${pruneHint}`;
 		const searchHint = ui.search ? `${ansiYellow("ctrl+u")} ${theme.fg("dim", "clear search")}` : `${theme.fg("dim", "type to filter")}`;
 		const closeHint = `${ansiYellow("esc")} ${theme.fg("dim", "close")}`;
