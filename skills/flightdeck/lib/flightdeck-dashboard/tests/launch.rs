@@ -128,6 +128,7 @@ fn no_motion_forwards_motion_off() -> Result<(), Box<dyn Error>> {
 
     let output = launch_command_without_daemon(&path, &temp.path().join("runtime"), &project)
         .env("FLIGHTDECK_SESSION_BIN", &flightdeck_session)
+        .env("FLIGHTDECK_DASHBOARD_MOTION", "full")
         .env("NO_MOTION", "1")
         .output()?;
 

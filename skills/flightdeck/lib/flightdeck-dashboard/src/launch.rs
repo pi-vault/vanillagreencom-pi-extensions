@@ -145,13 +145,13 @@ fn select_window_name(cli: Option<&str>) -> String {
 
 fn select_motion(cli: Option<MotionArg>) -> Option<MotionArg> {
     cli.or_else(|| {
+        (std::env::var_os(NO_MOTION_ENV).is_some() || std::env::var_os(NO_COLOR_ENV).is_some())
+            .then_some(MotionArg::Off)
+    })
+    .or_else(|| {
         std::env::var(MOTION_ENV)
             .ok()
             .and_then(|value| motion_from_str(value.trim()))
-    })
-    .or_else(|| {
-        (std::env::var_os(NO_MOTION_ENV).is_some() || std::env::var_os(NO_COLOR_ENV).is_some())
-            .then_some(MotionArg::Off)
     })
 }
 
