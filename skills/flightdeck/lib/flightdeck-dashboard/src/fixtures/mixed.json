@@ -1,0 +1,96 @@
+{
+  "session_id": "demo-mixed",
+  "started_at": "2026-05-15T07:45:00Z",
+  "updated_at": "2026-05-15T10:06:00Z",
+  "terminated": false,
+  "terminated_at": null,
+  "owner": {
+    "harness": "pi",
+    "pane_id": "%25",
+    "pane_target": "demo:1.0",
+    "cwd": "/repo/demo",
+    "pid": 2001,
+    "pi_session_id": "pi-demo-mixed",
+    "pi_bridge_socket": "/run/user/1000/pi-demo.sock",
+    "discovery_error": null
+  },
+  "entries": {
+    "adhoc-logs": {
+      "id": "adhoc-logs",
+      "title": "Watch daemon logs",
+      "kind": "adhoc",
+      "state": "waiting",
+      "substate": "tailing",
+      "harness": "pi",
+      "cwd": "/repo/demo",
+      "window": "logs",
+      "pane_target": "demo:2.0",
+      "pane_id": "%31",
+      "launch": { "model": "gpt-5.5", "effort": "medium", "cmd": "tail -f tmp/flightdeck.log" },
+      "adapter": { "pi_bridge_pid": 2311, "pi_bridge_socket": "/run/user/1000/pi-logs.sock", "pi_session_id": "pi-logs" },
+      "domain": null,
+      "last_response_at": "2026-05-15T09:58:00Z",
+      "spawned_at": "2026-05-15T08:00:00Z",
+      "last_polled_at": "2026-05-15T10:06:00Z",
+      "decisions_log": []
+    },
+    "VST-101": {
+      "id": "VST-101",
+      "title": "Fix dashboard state reader",
+      "kind": "issue",
+      "state": "prompting",
+      "substate": "cleanup prompt",
+      "harness": "opencode",
+      "cwd": "/repo/worktrees/vst-101",
+      "window": "VST-101",
+      "pane_target": "demo:3.0",
+      "pane_id": "%41",
+      "launch": { "model": "gpt-5.5", "effort": "xhigh", "cmd": "opencode run issue VST-101" },
+      "adapter": { "oc_url": "http://127.0.0.1:5050", "oc_session_id": "oc-vst-101" },
+      "domain": {
+        "issue": {
+          "id": "VST-101",
+          "worktree": "/repo/worktrees/vst-101",
+          "pr_number": 44,
+          "scope_files_declared": 5,
+          "scope_files_actual": 7,
+          "orchestration_started": true,
+          "merge_commit": null
+        }
+      },
+      "last_response_at": "2026-05-15T09:55:00Z",
+      "spawned_at": "2026-05-15T08:35:00Z",
+      "last_polled_at": "2026-05-15T10:06:00Z",
+      "decisions_log": [
+        { "ts": "2026-05-15T09:50:30Z", "prompt_tag": "cleanup-prompt", "answer": "NO — sibling worktree still live" }
+      ]
+    },
+    "dashboard-rust": {
+      "id": "dashboard-rust",
+      "title": "Build Rust dashboard",
+      "kind": "workflow",
+      "state": "submitting",
+      "substate": "running acceptance gates",
+      "harness": "codex",
+      "cwd": "/repo/demo",
+      "window": "dashboard-rust",
+      "pane_target": "demo:4.0",
+      "pane_id": "%51",
+      "launch": { "model": "gpt-5.5", "effort": "high", "cmd": "codex run flightdeck dashboard" },
+      "adapter": { "cx_ws": "ws://127.0.0.1:6060", "cx_thread_id": "cx-dashboard" },
+      "domain": null,
+      "last_response_at": "2026-05-15T10:01:00Z",
+      "spawned_at": "2026-05-15T09:12:00Z",
+      "last_polled_at": "2026-05-15T10:06:00Z",
+      "decisions_log": [
+        { "ts": "2026-05-15T09:47:00Z", "prompt_tag": "bash-permission-prompt", "answer": "Allow cargo test in dashboard crate" }
+      ]
+    }
+  },
+  "merge_queue": ["VST-101", "VST-102"],
+  "conflict_graph": {
+    "edges": [["VST-101", "VST-102"]],
+    "computed_at": "2026-05-15T10:04:00Z"
+  },
+  "paused_for_user": null
+}

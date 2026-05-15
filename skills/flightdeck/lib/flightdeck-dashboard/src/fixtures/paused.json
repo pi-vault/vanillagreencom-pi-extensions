@@ -1,0 +1,58 @@
+{
+  "session_id": "demo-paused",
+  "started_at": "2026-05-15T07:00:00Z",
+  "updated_at": "2026-05-15T10:08:00Z",
+  "terminated": false,
+  "terminated_at": null,
+  "owner": {
+    "harness": "pi",
+    "pane_id": "%25",
+    "pane_target": "demo:1.0",
+    "cwd": "/repo/demo",
+    "pid": 2001,
+    "pi_session_id": "pi-demo-paused",
+    "pi_bridge_socket": "/run/user/1000/pi-demo.sock",
+    "discovery_error": null
+  },
+  "entries": {
+    "VST-202": {
+      "id": "VST-202",
+      "title": "Resolve scope creep",
+      "kind": "issue",
+      "state": "prompting",
+      "substate": "paused for user",
+      "harness": "pi",
+      "cwd": "/repo/worktrees/vst-202",
+      "window": "VST-202",
+      "pane_target": "demo:3.0",
+      "pane_id": "%42",
+      "launch": { "model": "gpt-5.5", "effort": "xhigh", "cmd": "pi issue VST-202" },
+      "adapter": { "pi_bridge_pid": 2502, "pi_bridge_socket": "/run/user/1000/pi-vst-202.sock", "pi_session_id": "pi-vst-202" },
+      "domain": {
+        "issue": {
+          "id": "VST-202",
+          "worktree": "/repo/worktrees/vst-202",
+          "pr_number": 88,
+          "scope_files_declared": 3,
+          "scope_files_actual": 12,
+          "orchestration_started": true,
+          "merge_commit": null
+        }
+      },
+      "last_response_at": "2026-05-15T09:45:00Z",
+      "spawned_at": "2026-05-15T08:05:00Z",
+      "last_polled_at": "2026-05-15T10:08:00Z",
+      "decisions_log": [
+        { "ts": "2026-05-15T09:55:00Z", "prompt_tag": "scope-creep-detected", "answer": "Escalated to user" }
+      ]
+    }
+  },
+  "merge_queue": ["VST-202"],
+  "conflict_graph": { "edges": [["VST-202", "VST-203"]], "computed_at": "2026-05-15T10:08:00Z" },
+  "paused_for_user": {
+    "entry_id": "VST-202",
+    "issue_id": "VST-202",
+    "reason": "scope-creep-detected",
+    "prompt_text": "Actual files exceed declared scope. Continue, descope, or abort?"
+  }
+}

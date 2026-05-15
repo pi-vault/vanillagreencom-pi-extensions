@@ -1,0 +1,43 @@
+{
+  "session_id": "demo-adhoc",
+  "started_at": "2026-05-15T09:45:00Z",
+  "updated_at": "2026-05-15T10:04:00Z",
+  "terminated": false,
+  "terminated_at": null,
+  "owner": {
+    "harness": "pi",
+    "pane_id": "%25",
+    "pane_target": "demo:1.0",
+    "cwd": "/repo/demo",
+    "pid": 2001,
+    "pi_session_id": "pi-demo-adhoc",
+    "pi_bridge_socket": "/run/user/1000/pi-demo.sock",
+    "discovery_error": null
+  },
+  "entries": {
+    "scratch-pi": {
+      "id": "scratch-pi",
+      "title": "Scratch Pi recon",
+      "kind": "adhoc",
+      "state": "ready",
+      "substate": null,
+      "harness": "pi",
+      "cwd": "/repo/demo",
+      "window": "scratch",
+      "pane_target": "demo:2.0",
+      "pane_id": "%31",
+      "launch": { "model": "gpt-5.5", "effort": "high", "cmd": "pi Investigate this repo" },
+      "adapter": { "pi_bridge_pid": 2311, "pi_bridge_socket": "/run/user/1000/pi-scratch.sock", "pi_session_id": "pi-scratch" },
+      "domain": null,
+      "last_response_at": "2026-05-15T10:02:15Z",
+      "spawned_at": "2026-05-15T09:46:00Z",
+      "last_polled_at": "2026-05-15T10:04:00Z",
+      "decisions_log": [
+        { "ts": "2026-05-15T09:58:00Z", "prompt_tag": "generic-multi-choice", "answer": "Continue read-only recon" }
+      ]
+    }
+  },
+  "merge_queue": [],
+  "conflict_graph": { "edges": [], "computed_at": "2026-05-15T10:04:00Z" },
+  "paused_for_user": null
+}

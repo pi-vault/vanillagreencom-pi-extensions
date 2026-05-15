@@ -5,6 +5,7 @@ HT-AGENTS.md
 .cache/
 ht/
 cli/target/
+target/
 tmp/
 docs/work-in-progress/
 

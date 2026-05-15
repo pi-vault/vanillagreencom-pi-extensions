@@ -1,0 +1,21 @@
+{
+  "session_id": "demo-empty",
+  "started_at": "2026-05-15T10:00:00Z",
+  "updated_at": "2026-05-15T10:03:00Z",
+  "terminated": false,
+  "terminated_at": null,
+  "owner": {
+    "harness": "pi",
+    "pane_id": "%25",
+    "pane_target": "demo:1.0",
+    "cwd": "/repo/demo",
+    "pid": 2001,
+    "pi_session_id": "pi-demo-empty",
+    "pi_bridge_socket": "/run/user/1000/pi-demo.sock",
+    "discovery_error": null
+  },
+  "entries": {},
+  "merge_queue": [],
+  "conflict_graph": { "edges": [], "computed_at": "2026-05-15T10:03:00Z" },
+  "paused_for_user": null
+}

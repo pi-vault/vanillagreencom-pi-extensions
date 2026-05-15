@@ -1,0 +1,44 @@
+{
+  "session_id": "demo-terminated",
+  "started_at": "2026-05-15T06:00:00Z",
+  "updated_at": "2026-05-15T10:07:00Z",
+  "terminated": true,
+  "terminated_at": "2026-05-15T10:07:30Z",
+  "owner": {
+    "harness": "codex",
+    "pane_id": "%25",
+    "pane_target": "demo:1.0",
+    "cwd": "/repo/demo",
+    "pid": 2001,
+    "pi_session_id": null,
+    "pi_bridge_socket": null,
+    "discovery_error": null
+  },
+  "entries": {
+    "adhoc-summary": {
+      "id": "adhoc-summary",
+      "title": "Summarize completed run",
+      "kind": "adhoc",
+      "state": "complete",
+      "substate": null,
+      "harness": "claude",
+      "cwd": "/repo/demo",
+      "window": "summary",
+      "pane_target": "demo:2.0",
+      "pane_id": "%31",
+      "launch": { "model": "gpt-5.5", "effort": "medium", "cmd": "claude summarize" },
+      "adapter": { "cc_url": "http://127.0.0.1:7070", "cc_session_uuid": "cc-summary" },
+      "domain": null,
+      "last_response_at": "2026-05-15T10:05:00Z",
+      "spawned_at": "2026-05-15T09:30:00Z",
+      "last_polled_at": "2026-05-15T10:07:00Z",
+      "decisions_log": [
+        { "ts": "2026-05-15T10:06:00Z", "prompt_tag": "terminal-state-reached", "answer": "complete" }
+      ]
+    }
+  },
+  "merge_queue": [],
+  "conflict_graph": { "edges": [], "computed_at": "2026-05-15T10:07:00Z" },
+  "paused_for_user": null,
+  "summary_path": "tmp/flightdeck-summary-demo-terminated.md"
+}

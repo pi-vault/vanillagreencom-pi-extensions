@@ -1,0 +1,53 @@
+{
+  "session_id": "demo-issue",
+  "started_at": "2026-05-15T08:30:00Z",
+  "updated_at": "2026-05-15T10:05:00Z",
+  "terminated": false,
+  "terminated_at": null,
+  "owner": {
+    "harness": "claude",
+    "pane_id": "%25",
+    "pane_target": "demo:1.0",
+    "cwd": "/repo/demo",
+    "pid": 2001,
+    "pi_session_id": null,
+    "pi_bridge_socket": null,
+    "discovery_error": null
+  },
+  "entries": {
+    "VST-101": {
+      "id": "VST-101",
+      "title": "Fix dashboard state reader",
+      "kind": "issue",
+      "state": "prompting",
+      "substate": "needs user guidance",
+      "harness": "opencode",
+      "cwd": "/repo/worktrees/vst-101",
+      "window": "VST-101",
+      "pane_target": "demo:3.0",
+      "pane_id": "%41",
+      "launch": { "model": "gpt-5.5", "effort": "xhigh", "cmd": "opencode run issue VST-101" },
+      "adapter": { "oc_url": "http://127.0.0.1:5050", "oc_session_id": "oc-vst-101" },
+      "domain": {
+        "issue": {
+          "id": "VST-101",
+          "worktree": "/repo/worktrees/vst-101",
+          "pr_number": 44,
+          "scope_files_declared": 5,
+          "scope_files_actual": 7,
+          "orchestration_started": true,
+          "merge_commit": null
+        }
+      },
+      "last_response_at": "2026-05-15T09:51:00Z",
+      "spawned_at": "2026-05-15T08:35:00Z",
+      "last_polled_at": "2026-05-15T10:05:00Z",
+      "decisions_log": [
+        { "ts": "2026-05-15T09:48:30Z", "prompt_tag": "rebase-multi-choice", "answer": "Preserve upstream parser split; apply local fixture rename; verify cargo test" }
+      ]
+    }
+  },
+  "merge_queue": ["VST-101"],
+  "conflict_graph": { "edges": [], "computed_at": "2026-05-15T10:05:00Z" },
+  "paused_for_user": null
+}
