@@ -92,3 +92,4 @@ pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const PARSE_ERROR: i64 = -32700;
 pub const METHOD_NOT_FOUND: i64 = -32601;
 pub const INTERNAL_ERROR: i64 = -32603;
+pub const FRAME_TOO_LARGE: i64 = -32001;

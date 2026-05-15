@@ -5,8 +5,11 @@ use std::thread;
 use std::time::Duration as StdDuration;
 
 use flightdeck_dashboard::daemon::client::DaemonClient;
+use flightdeck_dashboard::daemon::rpc::FRAME_TOO_LARGE;
 use flightdeck_dashboard::state::snapshot::DashboardSnapshot;
 use serde_json::Value;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::UnixStream;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, timeout, Duration, Instant};
 
@@ -52,6 +55,34 @@ async fn daemon_status_lifecycle_and_double_start() -> Result<(), Box<dyn Error>
     assert_eq!(json["running"], false);
     assert!(json["pid"].is_null());
     assert!(json["socket"].is_null());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn daemon_rejects_oversized_frame_without_unbounded_read() -> Result<(), Box<dyn Error>> {
+    let temp = tempfile::tempdir()?;
+    let state_file = temp.path().join("flightdeck-state-s404.json");
+    write_state(&state_file, "initial", "2026-05-15T00:00:00Z")?;
+
+    let bin = dashboard_bin();
+    let mut daemon = spawn_daemon(bin, temp.path(), SESSION, &state_file).await?;
+    let socket = daemon.socket();
+    let mut stream = UnixStream::connect(&socket).await?;
+    let oversized = vec![b'X'; 2 * 1024 * 1024];
+    let _ = timeout(Duration::from_secs(1), stream.write_all(&oversized)).await;
+
+    let mut line = String::new();
+    let mut reader = BufReader::new(stream);
+    let read = timeout(Duration::from_secs(1), reader.read_line(&mut line)).await??;
+    if read > 0 {
+        let value: Value = serde_json::from_str(&line)?;
+        assert_eq!(value["error"]["code"], FRAME_TOO_LARGE);
+    }
+
+    let stop = daemon_command(bin, temp.path(), ["daemon", "stop", "--session", SESSION])?;
+    assert!(stop.status.success(), "stop command failed");
+    daemon.wait_for_exit();
 
     Ok(())
 }

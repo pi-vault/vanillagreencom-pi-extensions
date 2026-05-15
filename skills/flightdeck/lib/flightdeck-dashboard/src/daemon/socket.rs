@@ -5,15 +5,15 @@ use std::time::Instant;
 use serde::Serialize;
 use serde_json::{json, Value};
 use thiserror::Error;
-use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{broadcast, oneshot, RwLock};
 
 use crate::state::snapshot::DashboardSnapshot;
 
 use super::rpc::{
-    DaemonStatus, RpcNotification, RpcRequest, RpcResponse, StateChangeParams, INTERNAL_ERROR,
-    MAX_FRAME_BYTES, METHOD_NOT_FOUND, PARSE_ERROR,
+    DaemonStatus, RpcNotification, RpcRequest, RpcResponse, StateChangeParams, FRAME_TOO_LARGE,
+    INTERNAL_ERROR, MAX_FRAME_BYTES, METHOD_NOT_FOUND, PARSE_ERROR,
 };
 use super::state::SharedState;
 
@@ -84,22 +84,21 @@ async fn handle_connection(
 ) -> Result<(), std::io::Error> {
     let (read_half, mut write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);
-    let mut line = String::new();
+    let mut frame = Vec::with_capacity(4096);
     loop {
-        line.clear();
-        let bytes = reader.read_line(&mut line).await?;
-        if bytes == 0 {
-            return Ok(());
+        match read_bounded_frame(&mut reader, &mut frame).await? {
+            FrameRead::Eof => return Ok(()),
+            FrameRead::TooLarge => {
+                write_json_line(
+                    &mut write_half,
+                    &RpcResponse::err(None, FRAME_TOO_LARGE, "frame exceeds 1 MiB"),
+                )
+                .await?;
+                return Ok(());
+            }
+            FrameRead::Frame => {}
         }
-        if bytes > MAX_FRAME_BYTES {
-            write_json_line(
-                &mut write_half,
-                &RpcResponse::err(None, PARSE_ERROR, "frame exceeds 1 MiB"),
-            )
-            .await?;
-            continue;
-        }
-        let request = match serde_json::from_str::<RpcRequest>(&line) {
+        let request = match serde_json::from_slice::<RpcRequest>(&frame) {
             Ok(request) => request,
             Err(error) => {
                 write_json_line(
@@ -120,10 +119,10 @@ async fn handle_connection(
                 write_ok_line(&mut write_half, request.id, status).await?;
             }
             "subscribe_snapshots" => {
-                write_ok_line(&mut write_half, request.id, json!({"subscribed": true})).await?;
-                let snapshot = shared.snapshot.read().await.clone();
-                write_snapshot_notification(&mut write_half, &snapshot).await?;
                 let mut rx = shared.snapshots.subscribe();
+                let snapshot = shared.snapshot.read().await.clone();
+                write_ok_line(&mut write_half, request.id, json!({"subscribed": true})).await?;
+                write_snapshot_notification(&mut write_half, &snapshot).await?;
                 loop {
                     match rx.recv().await {
                         Ok(snapshot) => {
@@ -135,10 +134,10 @@ async fn handle_connection(
                 }
             }
             "tail_state" => {
-                write_ok_line(&mut write_half, request.id, json!({"subscribed": true})).await?;
-                let snapshot = shared.snapshot.read().await.clone();
-                write_state_change_notification(&mut write_half, &snapshot).await?;
                 let mut rx = shared.snapshots.subscribe();
+                let snapshot = shared.snapshot.read().await.clone();
+                write_ok_line(&mut write_half, request.id, json!({"subscribed": true})).await?;
+                write_state_change_notification(&mut write_half, &snapshot).await?;
                 loop {
                     match rx.recv().await {
                         Ok(snapshot) => {
@@ -164,6 +163,50 @@ async fn handle_connection(
                 .await?;
             }
         }
+    }
+}
+
+enum FrameRead {
+    Frame,
+    TooLarge,
+    Eof,
+}
+
+async fn read_bounded_frame<R>(
+    reader: &mut R,
+    frame: &mut Vec<u8>,
+) -> Result<FrameRead, std::io::Error>
+where
+    R: AsyncBufRead + Unpin,
+{
+    frame.clear();
+    loop {
+        let available = reader.fill_buf().await?;
+        if available.is_empty() {
+            return if frame.is_empty() {
+                Ok(FrameRead::Eof)
+            } else {
+                Ok(FrameRead::Frame)
+            };
+        }
+        if let Some(newline) = available.iter().position(|byte| *byte == b'\n') {
+            let take = newline + 1;
+            if frame.len().saturating_add(take) > MAX_FRAME_BYTES {
+                reader.consume(take);
+                return Ok(FrameRead::TooLarge);
+            }
+            frame.extend_from_slice(&available[..take]);
+            reader.consume(take);
+            return Ok(FrameRead::Frame);
+        }
+        if frame.len().saturating_add(available.len()) > MAX_FRAME_BYTES {
+            let take = available.len();
+            reader.consume(take);
+            return Ok(FrameRead::TooLarge);
+        }
+        let take = available.len();
+        frame.extend_from_slice(available);
+        reader.consume(take);
     }
 }
 
