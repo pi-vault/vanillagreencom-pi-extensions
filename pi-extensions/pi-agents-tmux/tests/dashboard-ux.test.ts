@@ -19,7 +19,7 @@ import {
 	taskNumberById,
 	traceViewerItems,
 } from "../extensions/subagent/browser.js";
-import { renderDashboardWidgetLines } from "../extensions/subagent/dashboard.js";
+import { latestDashboardActivity, renderDashboardWidgetLines } from "../extensions/subagent/dashboard.js";
 import { COMPLETION_SUMMARY_UNAVAILABLE, extractLastAssistantTextFromTranscriptContent, highlightInlinePreview, oneLinePreview } from "../extensions/subagent/format.js";
 import { oneShotTranscriptPath } from "../extensions/subagent/paths.js";
 import { formatTaskRecordResult } from "../extensions/subagent/renderers.js";
@@ -70,6 +70,10 @@ function withTempPiUserDir<T>(fn: () => T): T {
 		if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
 		else process.env.PI_CODING_AGENT_DIR = previous;
 	}
+}
+
+function stripAnsi(text: string): string {
+	return text.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
 function record(agent: string, taskId: string, createdAt: string, patch: Partial<PaneTaskRecord> = {}): PaneTaskRecord {
@@ -195,6 +199,41 @@ test("dashboard mini widget shows session-mode chips", () => {
 
 	const paneResumed = renderDashboardWidgetLines({ collapsed: false, mode: "normal", visible: true, items: { a: dashboardItem({ kind: "pane", sessionMode: "resumed" }) } }, theme as any, cwd, 220).join("\n");
 	assert.match(paneResumed, /completed · pane · resumed/);
+});
+
+test("dashboard compact activity uses latest agent action, not prompt fallback", () => {
+	const cwd = tempRuntime();
+	writeManagerConfig(cwd, { dashboard: true });
+	const transcript = join(cwd, "agent.jsonl");
+	writeFileSync(transcript, [
+		JSON.stringify({ event: { type: "message_end", message: { role: "user", content: [{ type: "text", text: "Task: initial prompt" }] } } }),
+		JSON.stringify({ event: { type: "message_end", message: { role: "assistant", content: [{ type: "toolCall", name: "Bash" }] } } }),
+	].join("\n"));
+	const running = dashboardItem({ status: "running", task: "initial prompt", message: "initial prompt", transcriptPath: transcript });
+
+	assert.equal(latestDashboardActivity(running), "tool: Bash");
+	const rendered = renderDashboardWidgetLines({ collapsed: false, mode: "compact", visible: true, items: { a: running } }, theme as any, cwd, 220).join("\n");
+	assert.match(rendered, /tool: Bash/);
+	assert.doesNotMatch(rendered, /said: tool|initial prompt/);
+
+	const promptOnly = dashboardItem({ status: "running", task: "initial prompt", message: "initial prompt" });
+	assert.equal(latestDashboardActivity(promptOnly), undefined);
+	const promptOnlyRendered = renderDashboardWidgetLines({ collapsed: false, mode: "compact", visible: true, items: { a: promptOnly } }, theme as any, cwd, 220).join("\n");
+	assert.doesNotMatch(promptOnlyRendered, /initial prompt/);
+});
+
+test("dashboard expanded message lines mark inbound prompt and outbound result", () => {
+	const cwd = tempRuntime();
+	writeManagerConfig(cwd, { dashboard: true });
+	const rendered = stripAnsi(renderDashboardWidgetLines({
+		collapsed: false,
+		mode: "expanded",
+		visible: true,
+		items: { a: dashboardItem({ status: "completed", task: "Inspect tests", message: "No gaps found.", messageProvenance: "persisted" }) },
+	}, theme as any, cwd, 220).join("\n"));
+
+	assert.match(rendered, /-> Inspect tests/);
+	assert.match(rendered, /<- No gaps found\./);
 });
 
 test("dashboard spinner setting replaces running animation with static gear", () => {

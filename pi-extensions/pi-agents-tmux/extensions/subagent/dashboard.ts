@@ -4,7 +4,9 @@ import { type Theme } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { loadTaskRegistrySync, taskNumberById } from "./browser.js";
 import {
+	ansiGreen,
 	ansiMagenta,
+	ansiYellow,
 	formatUsageStatsForDashboard,
 	oneLinePreview,
 	padAnsi,
@@ -131,13 +133,23 @@ function compactActivityText(text: string, maxChars = 180): string {
 	return compact.length > maxChars ? `${compact.slice(0, maxChars - 1)}…` : compact;
 }
 
-function textFromMessageContent(content: unknown): string | undefined {
-	if (typeof content === "string") return compactActivityText(content);
+type ActivityContent = { kind: "text" | "tool"; text: string };
+
+function toolNameFromPart(part: any): string | undefined {
+	return typeof part?.name === "string" && part.name.trim()
+		? part.name.trim()
+		: typeof part?.toolName === "string" && part.toolName.trim()
+			? part.toolName.trim()
+			: undefined;
+}
+
+function activityContentFromMessageContent(content: unknown): ActivityContent | undefined {
+	if (typeof content === "string") return { kind: "text", text: compactActivityText(content) };
 	if (!Array.isArray(content)) return undefined;
-	const tool = content.find((part: any) => part?.type === "toolCall");
-	if (tool) return `tool ${tool.name ?? "call"}`;
+	const tool = content.find((part: any) => part?.type === "toolCall" || part?.type === "tool_call" || part?.type === "tool-call");
+	if (tool) return { kind: "tool", text: toolNameFromPart(tool) ?? "call" };
 	const text = content.find((part: any) => part?.type === "text" && typeof part.text === "string");
-	if (text?.text) return compactActivityText(String(text.text));
+	if (text?.text) return { kind: "text", text: compactActivityText(String(text.text)) };
 	return undefined;
 }
 
@@ -148,14 +160,17 @@ function activityFromParsedEvent(parsed: any): string | undefined {
 	const event = parsed.event && typeof parsed.event === "object" ? parsed.event : parsed;
 	const inner = event?.event && typeof event.event === "object" ? event.event : event;
 	const type = typeof inner?.type === "string" ? inner.type : undefined;
-	const toolName = typeof inner?.toolName === "string" ? inner.toolName : undefined;
-	if (type === "tool_execution_start" && toolName) return `tool ${toolName}`;
-	if ((type === "tool_execution_end" || type === "tool_result_end") && toolName) return `tool ${toolName} done`;
-	if (type === "tool_result_end") return "tool result";
+	const toolName = typeof inner?.toolName === "string" ? inner.toolName : toolNameFromPart(inner?.toolCall) ?? toolNameFromPart(inner?.tool_call);
+	if (type === "tool_execution_start" && toolName) return `tool: ${toolName}`;
+	if ((type === "tool_execution_end" || type === "tool_result_end") && toolName) return `tool: ${toolName}`;
+	if (type === "tool_result_end") return "tool: result";
 	const msg = inner?.message && typeof inner.message === "object" ? inner.message : undefined;
 	if (msg) {
-		const rendered = textFromMessageContent(msg.content);
-		if (rendered) return `${msg.role === "assistant" ? "said" : String(msg.role ?? "msg")}: ${rendered}`;
+		const rendered = activityContentFromMessageContent(msg.content);
+		if (rendered?.kind === "tool") return `tool: ${rendered.text}`;
+		if (rendered?.kind === "text" && msg.role === "assistant") return `said: ${rendered.text}`;
+		if (rendered?.kind === "text" && msg.role === "tool") return `tool: ${rendered.text}`;
+		return undefined;
 	}
 	if (type === "message_end") return "message complete";
 	return undefined;
@@ -172,8 +187,24 @@ export function latestDashboardActivity(item: SubagentDashboardItem): string | u
 		}
 	}
 	if (item.status === "queued") return item.task ? `queued: ${compactActivityText(item.task)}` : "queued";
-	if (isDashboardWorkingStatus(item.status)) return item.message ? compactActivityText(item.message) : item.task ? compactActivityText(item.task) : undefined;
 	return undefined;
+}
+
+function outgoingDashboardMessage(item: SubagentDashboardItem): string | undefined {
+	if (isDashboardWorkingStatus(item.status)) return undefined;
+	const message = item.message?.trim();
+	if (!message || item.messageProvenance === "placeholder" || item.messageProvenance === "task-echo-fallback") return undefined;
+	if (item.task && compactActivityText(message) === compactActivityText(item.task)) return undefined;
+	return message;
+}
+
+function expandedDashboardMessageLines(item: SubagentDashboardItem, stem: string, theme: Theme, width: number): string[] {
+	const maxChars = Math.max(48, width - 20);
+	const lines: string[] = [];
+	if (item.task?.trim()) lines.push(`${stem}${ansiYellow("->")} ${theme.fg("toolOutput", oneLinePreview(item.task, maxChars))}`);
+	const outgoing = outgoingDashboardMessage(item);
+	if (outgoing) lines.push(`${stem}${ansiGreen("<-")} ${theme.fg("toolOutput", oneLinePreview(outgoing, maxChars))}`);
+	return lines;
 }
 
 function dashboardFrame(lines: string[], width: number, theme: Theme): string[] {
@@ -341,8 +372,8 @@ export function renderDashboardWidgetLines(state: SubagentDashboardState, theme:
 			if (activity) rowParts.push(theme.fg("toolOutput", activity));
 		}
 		lines.push(`${branch}${dashboardStatusIcon(item.status, theme, { animateSpinners })} ${name}${dotSep}${rowParts.join(dotSep)}`);
-		if (state.mode === "expanded" && !state.collapsed && item.message) {
-			lines.push(`${subagentStem(theme, index === shown.length - 1 && items.length <= shown.length, cwd)}${theme.fg("toolOutput", oneLinePreview(item.message, Math.max(48, width - 16)))}`);
+		if (state.mode === "expanded" && !state.collapsed) {
+			lines.push(...expandedDashboardMessageLines(item, subagentStem(theme, index === shown.length - 1 && items.length <= shown.length, cwd), theme, width));
 		}
 	}
 	const hidden = items.length - shown.length;
