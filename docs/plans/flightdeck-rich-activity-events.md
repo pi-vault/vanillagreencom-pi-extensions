@@ -1,28 +1,24 @@
 # Flightdeck rich activity events plan
 
-Date: 2026-05-14
+Originally drafted 2026-05-14. Updated 2026-05-15 to reflect the Rust dashboard ship (`flightdeck-dashboard-rust` branch) — see [Baseline](#baseline) below.
 
-## Status update (2026-05-14, post-legacy-purge baseline)
+## Baseline
 
-The flightdeck legacy purge landed on 2026-05-14 (commits `c204989`, `3fbd4ce`, `87aa9ac`). This plan now executes against a post-purge codebase: `.entries` is the only tracked-entry shape, `.issues` is gone, bash siblings are deleted, `FLIGHTDECK_USE_TS_*` gates are gone, and daemon `start` is TS-only. Impacts on this plan:
+This plan executes against the post-purge codebase. Load-bearing facts:
 
-- **No bash mirror requirements.** The TypeScript implementation is canonical. Phase 1 ships TS-only helpers under `skills/flightdeck/lib/flightdeck-core/src/activity/`; bash trampolines exec the TS binary. Skip the "bash mirror" step in every phase and skip parity tests against deleted bash siblings.
-- **`.entries[ENTRY_ID].decisions_log` is canonical.** `pane-registry log-decision` already writes only to `.entries`. The Phase 2 "generic decision logging fix" is already done — just emit `decision.recorded` activity from the existing append point.
-- **`pane-registry set` redirects issue-domain fields into `domain.issue`.** Activity producers that read `pr_number` / `worktree` / `merge_commit` / `scope_files_*` / `orchestration_started` must read them from `entry.domain.issue.<field>`, not as top-level fields.
-- **Daemon `start` is TS-only.** Phase 3 emits activity from `lib/flightdeck-core/src/daemon/loop.ts` and `src/daemon/start.ts` directly; no bash path to mirror. The risks list in this plan that previously said "don't flip TS, don't delete .bash" is removed — both already happened.
-- **`pi-flightdeck` reads `.entries` only.** Phase 6 Activity tab uses `readTrackedEntries(state)` (which now reads `.entries` directly) without the `.issues` fallback path.
-
-The pre-purge context retained below is still accurate for the prior PRs (#20–#44):
-
-- `pi-extensions/pi-background-tasks/extensions/wake-events.ts` already defines `eventAt`, `sequence`, `notifyMode` (`always | transition | first-match-only`), `dedupeKey`, `pendingWakes`, `voidedWakes`/`voidedWakeSequences`. The activity event `id`/dedup rule in this plan must compose with that schema, not parallel it — see [Activity event schema](#activity-event-schema).
-- `pi-extensions/pi-agents-tmux/extensions/subagent/` has been split: `index.ts` is now wiring, with `runner.ts`, `dispatch.ts`, `sessions.ts`, and `wait.ts` owning the execution surface. Activity producers attach to `runner.ts`/`dispatch.ts`. The `wait_for_subagent_idle` tool (`waitFor: "idle" | "completion"`) is the canonical pane-idle observation point.
-- `skills/flightdeck/lib/flightdeck-core/src/state/master-state.ts::archiveState` already exists (PR #23). Activity archival in Phase 1 must hook into the same `flightdeck-state archive` flow.
-- `skills/orchestration/scripts/flightdeck-mode` exposes the tri-state `FLIGHTDECK_MANAGED` signal (PR #21). Phase 5 GitHub/Linear wrapper instrumentation should gate on `FLIGHTDECK_MANAGED=1` or `FLIGHTDECK_SESSION_ID`.
-- `pi-extensions/pi-flightdeck/extensions/state-archive.ts`, `state-normalizers.ts`, `render-terminated.ts`, `session-ui.ts`, and `dashboard-visibility.ts` (PRs #25, #31) are the right seams for the Phase 6 Activity tab.
-- **`pane-registry log-decision` writes only `.entries[ENTRY_ID].decisions_log`** after the legacy purge. Phase 2's "generic decision fix" is done; Phase 2 instrumentation just adds an activity-append call at the existing point.
-- **Adhoc lifecycle gaps closed (PR #41, commit `a7f29e7`, and the purge).** `pane-registry remove <id>` and `teardown-entry` operate on `.entries[]` only, accepting `complete | cancelled` alongside `merged | aborted | dead`. Phase 2 instrumentation can emit canonical `entry.completed` / `entry.cancelled` / `entry.dead` activity events at both mutation points. `pane-respond` accepts `%pane_id` stable ids — producers emitting activity from prompt-response paths can reference `pane_id` directly without a `pane_target` lookup.
-- **Cross-shell launch + daemon hardening (PR #44, closes #39 + #40).** Adds a canonical `daemon-exited` event written to `EVENTS_FILE` (the file `flightdeck-daemon events` drains) with `reason` classification (`master-gone | signal-term | signal-int | other`). Phase 3 of this plan should map it directly to the `daemon.stopped` activity type (with `severity` derived from `reason`: `master-gone | signal-term` → `warning`; `signal-int` → `info`; `other` → `error`). New `flightdeck-daemon start` exit code `4` for stale `--master` is a useful audit signal too — map to `daemon.warning` with `details.exit_code = 4`. Pi subscriber drain semantics (initial drain + `bridge_hello` re-drain + `seen_qids` dedupe) mean Pi `question.opened` activity events MUST dedupe by `requestId`, not by drain attempt.
-- **WORKTREE_MKDIRS (PR #42) and info/exclude fix (PR #43).** Activity plan work uses `<worktree>/tmp/` for any scratch JSONL fixtures generated by parity tests. The worktree is now clean of untracked harness-mirror symlinks, so `worktree remove` without `--force` is the standard cleanup.
+- **`.entries` is the canonical tracked-session map.** Issue-mode metadata lives under `entry.domain.issue` (`pr_number`, `worktree`, `merge_commit`, `scope_files_*`, `orchestration_started`). Producers read these from `entry.domain.issue.<field>`, never top-level.
+- **TypeScript is canonical for the daemon and state plane.** `flightdeck-daemon start` is TS-only; subscriber bodies live in `skills/flightdeck/scripts/lib/subscribers.bash` but are sourced by the TS daemon — no parallel implementations.
+- **`pane-registry log-decision` writes only to `.entries[ENTRY_ID].decisions_log`.** The activity plan's per-entry decision logging hook is a single append-call at the existing log-decision site.
+- **`pane-registry remove <id>` and `teardown-entry` accept the full lifecycle vocabulary** (`complete | cancelled` alongside `merged | aborted | dead`). Phase 2 emits the matching `entry.completed | entry.cancelled | entry.dead` activity events at both mutation points.
+- **`pane-respond` accepts `%pane_id` stable ids.** Activity producers can reference `pane_id` directly without resolving to `pane_target`.
+- **`master-state.ts::archiveState` is the canonical archive flow.** Activity archival in Phase 1 hooks into the same call site so a `*.json.archive` and its matching `*.jsonl.archive` always land together.
+- **`FLIGHTDECK_MANAGED` is a tri-state signal** (`skills/orchestration/scripts/flightdeck-mode`). Phase 5 GitHub/Linear wrapper instrumentation gates on `FLIGHTDECK_MANAGED=1` or `FLIGHTDECK_SESSION_ID`.
+- **Daemon emits a canonical `daemon-exited` event** to `EVENTS_FILE` with `reason ∈ {master-gone, signal-term, signal-int, other}`. Phase 3 maps it to `daemon.stopped` with severity derived from `reason` (`master-gone | signal-term` → `warning`, `signal-int` → `info`, `other` → `error`). The `start --master` exit code `4` (stale master) maps to `daemon.warning` with `details.exit_code = 4`.
+- **Pi subscriber drain semantics** (initial drain + `bridge_hello` re-drain + `seen_qids` dedupe) mean Pi `question.opened` activity events MUST dedupe by `requestId`, not by drain attempt.
+- **`pi-extensions/pi-background-tasks/extensions/wake-events.ts` already defines wake metadata fields** (`eventAt`, monotonic `sequence`, `notifyMode ∈ {always, transition, first-match-only}`, `dedupeKey`, `pendingWakes`, `voidedWakes` / `voidedWakeSequences`, `cleared-on-task-exit` diagnostics). Activity `id` composes with these — see [Activity event schema](#activity-event-schema).
+- **`pi-extensions/pi-agents-tmux/extensions/subagent/` is split** into `index.ts` (wiring), `runner.ts` (spawn/process supervision; compact-then-empty `agent_end` detector — vstack#38), `dispatch.ts` (single/parallel/chain), `sessions.ts` (lane minting), `wait.ts` (`wait_for_subagent_idle` with `waitFor: idle | completion`). Activity producers attach in `runner.ts` / `dispatch.ts`. `wait_for_subagent_idle` is the canonical pane-idle observation point — never infer from transcript text.
+- **Rust dashboard shipped** (`skills/flightdeck/lib/flightdeck-dashboard/`, branch `flightdeck-dashboard-rust` as of 2026-05-15). The plan's Phase 6 ("Activity UI") is now Rust-dashboard-primary; pi-flightdeck remains as a deprecated secondary reader. The dashboard already defines an `EventSource` trait at `src/events/mod.rs` designed for exactly this swap — Phase 6 ships a `JsonlActivitySource` impl, not a restructure. See [Phase 6](#phase-6--activity-ui-rust-dashboard-primary).
+- **Worktree convention**: scratch (engineer task briefs, intermediate result JSONs, parity-test fixtures) goes in `<worktree>/tmp/`, never at worktree root or `/tmp/`. `WORKTREE_MKDIRS` auto-creates `tmp/`.
 
 ## Goal
 
@@ -315,19 +311,21 @@ Retention:
 
 ## Worktree setup (first action)
 
-**Always create the activity-plan worktree via the worktree skill, not raw `git worktree add`.** From the project root:
+**Always create the activity-plan worktree via the worktree skill, not raw `git worktree add`.**
 
 ```bash
 cd /mnt/Tertiary/dev/vstack/main
 skills/worktree/scripts/worktree create flightdeck-rich-activity --from main
 cd /mnt/Tertiary/dev/vstack/trees/flightdeck-rich-activity
 ls -la tmp/                                  # WORKTREE_MKDIRS auto-created scratch dir
-git status --short                           # clean (info/exclude fix from PR #43)
+git status --short                           # clean
 ```
 
-The worktree skill wires `.env.local`, harness mirror symlinks (`.agents`, `.pi`, `.opencode`, `.codex`, `.cursor`, `.claude/agents`), bot identity, `WORKTREE_MKDIRS` (defaults to `tmp/`), and adds proper `info/exclude` entries so `git status` is clean. Raw `git worktree add` skips all of it and breaks agent tooling.
+The worktree skill wires `.env.local`, harness mirror symlinks (`.agents`, `.pi`, `.opencode`, `.codex`, `.cursor`, `.claude/agents`), bot identity, `WORKTREE_MKDIRS` (defaults to `tmp/`), and adds proper `info/exclude` entries so `git status` is clean.
 
 All scratch (engineer task briefs, intermediate result JSONs, parity-test fixtures) goes in `<worktree>/tmp/` — not at worktree root, not `/tmp/`.
+
+The Rust dashboard work shipped to `flightdeck-dashboard-rust`; this plan branches off `main` once that branch merges. If `flightdeck-dashboard-rust` has not merged when this plan starts, branch off `flightdeck-dashboard-rust` directly so the dashboard's `EventSource` trait is available for the Phase 6 impl.
 
 ## Review cycles (mandatory)
 
@@ -374,13 +372,13 @@ bun run typecheck
 
 Emit activity from existing mutation points first. This gives immediate value without waiting for every external integration.
 
-Add events in `pane-registry` bash and TS:
+Add events in `pane-registry` TS (no bash siblings post-purge):
 
 - `init-entry` -> `entry.registered`
 - `set-state` -> `entry.state_changed`
 - `set-substate` -> `entry.state_changed` with substate
 - `log-decision` -> `decision.recorded`
-- `teardown-entry/window` -> `entry.completed` / `entry.dead` / `entry.cancelled` depending state/result
+- `teardown-entry` / `remove` -> `entry.completed` / `entry.dead` / `entry.cancelled` depending on the terminal state passed in (accepts `complete | cancelled | merged | aborted | dead`)
 - `reconcile` drift/drop/backfill -> `daemon.warning` or `entry.dead`
 
 Decision logging is already canonical (`.entries[ENTRY_ID].decisions_log` after the legacy purge). Just mirror every `log-decision` call as `decision.recorded` in activity.
@@ -507,14 +505,34 @@ For GitHub/Linear events, prefer wrappers over freeform markdown:
   - Linear issue created, updated, relation created, finished, cancelled
 - Gate emission on `FLIGHTDECK_ACTIVITY_FILE` or `FLIGHTDECK_SESSION_ID` so normal standalone use of those skills does not write Flightdeck activity.
 
-### Phase 6 — pi-flightdeck Activity UI
+### Phase 6 — Activity UI (Rust dashboard primary)
 
-Evolve Live feed into Activity. Insert the new reader through the existing seams: `state-archive.ts` (archive discovery), `state-normalizers.ts` (shape normalization), and a new `activity.ts` next to `render-terminated.ts`/`session-ui.ts`. Do not grow `flightdeck.ts` past its 1841-line baseline — wire from there but render in a focused module.
+The Rust dashboard at `skills/flightdeck/lib/flightdeck-dashboard/` is the primary read site. Its `src/events/mod.rs` defines an `EventSource` trait designed for this plug-in:
 
-Data source order:
+```rust
+pub trait EventSource: Send + 'static {
+    fn subscribe(&self) -> mpsc::UnboundedReceiver<Event>;
+}
+```
+
+Existing impls: `DaemonTextLogSource` (text daemon log tail), `JsonlEventSource` (generic JSONL — already used for `fd-wake-events-<key>.log`), `CompositeSource` (fan-in).
+
+**Ship `JsonlActivitySource` as a new impl** in `src/events/jsonl_activity.rs`. Wire it into the dashboard's default source composition order:
+
+1. New `flightdeck-activity-<session>.jsonl` sidecar — primary.
+2. Activity archive (`flightdeck-activity-<session>-*.jsonl.archive`) for completed sessions — newest-first iteration mirroring the existing `*.json.archive` fallback path.
+3. Existing `JsonlEventSource(fd-wake-events-<key>.log)` + `DaemonTextLogSource(fd-daemon-<key>.log)` — kept as compatibility fallback until activity-emission is universal across producers.
+
+No restructure required — Phase 3 of the rust-tui-plan was explicitly designed for this swap. The activity-events plan should land as a struct addition + one composition-line change.
+
+The Live feed tab is renamed to Activity once the activity sidecar is the primary source. Until activity emission is wired across producers (Phases 1–5), the tab stays labelled Live feed to avoid overpromising. The dashboard's `src/app/labels.rs` (UX v3) gets the rename.
+
+**pi-flightdeck (deprecated secondary)** continues to render activity for users who haven't switched to the Rust dashboard. Insert a thin reader through `state-archive.ts` (archive discovery) and `state-normalizers.ts` (shape normalization); add `activity.ts` next to `render-terminated.ts` / `session-ui.ts`. Do not grow `flightdeck.ts` past its existing baseline — wire from there but render in a focused module. The pi-flightdeck path is best-effort; new feature work goes into the Rust dashboard.
+
+Data source order (both readers):
 
 1. New `flightdeck-activity-<session>.jsonl` sidecar.
-2. Activity archive (`flightdeck-activity-<session>-*.jsonl.archive`) for completed sessions, picked up by the same newest-first iteration `buildSnapshotFromInputs` uses for `*.json.archive` (PR #23 + #33).
+2. Activity archive (`flightdeck-activity-<session>-*.jsonl.archive`) for completed sessions, picked up by the same newest-first iteration the dashboard uses for `*.json.archive`.
 3. Legacy fallback synthesis from daemon log + decisions + pending/wake events for older sessions.
 
 Default table columns:
@@ -522,25 +540,24 @@ Default table columns:
 | Time | Session | Type | Status | Summary |
 | --- | --- | --- | --- | --- |
 
-Rendering rules:
+Rendering rules — the dashboard already has all the substrate from UX v3 + the theme system; the Activity tab is a thin renderer on top:
 
 - Session label first; no raw pane ids in normal rows.
-- Type chips: `agent`, `bg`, `question`, `decision`, `pr`, `linear`, `daemon`, `session`.
-- Severity colors:
-  - success green
-  - warning yellow
-  - error red with a clear ASCII token like `ERR`
-  - info muted/normal
+- Type chips: `agent`, `bg`, `question`, `decision`, `pr`, `linear`, `daemon`, `session`. Render via the existing chip helpers in `src/app/view/`; use `Theme::palette().info` / `accent` / `secondary` for type-chip backgrounds (cycle by type).
+- Severity colors read from the palette — NEVER hardcode `Color::Green` / `Color::Yellow` etc. Use `palette.success`, `palette.warning`, `palette.error`. For error rows, also add a `Modifier::BOLD` `ERR` token in the Status column for accessibility (already a pattern in the dashboard).
 - Important-only default:
   - show critical/important/normal
   - hide noisy/debug unless toggled
-- `enter` opens full detail popup with links/refs/details.
+- Plain-language event type labels live in `src/app/labels.rs` (e.g. `pr.checks_failed` → "PR checks failed", `agent.task_completed` → "Agent task completed"). Match the existing `state_label` / `kind_label` pattern; do NOT invent a parallel labels module.
+- `enter` opens the detail popup. Use the existing `src/app/view/popup.rs` framework that UX v3 shipped — do not roll a new chrome. Activity detail popup gets title ("<type> · <session id>"), subtitle (severity + timestamp), body (summary + wrapped detail + links/refs), footer ("Esc close · ↑/↓ scroll").
+- Mouse: each row is a click target via the HitMap registry from UX v3. Push `ClickAction::SelectRow(i)` on single-click, `ClickAction::OpenDetail` on double-click. Backdrop click on the detail popup closes per existing pattern.
 - Search matches session, type, summary, refs, body.
-- Add filter controls:
-  - `ctrl+n` noise/all toggle remains
-  - `f` opens filter menu for type/severity
-  - `s` cycles session filter or opens session picker
+- Filter controls extend the existing `/` filter popup and `Ctrl+N` noise toggle from UX v3:
+  - `Ctrl+N` cycles noise mode (already present) — keep existing two-state toggle (hide noisy / show all)
+  - `f` opens a filter-menu popup for type/severity (new popup, use the existing popup framework)
+  - `s` opens a session-filter popup
   - `d` toggles decisions-only overlay or jumps to Decisions tab
+- Popup keyboard contract (from UX v3 P1-G): any popup the Activity tab opens MUST capture all keys; arrow/vim keys do not leak to the base layer. Reuse the existing `handle_popup_key` dispatch.
 
 Decisions interplay:
 
@@ -556,6 +573,7 @@ Editor/export:
   - if `$VISUAL`/`$EDITOR` is set and running inside tmux, open in a new tmux window named `fd-activity` or print the command/path if automatic open is unsafe
   - also support CLI: `flightdeck-state activity export --format markdown --filter ...`
 - Export includes full JSON refs/details collapsed under each event.
+- Tracked-entry filter and event-type filter persist via env vars (`FLIGHTDECK_ACTIVITY_FILTER_TYPES`, `FLIGHTDECK_ACTIVITY_FILTER_SESSIONS`) so users can pin a preferred view across launches.
 
 ### Phase 7 — Documentation and migration
 
@@ -564,12 +582,12 @@ Docs to update with implementation:
 - `skills/flightdeck/SKILL.md`
 - `skills/flightdeck/README.md`
 - `skills/flightdeck/DEVELOPMENT.md`
+- `skills/flightdeck/lib/flightdeck-dashboard/` README and `DEVELOPMENT.md` — document the `JsonlActivitySource` impl, the Activity tab rename, and the activity sidecar paths
 - `skills/orchestration/DEVELOPMENT.md` (if Phase 5 GitHub/Linear wrappers add activity emission)
-- `pi-extensions/pi-flightdeck/README.md`
-- `pi-extensions/pi-background-tasks/README.md` + `pi-extensions/pi-background-tasks/DEVELOPMENT.md` if broker events added
-- `pi-extensions/pi-agents-tmux/README.md` + `pi-extensions/pi-agents-tmux/DEVELOPMENT.md` if broker events added
+- `pi-extensions/pi-flightdeck/README.md` — keep deprecation banner; document Activity tab presence in pi-flightdeck's render with a pointer at the Rust dashboard
+- `pi-extensions/pi-background-tasks/README.md` + `DEVELOPMENT.md` if broker events added
+- `pi-extensions/pi-agents-tmux/README.md` + `DEVELOPMENT.md` if broker events added
 - `pi-extensions/pi-session-bridge/README.md` if `vstack_activity` stream event added
-- Existing plan `docs/plans/flightdeck-session-management-reframe.md` if schema/state references need cross-linking
 
 Migration:
 
@@ -637,12 +655,22 @@ Detail view should show:
 
 ## Validation plan
 
-Core:
+Core (TS):
 
 ```bash
 cd skills/flightdeck/lib/flightdeck-core
 bun test
 bun run typecheck
+```
+
+Rust dashboard (after Phase 6 activity source lands):
+
+```bash
+cd skills/flightdeck/lib/flightdeck-dashboard
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+cargo insta test
 ```
 
 Pi extension package checks after UI/broker changes:
@@ -691,11 +719,11 @@ End-to-end smoke:
 ## Proposed delivery order
 
 1. Core activity sidecar + `flightdeck-state activity` CLI.
-2. Registry/state transition instrumentation + decision-log generic fix.
-3. pi-flightdeck Activity tab reading new sidecar with `.entries[].decisions_log` fallback for archives that predate the sidecar.
-4. Daemon/subscriber curated events.
-5. Pi activity broker through session-bridge, then background-task/agent/question producers.
-6. Issue-domain workflow instrumentation for PR/CI/Linear lifecycle.
+2. Registry/state transition instrumentation (`pane-registry init-entry / set-state / set-substate / log-decision / teardown-entry`).
+3. Rust dashboard `JsonlActivitySource` impl + Activity tab rename. pi-flightdeck secondary reader follows in the same phase (lower priority).
+4. Daemon/subscriber curated events (daemon lifecycle, subscriber lifecycle, classified wake mappings).
+5. Pi activity broker through session-bridge; then background-task / agent / question producers publish to it.
+6. Issue-domain workflow instrumentation for PR / CI / Linear lifecycle.
 7. Editor/export shortcut and docs polish.
 
 This order makes the UI useful early, keeps wake behavior stable, and gives every later producer one canonical append path.
