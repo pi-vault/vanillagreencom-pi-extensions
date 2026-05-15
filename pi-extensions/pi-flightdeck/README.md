@@ -8,8 +8,8 @@ Read-only, sessions-first dashboard for the [`flightdeck`](../../skills/flightde
 
 - **Pause banner** — yellow frame above the editor when flightdeck master pauses for the user. Clears on resume.
 - **Persistent dashboard widget** — compact tree of tracked sessions with state, kind, harness, last decision, age, and per-pane cost/turns/tokens.
-- **`/flightdeck` popup** (F6) — six tabs: Overview, Live feed, Conversations, Conflicts & merges, Decisions, Daemon.
-- **Session-complete view** — keeps the completed session visible until you dismiss it (`Alt+M`).
+- **`/flightdeck` popup** — six tabs: Overview, Live feed, Conversations, Conflicts & merges, Decisions, Daemon.
+- **Session-complete view** — keeps the completed session visible until you dismiss the widget.
 - **Owner-scoped by default** — dashboard renders only in the flightdeck owner pane. Peer panes get a read-only observer popup. Child panes always suppressed. Visibility configurable.
 - Optional terminal bell and auto-popup when master pauses.
 - Participates in vstack's stable mini-dashboard stack order: Flightdeck → Tasks → Agents → BG tasks.
@@ -28,7 +28,7 @@ PR, worktree, and merge metadata render only on `ISS` rows.
 
 ## Read-only by design
 
-The flightdeck skill owns state mutation; the daemon owns wake delivery; `pane-respond` owns sending input to inner panes. pi-flightdeck only renders what's already on disk. The one exception is the explicit `p`/`del` prune keybind on the Overview tab, which shells to `pane-registry remove <id>` for entries whose tmux pane is already gone. The skill works fine without this extension; it's purely additive UX for the Pi harness.
+The flightdeck skill owns state mutation; the daemon owns wake delivery; `pane-respond` owns sending input to inner panes. pi-flightdeck only renders what's already on disk. The one exception is the explicit prune action on the Overview tab, which shells to `pane-registry remove <id>` for entries whose tmux pane is already gone. The skill works fine without this extension; it's purely additive UX for the Pi harness.
 
 ## Install
 
@@ -50,11 +50,11 @@ Restart Pi after installation.
 
 | Command | Action |
 | --- | --- |
-| `/flightdeck` | Open the session-control popup (also F6). |
+| `/flightdeck` | Open the session-control popup. |
 | `/flightdeck watch [args]` | Legacy bridge workaround that dispatches the `flightdeck watch` workflow. The daemon now sends `/skill:flightdeck watch --from-daemon` through pi-session-bridge directly. |
-| `/flightdeck:toggle` | Cycle the persistent dashboard widget (also Alt+M). |
+| `/flightdeck:toggle` | Cycle the persistent dashboard widget. |
 
-The popup shows its own keyboard hints in the footer. Peer panes get an observer view labelled with the owner pane id.
+Peer panes get an observer view labelled with the owner pane id; the popup's own footer documents its keys.
 
 ## Settings
 
@@ -83,8 +83,8 @@ Open `/extensions:settings`; settings appear under the **Flightdeck Dashboard** 
 
 | Setting | What it does |
 | --- | --- |
-| Popup shortcut | Default `f6`. |
-| Dashboard cycle shortcut | Default `alt+m`. |
+| Popup shortcut | Configurable. |
+| Dashboard cycle shortcut | Configurable. |
 
 ### Popup
 

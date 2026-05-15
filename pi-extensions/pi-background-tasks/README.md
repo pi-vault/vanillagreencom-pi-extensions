@@ -11,14 +11,14 @@ Run shell commands in the background without blocking the conversation.
 
 - `bg_task` tool spawns, lists, tails, stops, and clears tracked tasks.
 - `/bg` dashboard for browsing and controlling tasks interactively.
-- `Alt+.` arms the next bash command to run in the background.
+- Arm-next-bash shortcut runs the next bash command in the background.
 - Long-running monitors (`watch`, `tail -f`, `journalctl -f`, polling loops) are auto-backgrounded.
 - Wakeups when a task exits, with optional wakeups on matching output.
-- Inline mini-dashboard above the editor; full dashboard on `Alt+Shift+H` or `F5`.
+- Inline mini-dashboard above the editor; full dashboard popup for browsing details.
 - Inline mini-dashboard participates in vstack's stable stack order: Flightdeck → Tasks → Agents → BG tasks.
 - Persistent log files keep full output even when tool output is truncated.
 - Per-session sidecar state keeps `/bg` task history resumable for both tool-spawned and slash-command-spawned tasks.
-- The `/bg` dashboard wraps multi-line commands and strips terminal control sequences from preview rows so task details stay inside the popup frame; focus the right pane to scroll details with `↑/↓` or `-/=`, and press `x` to expand/collapse a truncated command.
+- The `/bg` dashboard wraps multi-line commands and strips terminal control sequences from preview rows so task details stay inside the popup frame; the popup documents its own keys in the footer.
 
 ## Install
 
@@ -58,7 +58,7 @@ Bash commands matching obvious monitor patterns are intercepted before they star
 
 Built-in matches: `watch ...`, `tail -f`, `journalctl -f`, Pi-bridge/tmux polling loops, and shell loops with `sleep` that monitor session state.
 
-Use `Alt+.` or `/bg:next` to force the next bash command into the background even if it doesn't match the built-in patterns. The shortcut applies only to commands not yet started.
+Use the arm-next-bash shortcut or `/bg:next` to force the next bash command into the background even if it doesn't match the built-in patterns. Only applies to commands not yet started.
 
 ## Settings
 
@@ -72,7 +72,7 @@ Open `/extensions:settings`; settings appear under the **Background Tasks** tab.
 | Default timeout | Spawn timeout. `0` disables. |
 | Auto-background blocking bash monitors | Auto-divert long-running bash commands into `bg_task`. |
 | Extra auto-background patterns | Newline-separated regexes for project-specific monitors. |
-| Shortcut arming window | Seconds `Alt+.`/`/bg:next` stays armed. |
+| Shortcut arming window | Seconds the arm-next-bash shortcut / `/bg:next` stays armed. |
 | Force-kill grace | Milliseconds between SIGTERM and SIGKILL. |
 
 ### Wakeups
@@ -96,14 +96,14 @@ Open `/extensions:settings`; settings appear under the **Background Tasks** tab.
 | --- | --- |
 | Show task widget | Compact background-task widget. |
 | Widget placement | Above or below the editor. |
-| Tool output style | `compact` one-liner or `stacked` rows with Ctrl+O details. |
+| Tool output style | `compact` one-liner or `stacked` rows with expandable details. |
 | Expanded tool log lines | Maximum lines shown when expanding log output. |
 | Dashboard output line cap | Maximum lines in the interactive dashboard viewport. |
 | Mini-dashboard default mode | `compact`, `expanded`, or `hidden`. |
 | Mini-dashboard finished retention | Seconds finished tasks stay visible in the inline widget. |
-| Background next bash shortcut | Default `alt+.`. |
-| Mini-dashboard toggle shortcut | Default `alt+h`. |
-| Dashboard shortcut | Default `alt+shift+h` (F5 also works). |
+| Background next bash shortcut | Configurable. |
+| Mini-dashboard toggle shortcut | Configurable. |
+| Dashboard shortcut | Configurable. |
 
 ### Storage
 

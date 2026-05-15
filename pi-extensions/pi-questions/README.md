@@ -8,8 +8,8 @@ Structured inline questions for Pi. Multi-tab categories, free-form answers, and
 
 - `question` tool for multiple-choice question tabs with optional free-form answers.
 - Editor-area UI by default; optional floating overlay.
-- OpenCode-style question UI: tab hints, highlighted active rows, `Enter` confirms single-select choices, and `Enter` toggles multi-select choices.
-- Compact answered tool output lists every category answer; `Ctrl+O` expands to show each question and presented answers with the selected choice marked.
+- OpenCode-style question UI: tab hints and highlighted active rows.
+- Compact answered tool output lists every category answer and expands inline to show each question with the selected choice marked.
 - Wrapped option labels stay readable in narrow panes.
 - `pi-session-bridge` integration lets external clients list, answer, and reject pending questions.
 - `pi-qol` notification hook fires before prompts open.
@@ -68,18 +68,6 @@ Cancelled:
 Set `allowCustom: true` to add a free-type row. Optional fields: `customLabel`, `customPlaceholder`.
 
 Do not include a final `Confirm`, `Submit`, `Review`, or `Done` question tab in the payload; the UI adds its own submit tab when needed.
-
-## Keys
-
-| Key | Action |
-| --- | --- |
-| `←` / `→` or `Tab` / `Shift+Tab` | Switch tabs. Multi-question and multi-select prompts include a final `Confirm`/`Submit` tab for submission. |
-| `↑` / `↓` | Move selection. |
-| `Enter` on single-select | Confirm the highlighted answer and advance/submit. |
-| `Enter` on multi-select | Toggle the highlighted answer. Use the `Confirm` tab to submit. |
-| `Enter` on custom row | Open/submit inline text input. |
-| `Space` | Also toggles multi-select rows. |
-| `Esc` | Dismiss prompt, or leave custom text input. |
 
 ## Settings
 

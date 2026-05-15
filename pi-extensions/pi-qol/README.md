@@ -10,15 +10,15 @@ Quality-of-life extension for Pi: compact statusline, multiline input, session n
 ## Highlights
 
 - Compact statusline with repo, branch, model, thinking level, and context percent.
-- Shift+Enter inserts a newline. Ctrl+J fallback for terminals that can't distinguish it.
+- Newline-insert in the editor (multi-line drafts without auto-submit), with a fallback binding for terminals that can't distinguish the primary key.
 - Sessions auto-name from your first prompt. `/rename` overrides anytime.
-- `/search` browses previous sessions with snippet previews. F2 opens it instantly.
+- `/search` browses previous sessions with snippet previews; the configured shortcut opens it instantly.
 - `/context` shows a Claude-style context-window breakdown.
 - `/handoff <goal>` drafts a focused prompt for a new session.
 - Permission gate prompts before risky `bash` commands. Default match: `rm -Rf`.
 - Notifications for ready, questions, blocked states, and task completion.
 - Thinking timer next to collapsed `Thinking...` labels.
-- Caveman badge and Alt+C mode cycling when `pi-caveman` is loaded.
+- Caveman badge and a mode-cycling shortcut when `pi-caveman` is loaded.
 - Subagent-name badge in `pi-agents-tmux` child panes.
 
 ## Install
@@ -74,8 +74,8 @@ Open `/extensions:settings`; settings appear under the **QOL** tab. Names below 
 
 | Setting | What it does |
 | --- | --- |
-| Shift+Enter inserts newline | Insert a newline instead of submitting on Shift+Enter. |
-| Fallback newline key | Alternate newline key for terminals that can't send Shift+Enter. |
+| Newline-insert binding | Insert a newline instead of submitting. |
+| Fallback newline binding | Alternate binding for terminals that can't send the primary one. |
 | Style pending queue preview | Highlight Pi's pending-queue preview with a green left bar. |
 | Style image chips | Render `[Image #N]` placeholders as distinct chips. |
 | Show attachment count | Show a status badge when the draft has image placeholders. |
@@ -112,7 +112,7 @@ Advanced: input cap, title length, output tokens, timeout, custom prompt templat
 | Setting | What it does |
 | --- | --- |
 | Enable session search | Register `/search` and the overlay. |
-| Session search shortcut | Shortcut to open search. Default `f2`; set to `none` to disable. |
+| Session search shortcut | Configurable; set to `none` to disable. |
 | Result limit | Max matching prompts returned. |
 | Visible session rows | Rows shown before scrolling. |
 | Preview snippets | Matching snippets shown on the preview screen. |

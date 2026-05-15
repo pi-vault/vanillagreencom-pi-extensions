@@ -36,12 +36,7 @@ Restart Pi after installation.
 | `/extensions:settings` | Open the settings editor. |
 | `/extensions:enable` | Recovery command when the manager is disabled. |
 
-## Keys
-
-- `alt+shift+e` or `F11` opens the package manager.
-- `alt+shift+s` or `F12` opens the settings editor.
-- In the package manager: `alt+x` enables/disables, `alt+u` updates, `alt+d` uninstalls, `alt+a` opens diagnostics. `backspace` returns to the list from diagnostics.
-- In the settings editor: type to filter, `Enter` to toggle/edit, `Esc` to cancel. Inline editors support `←`/`→`, `Home`/`End`, `alt+←`/`alt+→` word movement, `Backspace`/`Delete`, and `Ctrl+U` to clear.
+Each popup documents its own keys in the footer.
 
 Status icons: `●` active, `○` inactive, `×` broken. Packages with newer versions show `Update Needed`.
 

@@ -67,11 +67,9 @@ Bulk edit format:
 
 Status suffixes: `(active)`, `(done)`, `(dropped)`.
 
-## Shortcut
+## Visibility cycle
 
-Pi uses `Ctrl+T` for thinking visibility. The default panel shortcut is `Alt+T`, which cycles `hidden → show 4 → show all`. Enable **Use Ctrl+T for tasks** in settings to take over `Ctrl+T`.
-
-The manager popup opens with `Alt+Shift+T` (or `F4`).
+The panel toggle cycles `hidden → show 4 → show all`. The manager popup opens with its own shortcut and documents its keys in the footer. All bindings are configurable via `/extensions:settings`; Pi's thinking-visibility binding is preserved unless you opt in to taking it over.
 
 ## Settings
 
@@ -91,9 +89,9 @@ Open `/extensions:settings`; settings appear under the **Task Panel** tab.
 
 | Setting | What it does |
 | --- | --- |
-| Use Ctrl+T for tasks | Take over `Ctrl+T` (overrides Pi's thinking-visibility binding). |
-| Alternate shortcut | Always-available shortcut. Default `alt+t`. |
-| Manager popup shortcut | Default `alt+shift+t`. |
+| Take over thinking-visibility binding | Repurpose Pi's thinking-visibility binding for the task-panel toggle. |
+| Alternate shortcut | Always-available toggle. Configurable. |
+| Manager popup shortcut | Configurable. |
 
 ### Tool output
 

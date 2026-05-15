@@ -36,23 +36,7 @@ Restart Pi after installation.
 | --- | --- |
 | `/sessions` | Open the manager. Switch Current/All with the tabs. |
 
-`F1` opens the manager directly (configurable).
-
-## Keys
-
-| Key | Action |
-| --- | --- |
-| `↑` / `↓` | Move selection. |
-| `-` / `=` | Page the list. |
-| `Home` / `End` | Jump to first/last. |
-| `Enter` | Resume. If the session model differs, choose which to continue with. |
-| `Alt+R` | Rename inline. |
-| `Delete` | Delete the selected session after confirmation. |
-| `Alt+D` | Delete all shown deletable sessions after confirmation. |
-| `Tab` | Toggle current/all scope. |
-| `Alt+S` | Cycle threaded / recent / relevance sort. |
-| `Alt+N` | Toggle named-only filter. |
-| `Esc` / `Ctrl+C` | Clear search, cancel, or close. |
+The manager popup documents its own keys in the footer. Selection, rename, delete, scope toggle, sort cycle, and named-only filter are all available; bindings are configurable via `/extensions:settings`.
 
 Session titles match Pi `/resume`: explicit session name, otherwise first user message, otherwise filename. Search filters the shown list; delete-all acts only on the currently shown sessions.
 

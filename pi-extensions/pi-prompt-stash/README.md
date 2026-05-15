@@ -6,8 +6,7 @@ Per-session prompt stash. Save a draft, write something else, restore later.
 
 ## Highlights
 
-- `Alt+S` with editor text stashes the prompt and clears the editor.
-- `Alt+S` with empty editor opens the stash popup.
+- Dedicated stash shortcut: stashes the current draft when the editor has text, opens the popup when the editor is empty.
 - Searchable popup with restore, delete, and clear-all.
 - Stashes are per-session and survive Pi restarts within the session.
 - Optional deduplication discards older entries with identical text.
@@ -35,18 +34,7 @@ Restart Pi after installation.
 | --- | --- |
 | `/prompt-stash` | Open the stash popup. |
 
-## Keys
-
-| Key | Action |
-| --- | --- |
-| `Alt+S` (editor has text) | Stash the current prompt and clear the editor. |
-| `Alt+S` (editor empty) | Open the stash popup. |
-| Type | Search stashed prompts. |
-| `↑` / `↓` | Move selection. |
-| `Enter` | Restore the selected prompt. Stash unchanged. |
-| `Ctrl+D` or `Delete` | Delete the selected prompt. |
-| `Ctrl+X`, then `Enter` | Delete all stashed prompts. |
-| `Esc` | Close. |
+The stash shortcut both stashes (when the editor has text) and opens the popup (when the editor is empty). The popup itself documents its own keys in the footer — search, select, restore, delete, delete-all, close.
 
 ## Settings
 
@@ -54,7 +42,7 @@ Open `/extensions:settings`; settings appear under the **Prompt Stash** tab.
 
 | Setting | What it does |
 | --- | --- |
-| Stash shortcut | Default `alt+s`. |
+| Stash shortcut | Configurable. |
 | Store file | File name inside the per-session stash directory. |
 | Deduplicate prompts | Remove older entries with identical text when stashing. |
 | Popup width | Preferred popup width. |

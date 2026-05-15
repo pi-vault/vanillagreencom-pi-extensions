@@ -40,13 +40,7 @@ Restart Pi after installation.
 | `/skill:enable` | Recovery command when disabled. |
 | `/skill:<name>` | Native Pi skill invocation (handled by Pi). |
 
-## Keys
-
-Browse: type to search; `↑`/`↓` selects; `Enter` inserts or starts **Create new skill**; `Tab` previews; `Ctrl+X` enables/disables; `Backspace` deletes your own skill when the search box is empty; `Esc` clears search then closes.
-
-Preview: `↑`/`↓`, `-`/`=`, `Home`/`End` scroll; `Enter` inserts; `Ctrl+X` toggles; `Ctrl+E` edits; `Ctrl+R` renames; `Backspace`/`Delete` deletes your own skill; `Esc` or `Tab` returns to browse.
-
-Edit: `Ctrl+S` saves; `Esc` returns to preview.
+Each view (browse, preview, edit) documents its own keys in the footer.
 
 Create: name (normalized to a lowercase slug), trigger-focused description, visibility (project `.pi/skills/<name>/SKILL.md` or global `~/.pi/agent/skills/<name>/SKILL.md`).
 

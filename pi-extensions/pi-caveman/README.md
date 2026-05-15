@@ -61,7 +61,7 @@ Arguments support autocomplete.
 - `/caveman` slash commands set a per-session override. Active non-off defaults are snapshotted into new sessions, so resuming with `pi -r` keeps the mode that session started with even if your global default changes later. Changing the default in the extension manager replaces any active override in the current session.
 - When you type a destructive command (force-push, hard reset, drop table, rm -rf, etc.), caveman steps aside for that one reply and the model writes plain English. Caveman resumes automatically on the next turn.
 - Caveman applies to chat replies only. Commit messages, PR descriptions, formal reviews, and anything you send to other systems (issue bodies, PR comments, chat, email) stay normal English.
-- pi-qol uses this extension to show a Caveman badge in the status line and bind Alt+C to cycle modes.
+- pi-qol uses this extension to show a Caveman badge in the status line and bind a configurable shortcut to cycle modes.
 
 ## Settings
 
