@@ -147,9 +147,9 @@ Decision rules grouped by domain. Each pattern doc under `patterns/` has the ful
 .agents/skills/flightdeck/scripts/<script> [args]
 ```
 
-**Implementation:** All scripts are TypeScript under
+**Implementation:** Most scripts are TypeScript under
 `skills/flightdeck/lib/flightdeck-core/`. Trampolines under `scripts/`
-exec `bun .../src/bin/<script>.ts`. `bun` is a hard runtime dependency.
+exec `bun .../src/bin/<script>.ts`; `flightdeck-dashboard` is the Rust dashboard trampoline under `lib/flightdeck-dashboard/`. `bun` remains a hard runtime dependency for the TypeScript scripts.
 Functional + integration tests live under `lib/flightdeck-core/tests/`.
 
 | Script | Purpose |
@@ -159,6 +159,7 @@ Functional + integration tests live under `lib/flightdeck-core/tests/`.
 | `parallel-groups` | Read/manage parallel issue groups. |
 | `flightdeck-state` | Atomic CRUD on `tmp/flightdeck-state-<TMUX_SESSION>.json` (`init`/`get`/`set`/`append`/`increment`/`tracked-entries`/`write-entry`/`archive`) and master-busy lock (`master-busy lock\|unlock\|check`). See `workflows/session-watch.md` § 1 for lock semantics. |
 | `flightdeck-daemon` | External wake driver. Polls inner panes, normalizes turn-end events, wakes master with a per-harness payload. Actions: `start \| stop \| status \| health \| events \| ack`. `start` exits `4` for stale `--master` (distinct from usage/missing dependency exit `2`). Master respawn trigger: `status --session <S>` says `no daemon` while live entries exist; source panes via `pane-registry list --format inner-panes-live` / `inner-harnesses-live`, re-resolve `$TMUX_PANE` and retry once on exit `4`, and do not yield on unresolved start failure. Full contract: `workflows/session-watch.md` § 1 / § 6; adapter freshness: `patterns/tmux-monitoring.md`. |
+| `flightdeck-dashboard` | Rust/ratatui dashboard. Phase 1 supports `tui --demo[=NAME]` with compiled fixtures, six tabs, help overlay, and snapshot-tested motion skeleton. Other subcommands are reserved and exit `2` until later phases. |
 | `codex-app-server-spawn` / `-stop` | Idempotent bring-up/teardown of the per-session codex `app-server --listen ws://...` shared by all `codex --remote` panes. |
 | `pane-registry` | TrackedEntry↔pane mapping CRUD. `init-entry` writes `.entries[id]`; `init <ISSUE>` is an alias for `init-entry --kind issue`. `find-by-pane` emits `{id,kind}` JSON. `list --format json\|inner-panes\|inner-harnesses\|inner-panes-live\|inner-harnesses-live` feeds `pane-poll --batch -` and `flightdeck-daemon start`; use the `*-live` pair for daemon respawn. |
 | `pane-poll` | Pane state read. Preferred: `--batch -` from `pane-registry list --format json` (one JSONL object per tracked entry). Passes `kind` to `prompt-classify` so issue-only tags on ad-hoc entries become `domain-mismatch`. Legacy single-pane mode for drift re-polls / manual debug. See `patterns/tmux-monitoring.md` for per-harness adapter routes. |

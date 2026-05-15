@@ -50,6 +50,19 @@ Issue mode adds the optional `github`, `linear`, `worktree`, and `project-manage
 
 Runtime requirements for the shipped core scripts remain `bash` 4+, `tmux` 3.x, `jq`, `flock`, and `bun` (https://bun.sh). Issue mode additionally needs the GitHub/Linear CLIs or auth wrappers used by those skills, plus normal git worktree support. Mac users: install GNU coreutils for `sha256sum` and GNU date.
 
+## Rust dashboard (experimental)
+
+`skills/flightdeck/scripts/flightdeck-dashboard tui --demo[=NAME]` runs the standalone ratatui dashboard. Phase 1 ships compiled demo fixtures (`empty`, `one-adhoc`, `one-issue`, `mixed`, `terminated`, `paused`), six navigable tabs, help overlay, and motion settings; live Flightdeck state and daemon integration land in later phases.
+
+Build a prebuilt binary with:
+
+```bash
+cd skills/flightdeck/lib/flightdeck-dashboard
+cargo build --release
+```
+
+The script prefers `lib/flightdeck-dashboard/target/release/flightdeck-dashboard` and falls back to `cargo run --release` when the binary is absent.
+
 ## Pi dashboard (optional)
 
 If your master agent runs in Pi, install the [`pi-flightdeck`](../../pi-extensions/pi-flightdeck/README.md) extension for a live mission-control overlay — pause banner, persistent dashboard above the editor, `/flightdeck` popup with six tabs. It's read-only; the skill works identically with or without it.
@@ -68,6 +81,7 @@ Most users never touch these. The ones that occasionally matter:
 | `FLIGHTDECK_FORCE_MERGE_AFTER_SECS` | How long flightdeck waits before force-merging a PR that's approved + green but stuck in GitHub's `UNKNOWN` merge state (default 4 minutes). |
 | `FLIGHTDECK_LAUNCH_MODEL` / `FLIGHTDECK_LAUNCH_EFFORT` | Default model + thinking level for spawned agents when the user doesn't pass them explicitly. |
 | `FLIGHTDECK_STATE_DIR` | Where flightdeck writes its session state file inside the project. Defaults to `tmp/`. |
+| `FLIGHTDECK_DASHBOARD_MOTION` | Rust dashboard motion level: `full`, `reduced`, or `off`. `NO_MOTION` and `NO_COLOR` also disable motion. |
 
 Daemon-private files live outside your project under `$XDG_RUNTIME_DIR/flightdeck` (fallback `/tmp/flightdeck-$UID`) so they don't show up in commits.
 

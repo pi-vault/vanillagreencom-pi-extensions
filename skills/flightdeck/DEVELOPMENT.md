@@ -4,7 +4,7 @@ This file is for agents and humans hacking on flightdeck itself. End users shoul
 
 ## Implementation
 
-All scripts under `scripts/` are bash trampolines that exec the TypeScript implementation under `lib/flightdeck-core/src/bin/`. `bun` is a hard runtime dependency. Functional + integration tests live under `lib/flightdeck-core/tests/`. The live-wake suite (`tests/live-wake.sh`) is the smoke test for the daemon `start` run-loop.
+Most scripts under `scripts/` are bash trampolines that exec the TypeScript implementation under `lib/flightdeck-core/src/bin/`. `flightdeck-dashboard` is the Rust/ratatui trampoline under `lib/flightdeck-dashboard/`: it prefers a prebuilt release binary and falls back to `cargo run --release`. `bun` is a hard runtime dependency for the TypeScript scripts. Functional + integration tests live under `lib/flightdeck-core/tests/`. The live-wake suite (`tests/live-wake.sh`) is the smoke test for the daemon `start` run-loop.
 
 ## Session model and schema boundary
 
@@ -71,6 +71,7 @@ Not run by hand in normal use — the skill calls them.
 - `flightdeck-session` — launches or attaches generic tracked tmux sessions without fake issue ids.
 - `flightdeck-state` — reads/writes the session's master state file, including tracked-entry normalization (`tracked-entries`, `write-entry`).
 - `flightdeck-daemon` — background poller; wakes the master.
+- `flightdeck-dashboard` — Rust/ratatui standalone dashboard; Phase 1 supports `tui --demo[=NAME]` only.
 - `pane-registry`, `pane-poll`, `pane-respond` — pane tracking and IO.
 - `prompt-classify` — pattern-matches agent output against known prompt shapes; guards issue-only tags on non-issue entries as `domain-mismatch`.
 - `pr-conflict-graph`, `parallel-groups` — issue-mode merge-order planning.
@@ -91,6 +92,21 @@ bun run typecheck
 ```
 
 The live-wake suite (`tests/live-wake.sh`) must pass before shipping any change to the daemon run-loop, classifier, or pane I/O wiring.
+
+### Rust dashboard
+
+Run from the dashboard crate:
+
+```bash
+cd skills/flightdeck/lib/flightdeck-dashboard
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+cargo insta test
+cargo run --release -- tui --demo
+```
+
+Snapshots live under `tests/snapshots/`; update intentionally with `INSTA_UPDATE=always cargo insta test`, then review the `.snap` diff before committing.
 
 ### Live wake
 
@@ -139,6 +155,7 @@ Detailed list of what each script does, for debugging or porting work:
 | `open-terminal` | Launches a new tmux window with the chosen harness running on the chosen issue worktree. |
 | `flightdeck-state` | Reads/writes the session's master state file, including tracked-entry normalization (`tracked-entries`, `write-entry`). |
 | `flightdeck-daemon` | Background poller. Wakes the master when an agent needs attention. |
+| `flightdeck-dashboard` | Rust/ratatui dashboard trampoline. Phase 1 supports compiled demo fixtures via `tui --demo[=NAME]`; daemon/status/supervise/launch are reserved for later phases. |
 | `pane-registry` | Tracks which tracked entry (issue or adhoc session) lives in which tmux pane and how to talk to its agent. |
 | `pane-poll` | Reads an agent's current state (via native channel where possible). |
 | `pane-respond` | Sends a reply or option pick into an agent. |

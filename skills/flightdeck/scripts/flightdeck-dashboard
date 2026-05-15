@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Trampoline for the Rust flightdeck-dashboard implementation.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CRATE_DIR="$SCRIPT_DIR/../lib/flightdeck-dashboard"
+BIN="$CRATE_DIR/target/release/flightdeck-dashboard"
+
+if [[ -x "$BIN" ]]; then
+  exec "$BIN" "$@"
+fi
+
+if command -v cargo >/dev/null 2>&1; then
+  exec cargo run --quiet --release --manifest-path "$CRATE_DIR/Cargo.toml" -- "$@"
+fi
+
+echo "Error: flightdeck-dashboard binary not found at $BIN and cargo is not on PATH" >&2
+exit 127
