@@ -291,12 +291,22 @@ test("spinner setting defaults and project override precedence", () => {
 	});
 });
 
-test("trace summary includes session line only when sessionMode is persisted", async () => {
-	const withSession = await traceViewerItems(record("reviewer-arch", "reviewer-arch-session", "2026-05-14T05:00:00.000Z", { sessionMode: "resumed", sessionKey: "feature-x" }));
-	assert.match(withSession[0]!.text, /^Session\s+resumed · lane: feature-x$/m);
+test("Monitor session detail owns agent session model and effort metadata", async () => {
+	const taskRecord = record("reviewer-arch", "reviewer-arch-session", "2026-05-14T05:00:00.000Z", {
+		effort: "xhigh",
+		model: "openai-codex/gpt-5.5:xhigh",
+		sessionKey: "feature-x",
+		sessionMode: "resumed",
+	});
+	const group = buildMonitorSessionGroups([taskRecord])[0]!;
+	const sessionDetail = renderMonitorSessionDetail(group, taskNumberById([taskRecord]), uiState({ tab: "monitor" }), 160, 30, theme as any, true, { agents: [agent("reviewer-arch")] }).join("\n");
+	const taskItems = await traceViewerItems(taskRecord, 1, { agents: [agent("reviewer-arch")] }, group.sessionNumber);
 
-	const withoutSession = await traceViewerItems(record("reviewer-arch", "reviewer-arch-no-session", "2026-05-14T05:00:00.000Z"));
-	assert.doesNotMatch(withoutSession[0]!.text, /^Session\s+/m);
+	assert.match(sessionDetail, /^Agent:\s+reviewer-arch$/m);
+	assert.match(sessionDetail, /^Model:\s+openai-codex\/gpt-5\.5$/m);
+	assert.match(sessionDetail, /^Effort:\s+xhigh$/m);
+	assert.match(sessionDetail, /^Session:\s+resumed · lane: feature-x$/m);
+	assert.doesNotMatch(taskItems[0]!.text, /^(Agent|Session #|Model|Effort|Session)\s+/m);
 });
 
 test("completed one-shot record backfills summary from transcript final assistant text", async () => {
@@ -491,9 +501,12 @@ test("Monitor numbers repeated agent launches as sessions and resets task number
 
 	const items = await traceViewerItems(second, numbers.get(second.taskId), { agents: [agent("reviewer-arch")] }, latestReviewerGroup.sessionNumber);
 	const detail = renderMonitorDetail(second, new Map([[second.taskId, { items }]]), uiState({ tab: "monitor", pane: "inspector" }), 180, 30, theme as any).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
+	const sessionDetail = renderMonitorSessionDetail(latestReviewerGroup, numbers, uiState({ tab: "monitor" }), 180, 30, theme as any, true, { agents: [agent("reviewer-arch")] }).join("\n");
 	assert.equal(detail.split("\n")[0]?.trim(), "Detail");
 	assert.doesNotMatch(detail.split("\n")[0] ?? "", /reviewer-arch|session #|task #|completed|fresh|gpt/);
-	assert.match(items[0]!.text, /Session #  2/);
+	assert.doesNotMatch(items[0]!.text, /^(Agent|Session #|Model|Effort|Session)\s+/m);
+	assert.match(sessionDetail, /^Agent:\s+reviewer-arch$/m);
+	assert.match(sessionDetail, /^Session #:\s+2$/m);
 	assert.match(items[0]!.text, /Task #   1/);
 	assert.doesNotMatch(detail, /reviewer-arch #2/);
 });
@@ -701,8 +714,7 @@ test("Monitor tab task rendering still exposes task trace metadata", async () =>
 
 	assert.equal(items.length, 2);
 	assert.match(items[0]!.text, /Task ID  planner-1700000120-bbbbbbbb/);
-	assert.match(items[0]!.text, /Model    openai-codex\/gpt-5\.5/);
-	assert.match(items[0]!.text, /Effort   xhigh/);
+	assert.doesNotMatch(items[0]!.text, /^(Agent|Session #|Model|Effort|Session)\s+/m);
 	assert.match(items[0]!.text, /Artifacts\n---------/);
 	assert.match(items[0]!.text, /Transcript  \/tmp\/planner-transcript\.jsonl/);
 	assert.match(items[0]!.text, /Archive   \/tmp\/planner-completion\.json/);

@@ -11,7 +11,7 @@ Delegate work to specialized agents from a running Pi session. Agents run either
 - `/agents` browser lists agents for the selected scope with static detail, Monitor task traces, and one-key launch.
 - Monitor groups tasks by session (pane, bg lane, bg one-shot) under expandable Active and Completed sections; repeated same-agent launches get session numbers and task numbers reset per session.
 - Chat completion rows show actual results, never a repeat of the original request.
-- Task detail shows Summary and Completion tabs; Summary contains run metadata, artifacts, and task text, while Completion contains result summary, files changed, and validation.
+- Task detail shows Summary and Completion tabs; Summary contains task metadata, artifacts, and task text, while Completion contains result summary, files changed, and validation.
 - Dashboard widget shows live state, turns, tokens, and cost for every spawned agent.
 - Grouped completion notifications batch multiple agents finishing together.
 - `taskId` retrieval, mid-run steering, and pane stop without losing memory.

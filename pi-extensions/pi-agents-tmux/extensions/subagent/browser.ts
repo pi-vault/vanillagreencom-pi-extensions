@@ -1210,16 +1210,25 @@ function renderScrollableTraceText(rawLines: string[], type: TraceViewerItem["ty
 	return scrollHint ? [...slice, ansiYellow(scrollHint)] : [...slice, ""];
 }
 
-export function renderMonitorSessionDetail(group: MonitorSessionGroup | undefined, taskNumbers: Map<string, number>, ui: AgentBrowserUiState, width: number, rows: number, theme: Theme, animateSpinners = true): string[] {
+export function renderMonitorSessionDetail(group: MonitorSessionGroup | undefined, taskNumbers: Map<string, number>, ui: AgentBrowserUiState, width: number, rows: number, theme: Theme, animateSpinners = true, discovery?: { agents: AgentConfig[] }): string[] {
 	if (!group) return [`${agentPaneTitle(theme, "Detail", ui.pane === "inspector")} ${theme.fg("dim", "Select a session or task.")}`];
 	const safeWidth = Math.max(8, width);
 	const header = agentPaneTitle(theme, "Detail", ui.pane === "inspector");
 	const taskCountText = group.taskCount === 1 ? "1 task" : `${group.taskCount} tasks`;
+	const representative = group.records[0];
+	const agentConfig = discovery?.agents.find((agent) => agent.name === group.agent);
+	const model = representative ? recordRunModel(representative, agentConfig) : modelWithoutEffortSuffix(agentConfig?.model);
+	const effort = representative ? recordRunEffort(representative, agentConfig) : normalizeReasoningEffort(agentConfig?.effort) ?? effortFromModelId(agentConfig?.model);
+	const sessionDetail = sessionModeDetailLabel(group);
 	const metadata = [
 		"Session",
 		"-------",
+		`Agent    ${group.agent}`,
 		`Session type  ${monitorSessionTypeLabel(group)}`,
 		group.sessionNumber ? `Session #  ${group.sessionNumber}` : "",
+		model ? `Model    ${model}` : "",
+		effort ? `Effort   ${effort}` : "",
+		sessionDetail ? `Session  ${sessionDetail}` : "",
 		`Start     ${formatDateTime(group.createdAt)}`,
 		`Latest    ${formatDateTime(group.latestAt)}`,
 		`Duration  ${formatDurationBetween(group.createdAt, group.latestAt)}`,
@@ -1263,7 +1272,7 @@ function renderMonitorTabBody(
 	const taskNumbers = taskNumberById(records);
 	const right = selection?.kind === "task"
 		? renderMonitorDetail(selection.record, cache, ui, rightWidth, bodyRows, theme)
-		: renderMonitorSessionDetail(selection?.kind === "session" ? selection.group : undefined, taskNumbers, ui, rightWidth, bodyRows, theme, animateSpinners);
+		: renderMonitorSessionDetail(selection?.kind === "session" ? selection.group : undefined, taskNumbers, ui, rightWidth, bodyRows, theme, animateSpinners, discovery);
 	const lines: string[] = [agentDivider(width, theme)];
 	for (let i = 0; i < bodyRows; i += 1) {
 		lines.push(`${agentPad(left[i] ?? "", leftWidth)} ${theme.fg("dim", "│")} ${truncateToWidth(right[i] ?? "", rightWidth, "")}`);
@@ -1891,7 +1900,7 @@ export async function showAgentEditConfirmation(ctx: ExtensionContext, message: 
 	}), { overlay: true, overlayOptions: { anchor: "center", width: AGENT_EDIT_CONFIRM_WIDTH, maxHeight: "40%" } });
 }
 
-export async function traceViewerItems(record: PaneTaskRecord, taskNumber?: number, discovery?: { agents: AgentConfig[] }, sessionNumber?: number): Promise<TraceViewerItem[]> {
+export async function traceViewerItems(record: PaneTaskRecord, taskNumber?: number, _discovery?: { agents: AgentConfig[] }, _sessionNumber?: number): Promise<TraceViewerItem[]> {
 	const ref = recordTraceRef(record);
 	const usage = record.usage ? formatUsageStats(record.usage) : "";
 	const summaryText = record.summary?.trim()
@@ -1899,15 +1908,6 @@ export async function traceViewerItems(record: PaneTaskRecord, taskNumber?: numb
 		: record.status === "completed" || record.status === "failed" || record.status === "blocked"
 			? COMPLETION_SUMMARY_UNAVAILABLE
 			: "No summary yet.";
-	const agentConfig = discovery?.agents.find((a) => a.name === record.agent);
-	const model = recordRunModel(record, agentConfig);
-	const effort = recordRunEffort(record, agentConfig);
-	const modelLine = model
-		? `Model    ${model}`
-		: "";
-	const effortLine = effort ? `Effort   ${effort}` : "";
-	const sessionDetail = sessionModeDetailLabel(record);
-	const sessionLine = sessionDetail ? `Session  ${sessionDetail}` : "";
 	// `" "` (single space) is a sentinel for an intentional blank line; it
 	// survives the `.filter(Boolean)` pass below that drops conditionally
 	// empty entries (e.g. record.completedAt missing -> no `Done` line).
@@ -1922,14 +1922,9 @@ export async function traceViewerItems(record: PaneTaskRecord, taskNumber?: numb
 	].filter(Boolean);
 	const summary = [
 		`Ref      ${ref}`,
-		`Agent    ${record.agent}`,
-		sessionNumber ? `Session #  ${sessionNumber}` : "",
 		taskNumber ? `Task #   ${taskNumber}` : "",
 		`Status   ${record.status}`,
 		`Task ID  ${record.taskId}`,
-		modelLine,
-		effortLine,
-		sessionLine,
 		usage ? `Usage    ${usage}` : "",
 		`Created  ${record.createdAt}`,
 		record.completedAt ? `Done     ${record.completedAt}` : "",
