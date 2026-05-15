@@ -85,15 +85,7 @@ pub async fn run(args: LaunchArgs) -> Result<()> {
         }
     }
 
-    let daemon_state_file = if explicit_state_file.is_some() {
-        explicit_state_file.clone()
-    } else if !args.no_daemon && rust_daemon_enabled() {
-        state_file
-            .as_ref()
-            .and_then(|path| ensure_state_file(path, &session).map(|()| path.clone()))
-    } else {
-        None
-    };
+    let daemon_state_file = explicit_state_file.clone();
 
     if !args.no_daemon && rust_daemon_enabled() {
         start_daemon_if_needed(
@@ -200,43 +192,6 @@ fn resolve_state_file(cli: Option<&Path>, session: &str, project_root: &Path) ->
     tracked_entries::resolve_session_state_from(project_root, session)
         .ok()
         .map(|resolution| resolution.state_path)
-}
-
-fn ensure_state_file(path: &Path, session: &str) -> Option<()> {
-    if path.exists() {
-        return Some(());
-    }
-    if let Some(parent) = path.parent() {
-        if let Err(error) = fs::create_dir_all(parent) {
-            warn(format!(
-                "failed to create dashboard state directory {}: {error}",
-                parent.display()
-            ));
-            return None;
-        }
-    }
-    let now = chrono::Utc::now().to_rfc3339();
-    let state = serde_json::json!({
-        "session_id": session,
-        "updated_at": now,
-        "entries": {},
-    });
-    match serde_json::to_vec_pretty(&state) {
-        Ok(body) => {
-            if let Err(error) = fs::write(path, body) {
-                warn(format!(
-                    "failed to create dashboard state file {}: {error}",
-                    path.display()
-                ));
-                return None;
-            }
-        }
-        Err(error) => {
-            warn(format!("failed to serialize dashboard state seed: {error}"));
-            return None;
-        }
-    }
-    Some(())
 }
 
 fn absolutize(path: &Path) -> PathBuf {

@@ -1,6 +1,6 @@
 # Flightdeck dashboard parity smokes
 
-Manual smoke coverage for pi-flightdeck surfaces that cannot be proven by a ratatui snapshot because they depend on terminal side effects or tmux focus.
+Manual smoke coverage for pi-flightdeck surfaces that cannot be proven by a ratatui snapshot because they depend on terminal side effects or live tmux pane identity. The Rust TUI is render-only with one in-process bell side effect; it does not auto-focus tmux windows.
 
 ## Scope
 
@@ -27,19 +27,19 @@ Purpose: verify the Rust dashboard preserves the pi-flightdeck pause-bell behavi
 
 Expected result: audible/visual bell side effect occurs once per pause edge; repeated file watcher reloads do not spam the bell.
 
-## Smoke 2 — auto-focus on pause
+## Smoke 2 — no auto-focus on pause
 
-Purpose: verify the pi-flightdeck auto-popup behavior maps to dashboard-window focus via tmux.
+Purpose: verify the Rust dashboard does not mutate tmux focus on pause. The earlier parity plan mapped the Pi auto-popup to `tmux select-window`; Phase 11 removed that write-side behavior because the TUI must stay read/render-only.
 
 1. Start a Flightdeck tmux session with at least one child window and the dashboard window.
 2. Leave focus on a non-dashboard window.
 3. Trigger `paused_for_user` in the master state.
 4. Observe:
-   - tmux selects the dashboard window with the pause banner visible.
-   - Existing child panes keep running; no pane is split or killed.
-   - Clearing `paused_for_user` does not steal focus again.
+   - Focus stays on the current tmux window.
+   - Terminal bell fires if `FLIGHTDECK_DASHBOARD_BELL` is not `0`.
+   - The dashboard window shows `PAUSED FOR USER` when viewed manually.
 
-Expected result: pause edge focuses the dashboard window once, replacing the in-Pi popup auto-open with `tmux select-window`.
+Expected result: pause edge produces bell + visual status only; operators choose whether to focus the dashboard window.
 
 ## Smoke 3 — owner/observer live panes
 
@@ -69,4 +69,4 @@ Expected result: peer panes see read-only observer affordances; owner pane sees 
 | Conflicts & merges hidden without ISS rows | `snapshot_tabs::merges_tab_hidden_without_issue_rows` |
 | Decisions detail popup | `snapshot_tabs::decisions_detail_popup` |
 | Daemon heartbeat folding | `snapshot_tabs::mixed_daemon_tab` |
-| Terminal bell + pause auto-focus | Smoke 1 + Smoke 2 above |
+| Terminal bell + no auto-focus on pause | Smoke 1 + Smoke 2 above |

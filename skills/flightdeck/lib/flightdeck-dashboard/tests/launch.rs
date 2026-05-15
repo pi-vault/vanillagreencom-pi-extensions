@@ -146,6 +146,57 @@ fn no_motion_forwards_motion_off() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+fn launch_against_missing_state_file_does_not_create_it() -> Result<(), Box<dyn Error>> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("project");
+    std::fs::create_dir_all(&project)?;
+    std::fs::write(project.join("vstack.toml"), "")?;
+    let bin_dir = temp.path().join("bin");
+    std::fs::create_dir_all(&bin_dir)?;
+    let windows_file = temp.path().join("tmux-windows");
+    write_fake_tmux(&bin_dir, &windows_file)?;
+    let capture = temp.path().join("session-args");
+    let flightdeck_session = bin_dir.join("flightdeck-session");
+    write_capturing_flightdeck_session(&flightdeck_session, &capture)?;
+    let missing_state = project.join("tmp/flightdeck-state-test-fd.json");
+    let path = path_with_bin(&bin_dir);
+
+    let output = Command::new(dashboard_bin())
+        .current_dir(&project)
+        .args([
+            "launch",
+            "--session",
+            SESSION,
+            "--state-file",
+            missing_state.to_str().expect("state path utf-8"),
+            "--window-name",
+            "flightdeck-test",
+        ])
+        .env("PATH", path)
+        .env("TMUX", "/tmp/fake-tmux")
+        .env("FD_STATE_DIR", temp.path().join("runtime"))
+        .env("FLIGHTDECK_SESSION_BIN", &flightdeck_session)
+        .env("FLIGHTDECK_DAEMON_RUST", "1")
+        .env("FLIGHTDECK_DASHBOARD", "1")
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "launch failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        capture.exists(),
+        "dashboard window launch still best-effort"
+    );
+    assert!(
+        !missing_state.exists(),
+        "dashboard launch must not create master state"
+    );
+    Ok(())
+}
+
+#[test]
 fn probe_failure_skips_safely() -> Result<(), Box<dyn Error>> {
     let temp = tempfile::tempdir()?;
     let project = temp.path().join("project");

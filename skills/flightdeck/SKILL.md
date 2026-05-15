@@ -271,8 +271,7 @@ Master-loop env vars consulted by workflows:
 | `FLIGHTDECK_DASHBOARD_WINDOW` | `flightdeck` | Tmux window name used by `flightdeck-dashboard launch`. |
 | `FLIGHTDECK_DASHBOARD_MOTION` | `full` | Rust dashboard motion level: `full`, `reduced`, or `off`; `NO_MOTION`/`NO_COLOR` also force `off`. CLI `--motion` overrides it. |
 | `FLIGHTDECK_DAEMON_RUST` | `0` | When `1`, `flightdeck-dashboard launch` starts the Rust daemon; otherwise launch defers daemon ownership to the canonical TypeScript path. |
-| `FLIGHTDECK_DASHBOARD_BELL` | `1` | Set to `0` to suppress the terminal bell on a new pause-for-user edge. |
-| `FLIGHTDECK_DASHBOARD_AUTO_FOCUS` | `1` | Set to `0` to suppress `tmux select-window` auto-focus on a new pause-for-user edge. |
+| `FLIGHTDECK_DASHBOARD_BELL` | `1` | Set to `0` to suppress the terminal bell on a new pause-for-user edge. The dashboard never auto-focuses tmux windows. |
 
 Daemon tuning (`FD_*`) is in README.md. Most `FD_*` knobs run inside the
 daemon and do not affect master operation directly, but two are

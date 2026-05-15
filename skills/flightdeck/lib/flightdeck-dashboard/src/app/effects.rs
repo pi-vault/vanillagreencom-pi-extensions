@@ -1,9 +1,7 @@
 use std::io::Write;
 use std::path::Path;
-use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use tokio::process::Command;
 use tokio::sync::mpsc;
 
 use crate::app::model::{Clock, ReadSourceState};
@@ -97,48 +95,7 @@ impl Effects {
                 tracing::debug!(%error, "failed to flush dashboard pause bell");
             }
         }
-        if std::env::var("FLIGHTDECK_DASHBOARD_AUTO_FOCUS")
-            .map_or(true, |value| value.trim() != "0")
-            && std::env::var_os("TMUX").is_some()
-        {
-            tokio::spawn(async { focus_current_tmux_window().await });
-        }
     }
-}
-
-async fn focus_current_tmux_window() {
-    let Some(pane) = std::env::var_os("TMUX_PANE").filter(|pane| !pane.is_empty()) else {
-        return;
-    };
-    let output = tokio::time::timeout(
-        Duration::from_millis(500),
-        Command::new("tmux")
-            .args(["display-message", "-p", "-t"])
-            .arg(&pane)
-            .arg("#{window_id}")
-            .output(),
-    )
-    .await;
-    let Ok(Ok(output)) = output else {
-        tracing::debug!("failed to resolve dashboard tmux window for pause focus");
-        return;
-    };
-    if !output.status.success() {
-        tracing::debug!(status = %output.status, "tmux window lookup failed for pause focus");
-        return;
-    }
-    let window = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    if window.is_empty() {
-        return;
-    }
-    let _ = tokio::time::timeout(
-        Duration::from_millis(500),
-        Command::new("tmux")
-            .args(["select-window", "-t"])
-            .arg(window)
-            .output(),
-    )
-    .await;
 }
 
 fn snapshot_file_msg(path: &Path, now: DateTime<Utc>) -> Msg {
