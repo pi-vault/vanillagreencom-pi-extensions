@@ -72,6 +72,11 @@ import {
 	resolveMasterPidSafe,
 	writeRecoveryHint,
 } from "./recovery-hint.ts";
+import {
+	ownerCgroupProbeEnabled,
+	ownerMemHeartbeatFields,
+	probeOwnerCgroupMem,
+} from "./owner-cgroup-mem.ts";
 import { OC_LAST_ASSISTANT_JQ } from "../paths/oc.ts";
 import { CC_LAST_ASSISTANT_JQ } from "../paths/cc.ts";
 import { PI_LAST_ASSISTANT_JQ } from "../paths/pi.ts";
@@ -358,6 +363,11 @@ export async function runLoop(opts: RunLoopOpts): Promise<void> {
 	// canonical bell after a restart).
 	const bellWakeState = makeBellWakeState();
 	const bellWakeIntervalSec = bellWakeIntervalFromEnv();
+
+	// vstack#72: probe owner cgroup memory inside the heartbeat cadence.
+	// Gated by FD_HEARTBEAT_OWNER_CGROUP (default on); silent on any
+	// failure so non-Linux / no-cgroup-v2 hosts keep the existing line.
+	const ownerCgroupProbeOn = ownerCgroupProbeEnabled();
 
 	// vstack#59: reconcile tracked entries every FD_RECONCILE_INTERVAL_SEC
 	// so the daemon picks up panes added mid-session without restart.
@@ -767,7 +777,18 @@ export async function runLoop(opts: RunLoopOpts): Promise<void> {
 			for (const id of innerIds) if (paneCache.alive(id)) alive += 1;
 			const wpState = existsSync(wakePending) ? "in-flight" : "absent";
 			const bfState = existsSync(busyFile) ? "held" : "unlocked";
-			log("heartbeat", `panes=${innerIds.length} alive=${alive} wake_pending=${wpState} busy_lock=${bfState}`);
+			let ownerMemFields = "";
+			if (ownerCgroupProbeOn) {
+				try {
+					const masterPid = resolveMasterPidSafe(masterId);
+					if (masterPid) {
+						const snapshot = probeOwnerCgroupMem(masterPid);
+						const fields = ownerMemHeartbeatFields(snapshot);
+						if (fields) ownerMemFields = ` ${fields}`;
+					}
+				} catch { /* observability-only; never block heartbeat */ }
+			}
+			log("heartbeat", `panes=${innerIds.length} alive=${alive} wake_pending=${wpState} busy_lock=${bfState}${ownerMemFields}`);
 		}
 
 		// 4) Wake delivery + post-success state updates.
