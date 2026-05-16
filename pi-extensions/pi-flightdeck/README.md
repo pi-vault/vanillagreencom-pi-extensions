@@ -4,13 +4,13 @@
 
 > ⚠️ **WIP — not production ready.** APIs, settings, and UI may change without notice.
 
-Read-only, sessions-first dashboard for the [`flightdeck`](../../skills/flightdeck) skill. When Pi runs as the Flightdeck master agent in a tmux session, this extension surfaces the same owner-scoped on-disk tracked-session state the daemon and master maintain — without ever mutating it. Its Activity/Live feed surface reads the same `flightdeck-activity-<session>.jsonl` sidecar used by the Rust dashboard; new sessions should still prefer the Rust dashboard.
+Read-only, sessions-first dashboard for the [`flightdeck`](../../skills/flightdeck) skill. When Pi runs as the Flightdeck master agent in a tmux session, this extension surfaces the same owner-scoped on-disk tracked-session state the daemon and master maintain — without ever mutating it. The Live feed tab still tails the daemon log; the structured `flightdeck-activity-<session>.jsonl` sidecar is consumed by the Rust dashboard, which new sessions should prefer.
 
 ## Highlights
 
 - **Pause banner** — yellow frame above the editor when flightdeck master pauses for the user. Clears on resume.
 - **Persistent dashboard widget** — compact tree of tracked sessions with state, kind, harness, last decision, age, and per-pane cost/turns/tokens.
-- **`/flightdeck` popup** — six tabs: Overview, Activity/Live feed, Conversations, Conflicts & merges, Decisions, Daemon.
+- **`/flightdeck` popup** — six tabs: Overview, Live feed, Conversations, Conflicts & merges, Decisions, Daemon.
 - **Session-complete view** — keeps the completed session visible until you dismiss the widget.
 - **Owner-scoped by default** — dashboard renders only in the flightdeck owner pane. Peer panes get a read-only observer popup. Child panes always suppressed. Visibility configurable.
 - Optional terminal bell and auto-popup when master pauses.
