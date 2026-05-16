@@ -3,6 +3,7 @@ mod common;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use flightdeck_dashboard::activity::{ActivityEvent, ActivityType, Importance, Severity};
 use flightdeck_dashboard::app::command::SnapshotSource;
 use flightdeck_dashboard::app::model::{ModalState, Model, Tab};
 use flightdeck_dashboard::app::motion::{self, EffectKind, EffectTarget, MotionLevel};
@@ -19,82 +20,93 @@ fn mixed_overview_tab() {
 }
 
 #[test]
-fn mixed_live_feed_tab() {
+fn mixed_activity_tab() {
     insta::assert_snapshot!(
-        "tab_live_feed",
-        common::render_model(&common::model_for_tab(Tab::LiveFeed))
+        "tab_activity",
+        common::render_model(&common::model_for_tab(Tab::Activity))
     );
 }
 
 #[test]
-fn live_feed_empty_state_when_no_events() {
-    let model = common::model_for_tab(Tab::LiveFeed);
+fn activity_empty_state_when_no_events() {
+    let mut model = common::model_for_tab(Tab::Activity);
+    model.set_activity_events(Vec::new());
     let rendered = common::render_model(&model);
-    assert!(rendered.contains("Activity feed is empty"));
-    assert!(rendered.contains("fd-daemon-<key>.log / fd-wake-events-<key>.log"));
-    insta::assert_snapshot!("tab_live_feed_empty_state", rendered);
+    assert!(rendered.contains("No activity events yet"));
+    assert!(rendered.contains("flightdeck-activity-<session>.jsonl"));
+    insta::assert_snapshot!("tab_activity_empty_state", rendered);
 }
 
 #[test]
-fn live_feed_with_events() {
-    let mut model = common::model_for_tab(Tab::LiveFeed);
+fn activity_with_events() {
+    let mut model = common::model_for_tab(Tab::Activity);
     seed_events(&mut model);
-    insta::assert_snapshot!("tab_live_feed_with_events", common::render_model(&model));
+    insta::assert_snapshot!("tab_activity_with_events", common::render_model(&model));
 }
 
 #[test]
-fn live_feed_folds_heartbeats_when_noise_hidden() {
-    let mut model = common::model_for_tab(Tab::LiveFeed);
-    model.push_event(Event::new(
+fn activity_folds_noise_when_hidden() {
+    let mut model = common::model_for_tab(Tab::Activity);
+    model.push_activity_event(activity_event(
+        "noise-1",
         common::fixed_now() - chrono::Duration::seconds(30),
-        ActivitySource::Daemon,
-        EventImportance::Low,
+        "daemon.heartbeat",
+        Severity::Debug,
+        Importance::Noisy,
         "daemon heartbeat #1",
     ));
-    model.push_event(Event::new(
+    model.push_activity_event(activity_event(
+        "noise-2",
         common::fixed_now() - chrono::Duration::seconds(20),
-        ActivitySource::Daemon,
-        EventImportance::Low,
+        "daemon.heartbeat",
+        Severity::Debug,
+        Importance::Noisy,
         "daemon heartbeat #2",
     ));
-    model.push_event(Event::new(
+    model.push_activity_event(activity_event(
+        "wake-1",
         common::fixed_now() - chrono::Duration::seconds(10),
-        ActivitySource::Wake,
-        EventImportance::Medium,
+        "daemon.wake",
+        Severity::Info,
+        Importance::Normal,
         "wake delivered to master",
     ));
     let rendered = common::render_model(&model);
-    assert!(rendered.contains("2 heartbeat/noise events folded · press Ctrl+N to show."));
+    assert!(rendered.contains("2 noisy/debug activity events hidden · press n to show."));
     assert!(!rendered.contains("daemon heartbeat #1"));
-    assert!(rendered.contains("noise hidden"));
-    insta::assert_snapshot!("tab_live_feed_folds_heartbeats", rendered);
+    assert!(rendered.contains("2 noisy hidden"));
+    insta::assert_snapshot!("tab_activity_folds_heartbeats", rendered);
 }
 
 #[test]
-fn live_feed_all_noise_shows_summary_row() {
-    let mut model = common::model_for_tab(Tab::LiveFeed);
-    model.push_event(Event::new(
+fn activity_all_noise_shows_summary_row() {
+    let mut model = common::model_for_tab(Tab::Activity);
+    model.push_activity_event(activity_event(
+        "noise-1",
         common::fixed_now() - chrono::Duration::seconds(20),
-        ActivitySource::Daemon,
-        EventImportance::Low,
+        "daemon.heartbeat",
+        Severity::Debug,
+        Importance::Noisy,
         "daemon heartbeat #1",
     ));
-    model.push_event(Event::new(
+    model.push_activity_event(activity_event(
+        "noise-2",
         common::fixed_now() - chrono::Duration::seconds(10),
-        ActivitySource::Daemon,
-        EventImportance::Low,
+        "daemon.heartbeat",
+        Severity::Debug,
+        Importance::Noisy,
         "daemon heartbeat #2",
     ));
     let rendered = common::render_model(&model);
-    assert!(rendered.contains("2 heartbeat/noise events folded · press Ctrl+N to show."));
+    assert!(rendered.contains("2 noisy/debug activity events hidden · press n to show."));
     assert!(!rendered.contains("daemon heartbeat #1"));
-    insta::assert_snapshot!("tab_live_feed_all_noise_summary", rendered);
+    insta::assert_snapshot!("tab_activity_all_noise_summary", rendered);
 }
 
 #[test]
-fn live_feed_row_enter_motion_start_and_settled() {
+fn activity_row_enter_motion_start_and_settled() {
     let mut model = common::model_for_fixture("mixed", MotionLevel::Full);
-    model.current_tab = Tab::LiveFeed;
+    model.current_tab = Tab::Activity;
     seed_events(&mut model);
     flightdeck_dashboard::app::motion::push_effect(
         &mut model.active_effects,
@@ -110,10 +122,10 @@ fn live_feed_row_enter_motion_start_and_settled() {
         EffectKind::ActivityImportantFlash,
         EffectTarget::Row(0),
     );
-    insta::assert_snapshot!("tab_live_feed_motion_t0", common::render_model(&model));
+    insta::assert_snapshot!("tab_activity_motion_t0", common::render_model(&model));
     model.animate_frame = 8;
     motion::prune_effects(&mut model.active_effects, model.animate_frame);
-    insta::assert_snapshot!("tab_live_feed_motion_settled", common::render_model(&model));
+    insta::assert_snapshot!("tab_activity_motion_settled", common::render_model(&model));
 }
 
 #[test]
@@ -361,7 +373,7 @@ fn sample_cost_totals() -> SessionTotals {
 
 fn seed_events(model: &mut flightdeck_dashboard::app::model::Model) {
     let base = common::fixed_now();
-    let rows = [
+    let legacy_rows = [
         (
             ActivitySource::Daemon,
             EventImportance::Low,
@@ -393,13 +405,100 @@ fn seed_events(model: &mut flightdeck_dashboard::app::model::Model) {
             "adapter timeout recovered",
         ),
     ];
-    for (idx, (source, importance, message)) in rows.into_iter().enumerate() {
+    for (idx, (source, importance, message)) in legacy_rows.into_iter().enumerate() {
         model.push_event(Event::new(
             base - chrono::Duration::seconds(idx as i64),
             source,
             importance,
             message,
         ));
+    }
+    let activity_rows = [
+        (
+            "daemon-1",
+            "daemon.heartbeat",
+            Severity::Debug,
+            Importance::Noisy,
+            "daemon heartbeat folded",
+        ),
+        (
+            "wake-1",
+            "daemon.wake",
+            Severity::Info,
+            Importance::Normal,
+            "wake delivered to master",
+        ),
+        (
+            "question-1",
+            "question.opened",
+            Severity::Warning,
+            Importance::Important,
+            "prompt detected: merge-now",
+        ),
+        (
+            "state-1",
+            "entry.state_changed",
+            Severity::Info,
+            Importance::Normal,
+            "ISS-7 state changed ready → prompting",
+        ),
+        (
+            "decision-1",
+            "decision.recorded",
+            Severity::Success,
+            Importance::Important,
+            "decision recorded: YES",
+        ),
+        (
+            "error-1",
+            "pi-bg-task.exit",
+            Severity::Error,
+            Importance::Important,
+            "adapter timeout recovered",
+        ),
+    ];
+    for (idx, (id, event_type, severity, importance, summary)) in
+        activity_rows.into_iter().enumerate()
+    {
+        model.push_activity_event(activity_event(
+            id,
+            base - chrono::Duration::seconds(idx as i64),
+            event_type,
+            severity,
+            importance,
+            summary,
+        ));
+    }
+}
+
+fn activity_event(
+    id: &str,
+    ts: chrono::DateTime<chrono::Utc>,
+    event_type: &str,
+    severity: Severity,
+    importance: Importance,
+    summary: &str,
+) -> ActivityEvent {
+    ActivityEvent {
+        schema_version: 1,
+        id: id.to_owned(),
+        ts,
+        session_id: Some(String::from("demo-mixed")),
+        source: String::from("flightdeck"),
+        entry_id: Some(String::from("VST-101")),
+        entry_title: Some(String::from("Fix dashboard state reader")),
+        entry_kind: Some(String::from("issue")),
+        pane_id: Some(String::from("%41")),
+        harness: Some(String::from("opencode")),
+        event_type: ActivityType::new(event_type),
+        severity,
+        importance,
+        summary: summary.to_owned(),
+        body: None,
+        links: Vec::new(),
+        refs: None,
+        details: None,
+        noisy: importance == Importance::Noisy,
     }
 }
 

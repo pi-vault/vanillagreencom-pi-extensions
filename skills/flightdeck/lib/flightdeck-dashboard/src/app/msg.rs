@@ -1,5 +1,6 @@
 use crossterm::event::KeyEvent;
 
+use crate::activity::ActivityEvent;
 use crate::app::hitmap::ClickAction;
 use crate::app::model::ReadSourceState;
 use crate::cost::SessionTotals;
@@ -20,6 +21,9 @@ pub enum Msg {
         source_state: ReadSourceState,
     },
     EventReceived(Event),
+    ActivityRefreshed(Vec<ActivityEvent>),
+    ActivityFilterChanged,
+    ActivityExport,
     WatcherEvent(WatcherEvent),
     DaemonStatus(RuntimeDaemonStatus),
     CostUpdated(SessionTotals),

@@ -172,11 +172,34 @@ fn run_thread(
 }
 
 fn event_matches(event: &DebouncedEvent, live_path: &Path, archive_dir: &Path) -> bool {
-    event
-        .event
-        .paths
-        .iter()
-        .any(|path| path == live_path || is_archive_path(path, archive_dir))
+    event.event.paths.iter().any(|path| {
+        path == live_path
+            || is_archive_path(path, archive_dir)
+            || is_activity_path(path, live_path, archive_dir)
+    })
+}
+
+fn is_activity_path(path: &Path, live_path: &Path, archive_dir: &Path) -> bool {
+    let Some(session) = state_session_name(live_path) else {
+        return false;
+    };
+    let live_name = format!("flightdeck-activity-{session}.jsonl");
+    let archive_prefix = format!("flightdeck-activity-{session}-");
+    path.starts_with(archive_dir)
+        && path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| {
+                name == live_name
+                    || (name.starts_with(&archive_prefix) && name.ends_with(".jsonl.archive"))
+            })
+}
+
+fn state_session_name(path: &Path) -> Option<String> {
+    let name = path.file_name()?.to_str()?;
+    name.strip_prefix("flightdeck-state-")
+        .and_then(|rest| rest.strip_suffix(".json"))
+        .map(str::to_owned)
 }
 
 fn is_archive_path(path: &Path, archive_dir: &Path) -> bool {

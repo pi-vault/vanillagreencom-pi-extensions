@@ -1,9 +1,8 @@
-//! Activity event sources for the Live feed tab.
+//! Legacy daemon event sources retained for daemon diagnostics.
 //!
-//! The activity-events plan can plug in `flightdeck-activity-<session>.jsonl`
-//! by adding one more `EventSource` implementor that tails that file and
-//! returns `mpsc::UnboundedReceiver<Event>` from `subscribe`; the TUI fan-in
-//! and ring buffer do not need to change.
+//! The user-facing Activity tab reads structured `flightdeck-activity-<session>.jsonl`
+//! sidecars through `crate::activity`; these sources continue to feed daemon
+//! health panels and compatibility tests.
 
 use std::io;
 use std::os::unix::fs::MetadataExt;

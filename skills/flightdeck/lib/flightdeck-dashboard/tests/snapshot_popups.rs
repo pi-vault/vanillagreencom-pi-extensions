@@ -1,9 +1,9 @@
 mod common;
 
 use flightdeck_dashboard::actions::WriteAction;
+use flightdeck_dashboard::activity::{ActivityEvent, ActivityType, Importance, Severity};
 use flightdeck_dashboard::app::model::{ConfirmDialog, ModalState, Tab};
 use flightdeck_dashboard::app::motion::MotionLevel;
-use flightdeck_dashboard::state::snapshot::{ActivitySource, Event, EventImportance};
 
 #[test]
 fn popup_theme_picker() {
@@ -28,16 +28,23 @@ fn popup_decision_detail() {
 }
 
 #[test]
-fn popup_event_detail() {
-    let mut model = common::model_for_tab(Tab::LiveFeed);
-    model.push_event(Event::new(
-        common::fixed_now(),
-        ActivitySource::Prompt,
-        EventImportance::Important,
-        "prompt detected: merge-now with long detail text",
+fn popup_activity_detail() {
+    let mut model = common::model_for_tab(Tab::Activity);
+    model.push_activity_event(activity_event(
+        "detail-1",
+        "question.opened",
+        Severity::Warning,
+        Importance::Important,
     ));
     model.modal = ModalState::EventDetail;
-    insta::assert_snapshot!("popup_event_detail", common::render_model(&model));
+    insta::assert_snapshot!("popup_activity_detail", common::render_model(&model));
+}
+
+#[test]
+fn popup_activity_filter() {
+    let mut model = common::model_for_tab(Tab::Activity);
+    model.modal = ModalState::ActivityFilter;
+    insta::assert_snapshot!("popup_activity_filter", common::render_model(&model));
 }
 
 #[test]
@@ -67,6 +74,37 @@ fn popup_filter_input() {
     model.ui.filter_open = true;
     model.modal = ModalState::FilterInput;
     insta::assert_snapshot!("popup_filter_input", common::render_model(&model));
+}
+
+fn activity_event(
+    id: &str,
+    event_type: &str,
+    severity: Severity,
+    importance: Importance,
+) -> ActivityEvent {
+    ActivityEvent {
+        schema_version: 1,
+        id: id.to_owned(),
+        ts: common::fixed_now(),
+        session_id: Some(String::from("demo-mixed")),
+        source: String::from("flightdeck"),
+        entry_id: Some(String::from("VST-101")),
+        entry_title: Some(String::from("Fix dashboard state reader")),
+        entry_kind: Some(String::from("issue")),
+        pane_id: Some(String::from("%41")),
+        harness: Some(String::from("opencode")),
+        event_type: ActivityType::new(event_type),
+        severity,
+        importance,
+        summary: String::from("prompt detected: merge-now with long detail text"),
+        body: Some(String::from(
+            "Full prompt and routing context for the selected activity event.",
+        )),
+        links: Vec::new(),
+        refs: None,
+        details: None,
+        noisy: importance == Importance::Noisy,
+    }
 }
 
 #[test]

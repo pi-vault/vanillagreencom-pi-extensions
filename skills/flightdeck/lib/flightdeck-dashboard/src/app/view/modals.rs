@@ -4,10 +4,11 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap};
 use ratatui::Frame;
 
+use crate::activity::format::{event_chip_for, severity_label, severity_style};
 use crate::app::hitmap::{ClickAction, HitMap};
 use crate::app::keymap::BINDINGS;
 use crate::app::labels::{kind_label_for, state_label_for};
-use crate::app::model::Model;
+use crate::app::model::{Model, ACTIVITY_TYPE_CHIPS};
 use crate::app::theme::{Palette, Theme};
 use crate::app::view::popup::{render_popup, PopupChrome, PopupHeight, PopupWidth};
 
@@ -386,32 +387,153 @@ pub fn render_event_detail(
     theme: &Palette,
     hitmap: &mut HitMap,
 ) {
-    let Some(event) = model.filtered_events().get(model.selected_index()).copied() else {
-        render_message_popup(frame, area, "Event", "No event selected", theme, hitmap);
+    let Some(event) = model.activity_events().get(model.selected_index()).copied() else {
+        render_message_popup(
+            frame,
+            area,
+            "Activity",
+            "No activity event selected",
+            theme,
+            hitmap,
+        );
         return;
     };
-    let title = format!("Event · {}", event.source.as_chip());
-    let subtitle = event.ts.to_rfc3339();
+    let title = format!("Activity · {}", event_chip_for(event));
+    let subtitle = format!(
+        "{}  ·  {}  ·  {}",
+        event.session_label(),
+        event.event_type.as_str(),
+        event.ts.to_rfc3339()
+    );
     let chrome = PopupChrome {
         title: &title,
         subtitle: Some(&subtitle),
-        footer_hints: &["Esc close"],
-        width: PopupWidth::PercentOfFrame(68),
-        height: PopupHeight::PercentOfFrame(45),
+        footer_hints: &["Esc close", "↑/↓ scroll"],
+        width: PopupWidth::PercentOfFrame(76),
+        height: PopupHeight::PercentOfFrame(70),
     };
     render_popup(frame, area, chrome, theme, hitmap, |frame, body, _| {
-        frame.render_widget(
-            Paragraph::new(vec![
-                Line::from(Span::styled("Message", theme.header())),
-                Line::from(event.message.clone()),
+        let json = serde_json::to_string_pretty(event).unwrap_or_else(|_| String::from("{}"));
+        let mut lines = vec![
+            Line::from(Span::styled("Summary", theme.header())),
+            Line::from(event.summary.clone()),
+            Line::from(""),
+            Line::from(Span::styled("Status", theme.header())),
+            Line::from(vec![
+                Span::styled(
+                    severity_label(event.severity),
+                    severity_style(event.severity, theme),
+                ),
+                Span::raw(format!(" · {}", event.importance.as_str())),
+            ]),
+            Line::from(""),
+            Line::from(Span::styled("Session", theme.header())),
+            Line::from(format!(
+                "{} · pane {} · harness {}",
+                event.session_label(),
+                event.pane_id.as_deref().unwrap_or("—"),
+                event.harness.as_deref().unwrap_or("—")
+            )),
+        ];
+        if let Some(body) = &event.body {
+            lines.extend([
                 Line::from(""),
-                Line::from(format!("importance: {:?}", event.importance)),
-            ])
-            .wrap(Wrap { trim: true })
-            .scroll(popup_scroll(model)),
+                Line::from(Span::styled("Body", theme.header())),
+                Line::from(body.clone()),
+            ]);
+        }
+        lines.extend([
+            Line::from(""),
+            Line::from(Span::styled("JSON", theme.header())),
+        ]);
+        lines.extend(json.lines().map(|line| Line::from(line.to_owned())));
+        frame.render_widget(
+            Paragraph::new(lines)
+                .wrap(Wrap { trim: false })
+                .scroll(popup_scroll(model)),
             body,
         );
     });
+}
+
+pub fn render_activity_filter(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    model: &Model,
+    theme: &Palette,
+    hitmap: &mut HitMap,
+) {
+    let chrome = PopupChrome {
+        title: "Activity filters",
+        subtitle: Some("Space toggles type, severity, or session; n toggles noisy/debug; c clears"),
+        footer_hints: &["↑/↓ select", "Space toggle", "Enter/Esc close"],
+        width: PopupWidth::PercentOfFrame(66),
+        height: PopupHeight::Fixed(22),
+    };
+    render_popup(frame, area, chrome, theme, hitmap, |frame, body, _| {
+        let mut rows = Vec::new();
+        for (idx, chip) in ACTIVITY_TYPE_CHIPS.iter().enumerate() {
+            let checked = if model.activity.filter.visible_types.contains(*chip) {
+                "☑"
+            } else {
+                "☐"
+            };
+            rows.push(filter_row(idx, model, theme, checked, chip, "type chip"));
+        }
+        let severity_idx = ACTIVITY_TYPE_CHIPS.len();
+        rows.push(filter_row(
+            severity_idx,
+            model,
+            theme,
+            "◇",
+            model.activity.filter.severity.label(),
+            "severity selector",
+        ));
+        let session_idx = severity_idx + 1;
+        rows.push(filter_row(
+            session_idx,
+            model,
+            theme,
+            "◇",
+            model
+                .activity
+                .filter
+                .session
+                .as_deref()
+                .unwrap_or("all sessions"),
+            "session selector",
+        ));
+        let table = Table::new(
+            rows,
+            [
+                Constraint::Length(4),
+                Constraint::Length(18),
+                Constraint::Min(18),
+            ],
+        )
+        .column_spacing(1);
+        frame.render_widget(table, body);
+    });
+}
+
+fn filter_row<'a>(
+    idx: usize,
+    model: &Model,
+    theme: &Palette,
+    marker: &'a str,
+    label: &'a str,
+    description: &'a str,
+) -> Row<'a> {
+    Row::new([
+        Cell::from(marker),
+        Cell::from(label),
+        Cell::from(description),
+    ])
+    .style(if idx == model.activity.filter_cursor {
+        model.selection_style()
+    } else {
+        theme.frame()
+    })
 }
 
 pub fn render_filter_input(
@@ -421,9 +543,20 @@ pub fn render_filter_input(
     theme: &Palette,
     hitmap: &mut HitMap,
 ) {
+    let (title, subtitle) = if model.current_tab == crate::app::model::Tab::Activity {
+        (
+            "Filter activity text",
+            "matches session, type, summary, refs, and body; supports regex",
+        )
+    } else {
+        (
+            "Filter sessions",
+            "matches session title and id; supports regex such as ^HT-",
+        )
+    };
     let chrome = PopupChrome {
-        title: "Filter sessions",
-        subtitle: Some("matches session title and id; supports regex such as ^HT-"),
+        title,
+        subtitle: Some(subtitle),
         footer_hints: &["Enter apply", "Esc cancel"],
         width: PopupWidth::PercentOfFrame(62),
         height: PopupHeight::Fixed(12),
@@ -431,13 +564,18 @@ pub fn render_filter_input(
     render_popup(frame, area, chrome, theme, hitmap, |frame, body, hitmap| {
         let clear_rect = Rect::new(body.x, body.y.saturating_add(4), 20, 1);
         hitmap.push(clear_rect, ClickAction::ClearFilter, 10);
+        let help = if model.current_tab == crate::app::model::Tab::Activity {
+            "The filter matches activity session, type, summary, refs, and body; supports regex."
+        } else {
+            "The filter matches against session title and id; supports regex."
+        };
         let lines = vec![
             Line::from(Span::styled("Filter", theme.status_label())),
             Line::from(format!("> {}", model.feed_filter.input)),
             Line::from(""),
             Line::from(Span::styled("Clear filter", theme.warning())),
             Line::from(""),
-            Line::from("The filter matches against session title and id; supports regex."),
+            Line::from(help),
         ];
         frame.render_widget(
             Paragraph::new(lines)

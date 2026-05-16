@@ -4,6 +4,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap};
 use ratatui::Frame;
 
+use crate::activity::ActivityEvent;
 use crate::app::hitmap::{ClickAction, HitMap, ScrollSource};
 use crate::app::model::Model;
 use crate::app::theme::Palette;
@@ -109,6 +110,13 @@ pub fn selected_decision(model: &Model) -> Option<DecisionRow> {
 }
 
 pub fn decision_rows(model: &Model) -> Vec<DecisionRow> {
+    let activity_decisions = model.activity.decision_events();
+    if !activity_decisions.is_empty() {
+        return activity_decisions
+            .into_iter()
+            .map(decision_row_from_activity)
+            .collect();
+    }
     let mut rows = model
         .snapshot
         .sessions
@@ -125,6 +133,33 @@ pub fn decision_rows(model: &Model) -> Vec<DecisionRow> {
         .collect::<Vec<_>>();
     rows.sort_by(|left, right| right.ts.cmp(&left.ts));
     rows
+}
+
+fn decision_row_from_activity(event: &ActivityEvent) -> DecisionRow {
+    let prompt_tag = event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("prompt_tag"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or(event.event_type.as_str())
+        .to_owned();
+    let answer = event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("answer"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or(event.summary.as_str())
+        .to_owned();
+    DecisionRow {
+        entry_id: event.session_label().to_owned(),
+        title: event
+            .entry_title
+            .clone()
+            .unwrap_or_else(|| event.session_label().to_owned()),
+        ts: event.ts,
+        prompt_tag,
+        answer,
+    }
 }
 
 fn truncate(value: &str, max_chars: usize) -> String {

@@ -15,6 +15,8 @@ pub enum ClickAction {
     ToggleNoiseFilter,
     ToggleCompact,
     OpenFilter,
+    OpenActivityFilter,
+    ActivityExport,
     ClearFilter,
     OpenHelp,
     OpenThemePicker,

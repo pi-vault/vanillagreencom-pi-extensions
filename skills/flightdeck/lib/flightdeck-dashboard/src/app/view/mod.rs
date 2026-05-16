@@ -1,9 +1,9 @@
+pub mod activity;
 pub mod conversations;
 pub mod costs;
 pub mod daemon;
 pub mod decisions;
 pub mod fx;
-pub mod live_feed;
 pub mod merges;
 pub mod modals;
 pub mod overview;
@@ -67,6 +67,9 @@ pub fn render_with_hitmap(frame: &mut Frame<'_>, model: &Model, hitmap: &mut Hit
         }
         crate::app::model::ModalState::EventDetail => {
             modals::render_event_detail(frame, area, model, theme, hitmap);
+        }
+        crate::app::model::ModalState::ActivityFilter => {
+            modals::render_activity_filter(frame, area, model, theme, hitmap);
         }
         crate::app::model::ModalState::FilterInput => {
             modals::render_filter_input(frame, area, model, theme, hitmap);
@@ -301,7 +304,7 @@ fn render_body(
 ) {
     match model.current_tab {
         Tab::Overview => overview::render(frame, area, model, theme, hitmap),
-        Tab::LiveFeed => live_feed::render(frame, area, model, theme, hitmap),
+        Tab::Activity => activity::render(frame, area, model, theme, hitmap),
         Tab::Conversations => conversations::render(frame, area, model, theme, hitmap),
         Tab::Merges => merges::render(frame, area, model, theme, hitmap),
         Tab::Decisions => decisions::render(frame, area, model, theme, hitmap),
@@ -340,7 +343,7 @@ fn render_footer(
             format!("filter: {}", model.feed_filter.pattern)
         };
         let left =
-            " ↹ tabs   j/k or ↑/↓ select   ⏎ detail   D prune   g focus   / filter   ⇧M compact   ? help   q quit";
+            " ↹ tabs   j/k or ↑/↓ select   ⏎ detail   f filters   n noise   s session   d decisions   e export   ? help   q quit";
         push_footer_target(
             hitmap,
             area,
@@ -353,20 +356,13 @@ fn render_footer(
             hitmap,
             area,
             43,
-            "D prune",
-            ClickAction::PromptPrune(model.selected_index()),
+            "f filters",
+            ClickAction::OpenActivityFilter,
         );
-        push_footer_target(
-            hitmap,
-            area,
-            53,
-            "g focus",
-            ClickAction::PromptFocus(model.selected_index()),
-        );
-        push_footer_target(hitmap, area, 63, "/ filter", ClickAction::OpenFilter);
-        push_footer_target(hitmap, area, 74, "⇧M compact", ClickAction::ToggleCompact);
-        push_footer_target(hitmap, area, 87, "? help", ClickAction::OpenHelp);
-        push_footer_target(hitmap, area, 96, "q quit", ClickAction::Quit);
+        push_footer_target(hitmap, area, 55, "n noise", ClickAction::ToggleNoiseFilter);
+        push_footer_target(hitmap, area, 91, "e export", ClickAction::ActivityExport);
+        push_footer_target(hitmap, area, 102, "? help", ClickAction::OpenHelp);
+        push_footer_target(hitmap, area, 111, "q quit", ClickAction::Quit);
         let right = format!("{noisy}  ·  {filter}");
         let padding = area
             .width

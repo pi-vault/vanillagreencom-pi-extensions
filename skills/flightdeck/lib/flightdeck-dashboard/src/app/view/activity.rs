@@ -4,11 +4,12 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap};
 use ratatui::Frame;
 
+use crate::activity::format::{event_chip_for, severity_label, severity_style};
+use crate::activity::{ActivityEvent, Importance};
 use crate::app::hitmap::{ClickAction, HitMap, ScrollSource};
 use crate::app::model::Model;
 use crate::app::motion::{Effect, EffectKind, EffectTarget};
 use crate::app::theme::Palette;
-use crate::state::snapshot::{Event, EventImportance};
 
 pub fn render(
     frame: &mut Frame<'_>,
@@ -17,8 +18,8 @@ pub fn render(
     theme: &Palette,
     hitmap: &mut HitMap,
 ) {
-    let events = model.filtered_events();
-    let hidden_noise = model.hidden_noise_count();
+    let events = model.activity_events();
+    let hidden_noise = model.hidden_activity_noise_count();
     let row_count = events.len().saturating_add(usize::from(hidden_noise > 0));
     let title = title_for(row_count, model);
     let block = Block::default()
@@ -27,9 +28,9 @@ pub fn render(
         .style(theme.panel())
         .title(Span::styled(title, theme.title()));
 
-    if model.recent_events.is_empty() {
+    if model.activity.events.is_empty() {
         frame.render_widget(
-            Paragraph::new("Activity feed is empty. Daemon events appear here when the daemon writes to fd-daemon-<key>.log / fd-wake-events-<key>.log.")
+            Paragraph::new("No activity events yet. This tab reads tmp/flightdeck-activity-<session>.jsonl and archived activity sidecars when a session is complete.")
                 .block(block)
                 .style(theme.muted())
                 .alignment(Alignment::Center)
@@ -55,13 +56,14 @@ pub fn render(
     );
     let header = Row::new([
         Cell::from("Time"),
-        Cell::from("Source"),
-        Cell::from("!"),
-        Cell::from("Message"),
+        Cell::from("Session"),
+        Cell::from("Type"),
+        Cell::from("Status"),
+        Cell::from("Summary"),
     ])
     .style(theme.header());
     hitmap.push(area, ClickAction::ScrollDown(ScrollSource::Activity), 0);
-    for idx in 0..model.live_feed_row_count() {
+    for idx in 0..model.activity_row_count() {
         hitmap.push(
             Rect::new(
                 area.x.saturating_add(1),
@@ -77,9 +79,10 @@ pub fn render(
         rows,
         [
             Constraint::Length(8),
-            Constraint::Length(9),
-            Constraint::Length(2),
-            Constraint::Min(20),
+            Constraint::Length(18),
+            Constraint::Length(10),
+            Constraint::Length(8),
+            Constraint::Min(24),
         ],
     )
     .header(header)
@@ -89,19 +92,28 @@ pub fn render(
 }
 
 fn title_for(row_count: usize, model: &Model) -> String {
+    let noise = if model.ui.hide_noise {
+        format!("{} noisy hidden", model.hidden_activity_noise_count())
+    } else {
+        String::from("noisy shown")
+    };
+    let session = model
+        .activity
+        .filter
+        .session
+        .as_deref()
+        .unwrap_or("all sessions");
     format!(
-        " activity feed · {} row{} · {} ",
+        " activity · {} row{} · {} · {} · {} ",
         row_count,
         if row_count == 1 { "" } else { "s" },
-        if model.ui.hide_noise {
-            "noise hidden"
-        } else {
-            "noise shown"
-        }
+        noise,
+        session,
+        model.activity.filter.severity.label(),
     )
 }
 
-fn row_for_event<'a>(event: &Event, idx: usize, model: &Model, theme: &Palette) -> Row<'a> {
+fn row_for_event<'a>(event: &ActivityEvent, idx: usize, model: &Model, theme: &Palette) -> Row<'a> {
     let entered = is_active(model, EffectKind::ActivityRowEnter, EffectTarget::Row(idx));
     let flash = is_active(
         model,
@@ -114,23 +126,24 @@ fn row_for_event<'a>(event: &Event, idx: usize, model: &Model, theme: &Palette) 
         .with_timezone(&Local)
         .format("%H:%M:%S")
         .to_string();
-    let importance_style = match event.importance {
-        EventImportance::Low => theme.muted(),
-        EventImportance::Medium => theme.warning(),
-        EventImportance::Important => theme.error(),
-    };
-    let source_style = if flash {
-        theme.error()
-    } else {
-        theme.kind_badge(&crate::state::snapshot::SessionKind::Workflow)
+    let type_style = if flash { theme.error() } else { theme.info() };
+    let status_style = severity_style(event.severity, theme);
+    let importance = match event.importance {
+        Importance::Critical => "!!",
+        Importance::Important => "!",
+        Importance::Normal => "",
+        Importance::Noisy => "·",
     };
     Row::new(vec![
         Cell::from(time),
-        Cell::from(Span::styled(event.source.as_chip(), source_style)),
-        Cell::from(Span::styled(event.importance.dot(), importance_style)),
+        Cell::from(event.session_label().to_owned()),
+        Cell::from(Span::styled(event_chip_for(event), type_style)),
+        Cell::from(Span::styled(severity_label(event.severity), status_style)),
         Cell::from(Line::from(vec![
             Span::styled(accent.to_owned(), theme.info()),
-            Span::raw(event.message.clone()),
+            Span::styled(importance.to_owned(), status_style),
+            Span::raw(if importance.is_empty() { "" } else { " " }),
+            Span::raw(event.summary.clone()),
         ])),
     ])
     .style(if idx == model.selected_index() {
@@ -143,10 +156,11 @@ fn row_for_event<'a>(event: &Event, idx: usize, model: &Model, theme: &Palette) 
 fn row_for_folded_noise<'a>(count: usize, idx: usize, model: &Model, theme: &Palette) -> Row<'a> {
     Row::new(vec![
         Cell::from("—"),
-        Cell::from(Span::styled("NOISE", theme.muted())),
+        Cell::from("all sessions"),
+        Cell::from(Span::styled("noise", theme.muted())),
         Cell::from(Span::styled("·", theme.muted())),
         Cell::from(Span::styled(
-            format!("{count} heartbeat/noise events folded · press Ctrl+N to show."),
+            format!("{count} noisy/debug activity events hidden · press n to show."),
             theme.muted(),
         )),
     ])

@@ -12,6 +12,10 @@ pub enum Action {
     Last,
     OpenDetail,
     OpenFilter,
+    OpenActivityFilter,
+    CycleActivitySession,
+    JumpToDecisions,
+    ActivityExport,
     PromptPrune,
     PromptFocus,
     Reload,
@@ -78,8 +82,28 @@ pub const BINDINGS: &[KeyBinding] = &[
     },
     KeyBinding {
         keys: "/",
-        description: "Open filter input",
+        description: "Open text filter input",
         action: Action::OpenFilter,
+    },
+    KeyBinding {
+        keys: "f",
+        description: "Open activity filters",
+        action: Action::OpenActivityFilter,
+    },
+    KeyBinding {
+        keys: "s",
+        description: "Cycle activity session filter",
+        action: Action::CycleActivitySession,
+    },
+    KeyBinding {
+        keys: "d",
+        description: "Jump to Decisions tab",
+        action: Action::JumpToDecisions,
+    },
+    KeyBinding {
+        keys: "e",
+        description: "Export activity view",
+        action: Action::ActivityExport,
     },
     KeyBinding {
         keys: "D",
@@ -136,10 +160,16 @@ pub fn action_for(key: &KeyEvent) -> Option<Action> {
         KeyCode::End => Some(Action::Last),
         KeyCode::Enter => Some(Action::OpenDetail),
         KeyCode::Char('/') => Some(Action::OpenFilter),
+        KeyCode::Char('f') | KeyCode::Char('F') => Some(Action::OpenActivityFilter),
+        KeyCode::Char('s') => Some(Action::CycleActivitySession),
+        KeyCode::Char('d') => Some(Action::JumpToDecisions),
+        KeyCode::Char('e') => Some(Action::ActivityExport),
         KeyCode::Char('D') => Some(Action::PromptPrune),
         KeyCode::Char('g') => Some(Action::PromptFocus),
         KeyCode::Char('r') => Some(Action::Reload),
-        KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Char('n')
+            if key.modifiers.is_empty() || key.modifiers.contains(KeyModifiers::CONTROL) =>
+        {
             Some(Action::ToggleNoise)
         }
         KeyCode::Char('m') | KeyCode::Char('M') if key.modifiers.contains(KeyModifiers::ALT) => {

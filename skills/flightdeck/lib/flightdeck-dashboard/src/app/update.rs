@@ -47,7 +47,20 @@ pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
             }
             vec![Cmd::Render]
         }
-        Msg::WatcherEvent(WatcherEvent::Reload) => request_reload(model),
+        Msg::ActivityRefreshed(events) => {
+            model.set_activity_events(events);
+            model.set_selected_index(model.selected_index());
+            vec![Cmd::Render]
+        }
+        Msg::ActivityFilterChanged => {
+            model.set_selected_index(model.selected_index());
+            vec![Cmd::Render]
+        }
+        Msg::ActivityExport => export_activity(model),
+        Msg::WatcherEvent(WatcherEvent::Reload) => {
+            model.poll_activity_source();
+            request_reload(model)
+        }
         Msg::DaemonStatus(status) => {
             model.snapshot.daemon = daemon_status_chip(&status);
             vec![Cmd::Render]
@@ -113,6 +126,8 @@ fn handle_snapshot_updated(
     let pause_edge = model.snapshot.paused_for_user.is_none() && snapshot.paused_for_user.is_some();
     model.snapshot = snapshot;
     model.read_source_state = source_state;
+    model.sync_activity_source();
+    model.poll_activity_source();
     model.refresh_now();
     model.refresh_tabs_enabled();
     model.initialize_overview_selection();
@@ -197,6 +212,10 @@ fn handle_key(model: &mut Model, key: &KeyEvent) -> Vec<Cmd> {
         }
         Action::OpenDetail => open_detail(model),
         Action::OpenFilter => open_filter(model),
+        Action::OpenActivityFilter => open_activity_filter(model),
+        Action::CycleActivitySession => cycle_activity_session(model),
+        Action::JumpToDecisions => jump_to_decisions(model),
+        Action::ActivityExport => export_activity(model),
         Action::PromptPrune => prompt_prune_selected(model),
         Action::PromptFocus => prompt_focus_selected(model),
         Action::Reload => request_reload(model),
@@ -241,6 +260,7 @@ fn handle_popup_key(model: &mut Model, key: &KeyEvent) -> Vec<Cmd> {
         ModalState::DecisionDetail | ModalState::SessionDetail | ModalState::EventDetail => {
             handle_detail_popup_key(model, key)
         }
+        ModalState::ActivityFilter => handle_activity_filter_key(model, key),
         ModalState::FilterInput => handle_filter_key(model, key),
         ModalState::ConfirmAction => handle_confirm_key(model, key),
         ModalState::None => Vec::new(),
@@ -404,6 +424,8 @@ fn handle_click(model: &mut Model, action: ClickAction) -> Vec<Cmd> {
             vec![Cmd::Render]
         }
         ClickAction::OpenFilter => open_filter(model),
+        ClickAction::OpenActivityFilter => open_activity_filter(model),
+        ClickAction::ActivityExport => export_activity(model),
         ClickAction::ClearFilter => {
             model.feed_filter.clear();
             model.ui.filter_open = false;
@@ -446,7 +468,7 @@ fn open_detail(model: &mut Model) -> Vec<Cmd> {
     match model.current_tab {
         Tab::Overview => model.modal = ModalState::SessionDetail,
         Tab::Decisions if model.decision_count() > 0 => model.modal = ModalState::DecisionDetail,
-        Tab::LiveFeed if model.live_feed_row_count() > 0 => model.modal = ModalState::EventDetail,
+        Tab::Activity if model.activity_row_count() > 0 => model.modal = ModalState::EventDetail,
         _ => {
             return vec![Cmd::LogAction(format!(
                 "detail requested for tab={} row={}",
@@ -586,6 +608,64 @@ fn open_filter(model: &mut Model) -> Vec<Cmd> {
     ]
 }
 
+fn open_activity_filter(model: &mut Model) -> Vec<Cmd> {
+    if model.current_tab != Tab::Activity {
+        return open_filter(model);
+    }
+    model.popup_scroll = 0;
+    model.modal = ModalState::ActivityFilter;
+    vec![
+        Cmd::LogAction(String::from("activity filter opened")),
+        Cmd::Render,
+    ]
+}
+
+fn cycle_activity_session(model: &mut Model) -> Vec<Cmd> {
+    if model.current_tab != Tab::Activity {
+        return Vec::new();
+    }
+    model.activity.cycle_session_filter();
+    model.set_selected_index(model.selected_index());
+    vec![Cmd::Render]
+}
+
+fn jump_to_decisions(model: &mut Model) -> Vec<Cmd> {
+    model.current_tab = Tab::Decisions;
+    model.set_selected_index(0);
+    vec![Cmd::Render]
+}
+
+fn export_activity(model: &mut Model) -> Vec<Cmd> {
+    if !matches!(model.current_tab, Tab::Activity | Tab::Decisions) {
+        return Vec::new();
+    }
+    let events = if model.current_tab == Tab::Decisions {
+        model
+            .activity
+            .decision_events()
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>()
+    } else {
+        model
+            .activity_events()
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let session = model.snapshot.session_id.clone();
+    let state_path = model.snapshot.master_state_path.clone();
+    vec![Cmd::Spawn(
+        async move {
+            match actions::export_activity_markdown(&session, &state_path, events).await {
+                Ok(message) => Msg::ActionCompleted(Ok(message)),
+                Err(error) => Msg::ActionCompleted(Err(error)),
+            }
+        }
+        .boxed(),
+    )]
+}
+
 fn close_overlay(model: &mut Model) {
     model.show_help = false;
     model.modal = ModalState::None;
@@ -598,12 +678,66 @@ fn close_overlay(model: &mut Model) {
 fn handle_scroll(model: &mut Model, source: ScrollSource, delta: isize) {
     match (source, model.current_tab) {
         (ScrollSource::Sessions | ScrollSource::DetailRail, Tab::Overview)
-        | (ScrollSource::Activity, Tab::LiveFeed)
+        | (ScrollSource::Activity, Tab::Activity)
         | (ScrollSource::Decisions, Tab::Decisions)
         | (ScrollSource::Conversations, Tab::Conversations)
         | (ScrollSource::Costs, Tab::Costs) => move_selection(model, delta),
         _ => {}
     }
+}
+
+fn handle_activity_filter_key(model: &mut Model, key: &KeyEvent) -> Vec<Cmd> {
+    let filter_rows = crate::app::model::ACTIVITY_TYPE_CHIPS.len() + 2;
+    match key.code {
+        KeyCode::Esc => {
+            close_overlay(model);
+            vec![Cmd::Render]
+        }
+        KeyCode::Enter => {
+            close_overlay(model);
+            vec![Cmd::Render]
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            model.activity.filter_cursor = (model.activity.filter_cursor + 1) % filter_rows;
+            vec![Cmd::Render]
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            model.activity.filter_cursor =
+                (model.activity.filter_cursor + filter_rows - 1) % filter_rows;
+            vec![Cmd::Render]
+        }
+        KeyCode::Char(' ') => {
+            toggle_activity_filter_cursor(model);
+            vec![Cmd::Render]
+        }
+        KeyCode::Char('n') => {
+            model.ui.hide_noise = !model.ui.hide_noise;
+            vec![Cmd::Render]
+        }
+        KeyCode::Char('s') => cycle_activity_session(model),
+        KeyCode::Char('c') => {
+            model.activity.filter.reset();
+            model.feed_filter.clear();
+            model.set_selected_index(model.selected_index());
+            vec![Cmd::Render]
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn toggle_activity_filter_cursor(model: &mut Model) {
+    let type_count = crate::app::model::ACTIVITY_TYPE_CHIPS.len();
+    match model.activity.filter_cursor {
+        idx if idx < type_count => {
+            let chip = crate::app::model::ACTIVITY_TYPE_CHIPS[idx];
+            model.activity.filter.toggle_type(chip);
+        }
+        idx if idx == type_count => {
+            model.activity.filter.severity = model.activity.filter.severity.next();
+        }
+        _ => model.activity.cycle_session_filter(),
+    }
+    model.set_selected_index(model.selected_index());
 }
 
 fn handle_filter_key(model: &mut Model, key: &KeyEvent) -> Vec<Cmd> {

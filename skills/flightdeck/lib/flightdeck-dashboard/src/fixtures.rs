@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
+use crate::activity::ActivityEvent;
 use crate::state::snapshot::DashboardSnapshot;
 use crate::state::tracked_entries::{self, StateError};
 
@@ -14,6 +15,7 @@ const OBSERVER: &str = include_str!("fixtures/observer.json");
 const CONVERSATIONS: &str = include_str!("fixtures/conversations.json");
 const NO_ISSUE: &str = include_str!("fixtures/no-issue.json");
 const DECISIONS: &str = include_str!("fixtures/decisions.json");
+const ACTIVITY_MIXED: &str = include_str!("fixtures/activity-mixed.jsonl");
 
 #[derive(Debug, Error)]
 pub enum FixtureError {
@@ -77,4 +79,16 @@ pub fn load_demo_snapshot(
 ) -> Result<DashboardSnapshot, FixtureError> {
     let source = fixture_source(name)?;
     tracked_entries::snapshot_from_str(source, now).map_err(FixtureError::State)
+}
+
+pub fn load_demo_activity(name: &str) -> Result<Vec<ActivityEvent>, FixtureError> {
+    let jsonl = match canonical_name(name)? {
+        "mixed" => ACTIVITY_MIXED,
+        _ => "",
+    };
+    Ok(jsonl
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .filter_map(|line| serde_json::from_str::<ActivityEvent>(line).ok())
+        .collect())
 }

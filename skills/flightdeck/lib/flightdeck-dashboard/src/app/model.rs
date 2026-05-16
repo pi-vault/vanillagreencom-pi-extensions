@@ -1,5 +1,5 @@
-use std::collections::{HashMap, VecDeque};
-use std::path::Path;
+use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use ratatui::style::Style;
@@ -8,6 +8,9 @@ use regex::Regex;
 use chrono::{DateTime, Utc};
 
 use crate::actions::WriteAction;
+use crate::activity::{
+    format as activity_format, ActivityEvent, Importance, JsonlActivitySource, Severity,
+};
 use crate::app::command::SnapshotSource;
 use crate::app::motion::{EffectInstance, MotionLevel};
 use crate::app::reload::ReloadCoalescer;
@@ -16,6 +19,7 @@ use crate::cost::{CostMetrics, SessionTotals};
 use crate::state::snapshot::{
     DashboardSnapshot, Event, EventImportance, SessionKind, SessionState, TrackedSession,
 };
+use crate::state::tracked_entries;
 use crate::tmux::panes::PaneSnapshot;
 
 pub type Clock = fn() -> DateTime<Utc>;
@@ -25,7 +29,7 @@ pub const RECENT_EVENTS_CAP: usize = 500;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Tab {
     Overview,
-    LiveFeed,
+    Activity,
     Conversations,
     Merges,
     Decisions,
@@ -36,7 +40,7 @@ pub enum Tab {
 impl Tab {
     pub const ALL: [Self; 7] = [
         Self::Overview,
-        Self::LiveFeed,
+        Self::Activity,
         Self::Conversations,
         Self::Merges,
         Self::Decisions,
@@ -48,7 +52,7 @@ impl Tab {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Overview => "Overview",
-            Self::LiveFeed => "Live feed",
+            Self::Activity => "Activity",
             Self::Conversations => "Conversations",
             Self::Merges => "Conflicts & merges",
             Self::Decisions => "Decisions",
@@ -147,11 +151,254 @@ impl FeedFilter {
             regex.is_match(&event.message) || regex.is_match(event.source.as_chip())
         })
     }
+
+    #[must_use]
+    pub fn matches_activity(&self, event: &ActivityEvent) -> bool {
+        self.regex
+            .as_ref()
+            .map_or(true, |regex| regex.is_match(&event.searchable_text()))
+    }
 }
 
 impl Default for FeedFilter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+pub const ACTIVITY_TYPE_CHIPS: [&str; 8] = [
+    "agent", "bg", "question", "decision", "pr", "linear", "daemon", "session",
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActivitySeverityFilter {
+    All,
+    Exact(Severity),
+}
+
+impl ActivitySeverityFilter {
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::All => "all severities",
+            Self::Exact(severity) => severity.as_str(),
+        }
+    }
+
+    #[must_use]
+    pub fn matches(self, severity: Severity) -> bool {
+        match self {
+            Self::All => true,
+            Self::Exact(expected) => expected == severity,
+        }
+    }
+
+    #[must_use]
+    pub fn next(self) -> Self {
+        match self {
+            Self::All => Self::Exact(Severity::Info),
+            Self::Exact(Severity::Info) => Self::Exact(Severity::Success),
+            Self::Exact(Severity::Success) => Self::Exact(Severity::Warning),
+            Self::Exact(Severity::Warning) => Self::Exact(Severity::Error),
+            Self::Exact(Severity::Error) => Self::Exact(Severity::Debug),
+            Self::Exact(Severity::Debug) => Self::All,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ActivityFilter {
+    pub visible_types: BTreeSet<String>,
+    pub severity: ActivitySeverityFilter,
+    pub session: Option<String>,
+}
+
+impl ActivityFilter {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            visible_types: ACTIVITY_TYPE_CHIPS.into_iter().map(str::to_owned).collect(),
+            severity: ActivitySeverityFilter::All,
+            session: None,
+        }
+    }
+
+    #[must_use]
+    pub fn matches(
+        &self,
+        event: &ActivityEvent,
+        hide_noise: bool,
+        text_filter: &FeedFilter,
+    ) -> bool {
+        if hide_noise
+            && (event.noisy
+                || event.importance == Importance::Noisy
+                || event.severity == Severity::Debug)
+        {
+            return false;
+        }
+        let chip = activity_format::event_chip_for(event);
+        self.visible_types.contains(chip)
+            && self.severity.matches(event.severity)
+            && self
+                .session
+                .as_deref()
+                .map_or(true, |session| event.session_label() == session)
+            && text_filter.matches_activity(event)
+    }
+
+    pub fn toggle_type(&mut self, chip: &str) {
+        if !ACTIVITY_TYPE_CHIPS.contains(&chip) {
+            return;
+        }
+        if self.visible_types.contains(chip) {
+            self.visible_types.remove(chip);
+        } else {
+            self.visible_types.insert(chip.to_owned());
+        }
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+impl Default for ActivityFilter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ActivityView {
+    pub events: Vec<ActivityEvent>,
+    pub filter: ActivityFilter,
+    pub filter_cursor: usize,
+    pub malformed_lines: u64,
+    source: Option<JsonlActivitySource>,
+}
+
+impl ActivityView {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::with_default_filter()
+    }
+
+    pub fn with_default_filter() -> Self {
+        Self {
+            events: Vec::new(),
+            filter: ActivityFilter::new(),
+            filter_cursor: 0,
+            malformed_lines: 0,
+            source: None,
+        }
+    }
+
+    pub fn set_source(&mut self, source: Option<JsonlActivitySource>) {
+        self.source = source;
+        self.events.clear();
+        self.malformed_lines = 0;
+    }
+
+    pub fn set_events(&mut self, events: Vec<ActivityEvent>) {
+        self.events = events;
+    }
+
+    pub fn poll_source(&mut self) -> Vec<ActivityEvent> {
+        let Some(source) = &mut self.source else {
+            return self.events.clone();
+        };
+        let events = crate::activity::ActivitySource::poll(source);
+        self.malformed_lines = source.malformed_lines();
+        self.events.clone_from(&events);
+        events
+    }
+
+    #[must_use]
+    pub fn source_matches(&self, state_dir: &Path, session_name: &str) -> bool {
+        self.source.as_ref().is_some_and(|source| {
+            source.state_dir() == state_dir && source.session_name() == session_name
+        })
+    }
+
+    #[must_use]
+    pub fn filtered_events<'a>(
+        &'a self,
+        hide_noise: bool,
+        text_filter: &'a FeedFilter,
+    ) -> Vec<&'a ActivityEvent> {
+        self.events
+            .iter()
+            .rev()
+            .filter(|event| self.filter.matches(event, hide_noise, text_filter))
+            .collect()
+    }
+
+    #[must_use]
+    pub fn hidden_noise_count(&self, text_filter: &FeedFilter) -> usize {
+        self.events
+            .iter()
+            .filter(|event| {
+                event.noisy
+                    || event.importance == Importance::Noisy
+                    || event.severity == Severity::Debug
+            })
+            .filter(|event| self.filter.matches(event, false, text_filter))
+            .count()
+    }
+
+    #[must_use]
+    pub fn row_count(&self, hide_noise: bool, text_filter: &FeedFilter) -> usize {
+        self.filtered_events(hide_noise, text_filter)
+            .len()
+            .saturating_add(usize::from(
+                hide_noise && self.hidden_noise_count(text_filter) > 0,
+            ))
+    }
+
+    #[must_use]
+    pub fn session_options(&self) -> Vec<String> {
+        let mut sessions = self
+            .events
+            .iter()
+            .map(|event| event.session_label().to_owned())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        sessions.retain(|session| session != "—");
+        sessions
+    }
+
+    pub fn cycle_session_filter(&mut self) {
+        let sessions = self.session_options();
+        if sessions.is_empty() {
+            self.filter.session = None;
+            return;
+        }
+        self.filter.session = match self.filter.session.as_deref() {
+            None => sessions.first().cloned(),
+            Some(current) => sessions
+                .iter()
+                .position(|session| session == current)
+                .and_then(|idx| sessions.get(idx + 1).cloned()),
+        };
+    }
+
+    #[must_use]
+    pub fn decision_events(&self) -> Vec<&ActivityEvent> {
+        let mut events = self
+            .events
+            .iter()
+            .filter(|event| event.event_type.as_str() == "decision.recorded")
+            .collect::<Vec<_>>();
+        events.sort_by(|left, right| right.ts.cmp(&left.ts));
+        events
+    }
+}
+
+impl Default for ActivityView {
+    fn default() -> Self {
+        Self::with_default_filter()
     }
 }
 
@@ -188,6 +435,7 @@ pub enum ModalState {
     DecisionDetail,
     SessionDetail,
     EventDetail,
+    ActivityFilter,
     FilterInput,
     ConfirmAction,
 }
@@ -215,6 +463,7 @@ pub struct Model {
     pub snapshot: DashboardSnapshot,
     pub snapshot_source: SnapshotSource,
     pub read_source_state: ReadSourceState,
+    pub activity: ActivityView,
     pub recent_events: VecDeque<Event>,
     pub snapshot_diff_drops: u64,
     pub reload_coalescer: ReloadCoalescer,
@@ -259,12 +508,22 @@ impl Model {
         }
         let read_source_state = ReadSourceState::from_snapshot(&snapshot);
         let recent_events = snapshot.recent_events.clone();
+        let mut activity = ActivityView::new();
+        if let SnapshotSource::Demo(name) = &snapshot_source {
+            if let Ok(events) = crate::fixtures::load_demo_activity(name) {
+                activity.set_events(events);
+            }
+        } else {
+            activity.set_source(activity_source_for(&snapshot, &snapshot_source));
+            activity.poll_source();
+        }
         let mut model = Self {
             current_tab: Tab::Overview,
             tabs_enabled,
             snapshot,
             snapshot_source,
             read_source_state,
+            activity,
             recent_events,
             snapshot_diff_drops: 0,
             reload_coalescer: ReloadCoalescer::new(),
@@ -355,7 +614,7 @@ impl Model {
     pub fn max_selection_index(&self) -> usize {
         let len = match self.current_tab {
             Tab::Overview => self.snapshot.sessions.len(),
-            Tab::LiveFeed => self.live_feed_row_count(),
+            Tab::Activity => self.activity_row_count(),
             Tab::Conversations => self.snapshot.conversations.len(),
             Tab::Merges => self
                 .snapshot
@@ -427,6 +686,10 @@ impl Model {
 
     #[must_use]
     pub fn decision_count(&self) -> usize {
+        let activity_decisions = self.activity.decision_events().len();
+        if activity_decisions > 0 {
+            return activity_decisions;
+        }
         self.snapshot
             .sessions
             .iter()
@@ -479,10 +742,56 @@ impl Model {
     }
 
     #[must_use]
-    pub fn live_feed_row_count(&self) -> usize {
-        self.filtered_events()
-            .len()
-            .saturating_add(usize::from(self.hidden_noise_count() > 0))
+    pub fn activity_events(&self) -> Vec<&ActivityEvent> {
+        self.activity
+            .filtered_events(self.ui.hide_noise, &self.feed_filter)
+    }
+
+    #[must_use]
+    pub fn hidden_activity_noise_count(&self) -> usize {
+        if !self.ui.hide_noise {
+            return 0;
+        }
+        self.activity.hidden_noise_count(&self.feed_filter)
+    }
+
+    #[must_use]
+    pub fn activity_row_count(&self) -> usize {
+        self.activity
+            .row_count(self.ui.hide_noise, &self.feed_filter)
+    }
+
+    pub fn set_activity_events(&mut self, events: Vec<ActivityEvent>) {
+        self.activity.set_events(events);
+    }
+
+    pub fn push_activity_event(&mut self, event: ActivityEvent) {
+        let mut events = self.activity.events.clone();
+        events.push(event);
+        if events.len() > crate::activity::MAX_EVENTS_IN_MEMORY {
+            let drop_count = events
+                .len()
+                .saturating_sub(crate::activity::MAX_EVENTS_IN_MEMORY);
+            events.drain(..drop_count);
+        }
+        self.activity.set_events(events);
+    }
+
+    pub fn poll_activity_source(&mut self) -> Vec<ActivityEvent> {
+        self.activity.poll_source()
+    }
+
+    pub fn sync_activity_source(&mut self) {
+        let Some(source) = activity_source_for(&self.snapshot, &self.snapshot_source) else {
+            self.activity.set_source(None);
+            return;
+        };
+        if !self
+            .activity
+            .source_matches(source.state_dir(), source.session_name())
+        {
+            self.activity.set_source(Some(source));
+        }
     }
 
     #[must_use]
@@ -543,6 +852,28 @@ fn default_overview_selection(snapshot: &DashboardSnapshot) -> Option<usize> {
             })
         })
         .or(Some(0))
+}
+
+fn activity_source_for(
+    snapshot: &DashboardSnapshot,
+    source: &SnapshotSource,
+) -> Option<JsonlActivitySource> {
+    let (state_dir, session_name): (PathBuf, String) = match source {
+        SnapshotSource::Demo(_) | SnapshotSource::Socket(_) => return None,
+        SnapshotSource::File(path) => {
+            let state_dir = path.parent().map(Path::to_path_buf)?;
+            let session = if snapshot.session_id.is_empty() {
+                tracked_entries::session_id_from_state_path(path)
+            } else {
+                snapshot.session_id.clone()
+            };
+            (state_dir, session)
+        }
+        SnapshotSource::Session(resolution) => {
+            (resolution.state_dir.clone(), resolution.session.clone())
+        }
+    };
+    Some(JsonlActivitySource::new(state_dir, session_name))
 }
 
 fn enabled_tabs_for(snapshot: &DashboardSnapshot) -> Vec<Tab> {
