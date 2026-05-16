@@ -6,7 +6,12 @@ use ratatui::Frame;
 use crate::app::hitmap::{ClickAction, HitMap, ScrollSource};
 use crate::app::model::{Model, Tab};
 use crate::app::theme::Palette;
+use crate::app::view::overview::truncate_end;
 use crate::cost::{format_compact, format_cost, format_summary, format_tokens, HarnessTotal};
+
+const SESSION_COL_WIDTH: u16 = 14;
+const HARNESS_COL_WIDTH: u16 = 10;
+const COST_COL_WIDTH: u16 = 12;
 
 pub fn render(
     frame: &mut Frame<'_>,
@@ -84,13 +89,16 @@ pub fn render(
             } else {
                 theme.frame()
             };
+            let id_cell = pad_or_truncate(&session.id, SESSION_COL_WIDTH);
+            let harness_cell = pad_or_truncate(
+                session.harness.as_deref().unwrap_or("unknown"),
+                HARNESS_COL_WIDTH,
+            );
+            let cost_cell = pad_or_truncate(&cost, COST_COL_WIDTH);
             lines.push(Line::from(vec![
-                Span::styled(format!("  {:<12}", session.id), style),
-                Span::styled(
-                    format!("{:<10}", session.harness.as_deref().unwrap_or("unknown")),
-                    style,
-                ),
-                Span::styled(format!("{:<12}", cost), style),
+                Span::styled(format!("  {id_cell}"), style),
+                Span::styled(harness_cell, style),
+                Span::styled(cost_cell, style),
                 Span::styled(usage, style),
             ]));
         }
@@ -135,4 +143,13 @@ fn harness_line(harness: &str, total: &HarnessTotal) -> String {
         if total.sessions == 1 { " " } else { "s" },
         format_summary(&total.metrics)
     )
+}
+
+fn pad_or_truncate(value: &str, width: u16) -> String {
+    let truncated = truncate_end(value, width);
+    let pad = (width as usize).saturating_sub(truncated.chars().count());
+    let mut out = truncated;
+    out.extend(std::iter::repeat(' ').take(pad));
+    out.push(' ');
+    out
 }

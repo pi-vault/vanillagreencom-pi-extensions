@@ -16,6 +16,33 @@ use crate::state::tracked_entries::PRE_PURGE_BANNER;
 const RIGHT_RAIL_MIN_WIDTH: u16 = 100;
 const SINGLE_COLUMN_WIDTH: u16 = 80;
 
+const SESSIONS_TABLE_CONSTRAINTS: [Constraint; 9] = [
+    Constraint::Length(7),
+    Constraint::Length(16),
+    Constraint::Length(10),
+    Constraint::Percentage(24),
+    Constraint::Length(14),
+    Constraint::Percentage(18),
+    Constraint::Length(8),
+    Constraint::Percentage(20),
+    Constraint::Length(12),
+];
+const SESSIONS_TABLE_SPACING: u16 = 1;
+
+fn sessions_column_widths(area: Rect) -> [u16; 9] {
+    let inner_width = area.width.saturating_sub(2);
+    let total_spacing = SESSIONS_TABLE_SPACING
+        .saturating_mul((SESSIONS_TABLE_CONSTRAINTS.len() as u16).saturating_sub(1));
+    let cells_width = inner_width.saturating_sub(total_spacing);
+    let layout =
+        Layout::horizontal(SESSIONS_TABLE_CONSTRAINTS).split(Rect::new(0, 0, cells_width, 1));
+    let mut widths = [0u16; 9];
+    for (idx, rect) in layout.iter().enumerate().take(9) {
+        widths[idx] = rect.width;
+    }
+    widths
+}
+
 pub fn render(
     frame: &mut Frame<'_>,
     area: Rect,
@@ -309,6 +336,7 @@ fn render_session_table(
     ])
     .style(theme.header());
 
+    let widths = sessions_column_widths(area);
     let rows = model
         .snapshot
         .sessions
@@ -327,16 +355,22 @@ fn render_session_table(
                     Span::styled(fx::spinner(model, session), theme.info()),
                 ])),
                 Cell::from(Span::styled(
-                    state_label_for(&session.state),
+                    truncate_end(state_label_for(&session.state), widths[1]),
                     theme.state(&session.state),
                 )),
-                Cell::from(session.harness.as_deref().unwrap_or("—")),
-                title_cell(model, session, theme),
-                Cell::from(cost_label(model, session)),
-                Cell::from(issue_label(session)),
-                Cell::from(age_label(session.spawned_at, model.now)),
-                Cell::from(last_decision(session)),
-                Cell::from(activity_label(session, model.now)),
+                Cell::from(truncate_end(
+                    session.harness.as_deref().unwrap_or("—"),
+                    widths[2],
+                )),
+                title_cell(model, session, theme, widths[3]),
+                Cell::from(truncate_end(&cost_label(model, session), widths[4])),
+                Cell::from(truncate_start(&issue_label(session), widths[5])),
+                Cell::from(truncate_end(
+                    &age_label(session.spawned_at, model.now),
+                    widths[6],
+                )),
+                Cell::from(truncate_end(&last_decision(session), widths[7])),
+                Cell::from(truncate_end(&activity_label(session, model.now), widths[8])),
             ])
             .style(row_style)
         })
@@ -363,23 +397,10 @@ fn render_session_table(
             0,
         );
     }
-    let table = Table::new(
-        rows,
-        [
-            Constraint::Length(7),
-            Constraint::Length(16),
-            Constraint::Length(10),
-            Constraint::Percentage(24),
-            Constraint::Length(14),
-            Constraint::Percentage(18),
-            Constraint::Length(8),
-            Constraint::Percentage(20),
-            Constraint::Length(12),
-        ],
-    )
-    .header(header)
-    .block(block)
-    .column_spacing(1);
+    let table = Table::new(rows, SESSIONS_TABLE_CONSTRAINTS)
+        .header(header)
+        .block(block)
+        .column_spacing(SESSIONS_TABLE_SPACING);
     frame.render_widget(table, area);
 }
 
@@ -569,15 +590,26 @@ fn ordered_state_counts(model: &Model) -> Vec<(SessionState, usize)> {
     rows
 }
 
-fn title_cell(model: &Model, session: &TrackedSession, theme: &Palette) -> Cell<'static> {
+fn title_cell(
+    model: &Model,
+    session: &TrackedSession,
+    theme: &Palette,
+    max_width: u16,
+) -> Cell<'static> {
     if model.session_is_stale(session) {
-        return Cell::from(Line::from(vec![
-            Span::raw(session.title.clone()),
-            Span::raw(" "),
-            Span::styled("(stale)", theme.muted()),
-        ]));
+        const STALE_SUFFIX: &str = " (stale)";
+        let suffix_chars = STALE_SUFFIX.chars().count() as u16;
+        if max_width > suffix_chars {
+            let title_width = max_width.saturating_sub(suffix_chars);
+            return Cell::from(Line::from(vec![
+                Span::raw(truncate_end(&session.title, title_width)),
+                Span::raw(" "),
+                Span::styled("(stale)", theme.muted()),
+            ]));
+        }
+        return Cell::from(truncate_end(&session.title, max_width));
     }
-    Cell::from(session.title.clone())
+    Cell::from(truncate_end(&session.title, max_width))
 }
 
 fn cost_label(model: &Model, session: &TrackedSession) -> String {
@@ -687,6 +719,42 @@ fn truncate(value: &str, max_chars: usize) -> String {
     } else {
         truncated
     }
+}
+
+pub(crate) fn truncate_end(value: &str, max_width: u16) -> String {
+    let max = max_width as usize;
+    if max == 0 {
+        return String::new();
+    }
+    let count = value.chars().count();
+    if count <= max {
+        return value.to_owned();
+    }
+    if max == 1 {
+        return String::from("…");
+    }
+    let mut out: String = value.chars().take(max - 1).collect();
+    out.push('…');
+    out
+}
+
+pub(crate) fn truncate_start(value: &str, max_width: u16) -> String {
+    let max = max_width as usize;
+    if max == 0 {
+        return String::new();
+    }
+    let count = value.chars().count();
+    if count <= max {
+        return value.to_owned();
+    }
+    if max == 1 {
+        return String::from("…");
+    }
+    let chars: Vec<char> = value.chars().collect();
+    let start = chars.len().saturating_sub(max - 1);
+    let mut out = String::from("…");
+    out.extend(chars[start..].iter());
+    out
 }
 
 fn age_label(value: Option<DateTime<Utc>>, now: DateTime<Utc>) -> String {

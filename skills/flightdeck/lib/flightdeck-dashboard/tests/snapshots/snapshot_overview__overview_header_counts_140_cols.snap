@@ -10,7 +10,7 @@ expression: rendered
 "└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘"
 "┌ left rail ───────────────┐┌ sessions (3 tracked) ────────────────────────────────────────────┐┌ detail ──────────────────────────────────┐"
 "│Status                    ││Kind    State      Harness     Cost         Age       Activity    ││Fix dashboard state reader                │"
-"│▸ Needs input        1    ││ISS     Needs inpu opencode    —            1h35m     4m          ││VST-101  ·  Issue  ·  Needs input         │"
+"│▸ Needs input        1    ││ISS     Needs inp… opencode    —            1h35m     4m          ││VST-101  ·  Issue  ·  Needs input         │"
 "│Submitting         1      ││WF      Submitting codex       —            58m       4m          ││substate: cleanup prompt                  │"
 "│Running            1      ││AH      Running    pi          —            2h10m     4m          ││                                          │"
 "│                          ││                                                                  ││Where                                     │"
