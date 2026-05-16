@@ -67,6 +67,11 @@ import {
 	shouldEmitBellWake,
 	shouldEmitBgTaskExitWake,
 } from "./wake-filter.ts";
+import {
+	recoveryHintPath,
+	resolveMasterPidSafe,
+	writeRecoveryHint,
+} from "./recovery-hint.ts";
 import { OC_LAST_ASSISTANT_JQ } from "../paths/oc.ts";
 import { CC_LAST_ASSISTANT_JQ } from "../paths/cc.ts";
 import { PI_LAST_ASSISTANT_JQ } from "../paths/pi.ts";
@@ -499,6 +504,22 @@ export async function runLoop(opts: RunLoopOpts): Promise<void> {
 		if (!paneCache.alive(masterId)) {
 			log("master-gone", `master ${masterId} gone; exiting`);
 			setDaemonExitReason("master-gone");
+			// vstack#70: write a structured recovery hint before exit so
+			// operators have a clear breadcrumb. Failure must not block exit.
+			try {
+				const hint = writeRecoveryHint({
+					sessionId: opts.sessionId,
+					sessionKey: opts.sessionKey,
+					masterPaneId: masterId,
+					masterPid: resolveMasterPidSafe(masterId),
+					stateDir: opts.stateDir,
+					eventsFile,
+				});
+				if (hint.ok) log("exit", `master-gone; recovery hint at ${hint.path}`);
+				else log("exit-warn", `master-gone; recovery hint write failed (${hint.error}); expected at ${hint.path}`);
+			} catch (err) {
+				log("exit-warn", `master-gone; recovery hint write threw: ${(err as Error)?.message ?? err}; expected at ${recoveryHintPath(opts.stateDir, opts.sessionKey)}`);
+			}
 			break;
 		}
 
