@@ -4,12 +4,13 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap};
 use ratatui::Frame;
 
-use crate::activity::format::{event_chip_for, severity_label, severity_style};
+use crate::activity::format::{event_chip_for, severity_label};
 use crate::app::hitmap::{ClickAction, HitMap};
 use crate::app::keymap::BINDINGS;
 use crate::app::labels::{kind_label_for, state_label_for};
 use crate::app::model::{Model, ACTIVITY_TYPE_CHIPS};
 use crate::app::theme::{Palette, Theme};
+use crate::app::view::activity::severity_style;
 use crate::app::view::popup::{render_popup, PopupChrome, PopupHeight, PopupWidth};
 
 pub fn render_help(

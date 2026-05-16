@@ -8,3 +8,5 @@ mod incremental;
 mod malformed;
 #[path = "activity/parse.rs"]
 mod parse;
+#[path = "activity/rotation.rs"]
+mod rotation;

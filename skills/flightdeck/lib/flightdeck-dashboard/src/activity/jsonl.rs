@@ -1,9 +1,12 @@
 use std::collections::VecDeque;
-use std::fs::{self, File};
+use std::fs::{self, File, Metadata};
 use std::io::{Read, Seek, SeekFrom};
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use tracing::warn;
+
+use crate::state::archive_order;
 
 use super::{ActivityEvent, ActivitySource};
 
@@ -13,11 +16,27 @@ const ACTIVITY_PREFIX: &str = "flightdeck-activity-";
 const LIVE_SUFFIX: &str = ".jsonl";
 const ARCHIVE_SUFFIX: &str = ".jsonl.archive";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FileIdentity {
+    dev: u64,
+    ino: u64,
+}
+
+impl FileIdentity {
+    fn from_metadata(metadata: &Metadata) -> Self {
+        Self {
+            dev: metadata.dev(),
+            ino: metadata.ino(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct JsonlActivitySource {
     state_dir: PathBuf,
     session_name: String,
     active_path: Option<PathBuf>,
+    active_file_id: Option<FileIdentity>,
     offset: u64,
     pending: String,
     events: VecDeque<ActivityEvent>,
@@ -32,6 +51,7 @@ impl JsonlActivitySource {
             state_dir: state_dir.into(),
             session_name: session_name.into(),
             active_path: None,
+            active_file_id: None,
             offset: 0,
             pending: String::new(),
             events: VecDeque::with_capacity(MAX_EVENTS_IN_MEMORY.min(1024)),
@@ -82,19 +102,22 @@ impl JsonlActivitySource {
 
     fn poll_inner(&mut self) -> Vec<ActivityEvent> {
         let Some(path) = self.resolve_path() else {
-            self.reset_active(None);
+            self.reset_active(None, None);
             return Vec::new();
         };
-        if self.active_path.as_deref() != Some(path.as_path()) {
-            self.reset_active(Some(path.clone()));
-        }
-        match fs::metadata(&path) {
-            Ok(metadata) if metadata.len() < self.offset => self.reset_active(Some(path.clone())),
-            Ok(_) => {}
+        let metadata = match fs::metadata(&path) {
+            Ok(metadata) => metadata,
             Err(error) => {
                 warn!(path = %path.display(), %error, "activity source metadata failed");
                 return self.events();
             }
+        };
+        let file_id = FileIdentity::from_metadata(&metadata);
+        if self.active_path.as_deref() != Some(path.as_path())
+            || self.active_file_id != Some(file_id)
+            || metadata.len() < self.offset
+        {
+            self.reset_active(Some(path.clone()), Some(file_id));
         }
         if let Err(error) = self.read_new_records(&path) {
             warn!(path = %path.display(), %error, "activity source read failed");
@@ -102,8 +125,9 @@ impl JsonlActivitySource {
         self.events()
     }
 
-    fn reset_active(&mut self, path: Option<PathBuf>) {
+    fn reset_active(&mut self, path: Option<PathBuf>, file_id: Option<FileIdentity>) {
         self.active_path = path;
+        self.active_file_id = file_id;
         self.offset = 0;
         self.pending.clear();
         self.events.clear();
@@ -207,18 +231,6 @@ pub fn archive_candidates(state_dir: &Path, session_name: &str) -> Vec<PathBuf> 
                 .is_some_and(|name| name.starts_with(&prefix) && name.ends_with(ARCHIVE_SUFFIX))
         })
         .collect::<Vec<_>>();
-    candidates.sort_by_key(|path| std::cmp::Reverse(archive_sort_key(path)));
+    candidates.sort_by(|left, right| archive_order::cmp_archive_paths_desc(left, right));
     candidates
-}
-
-fn archive_sort_key(path: &Path) -> (std::time::SystemTime, String) {
-    let modified = fs::metadata(path)
-        .and_then(|metadata| metadata.modified())
-        .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-    let name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default()
-        .to_owned();
-    (modified, name)
 }

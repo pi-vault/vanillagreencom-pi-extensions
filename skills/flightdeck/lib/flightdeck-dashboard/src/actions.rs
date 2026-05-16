@@ -31,22 +31,38 @@ pub async fn export_activity_markdown(
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("tmp"));
-    tokio::fs::create_dir_all(&dir)
-        .await
-        .map_err(|error| error.to_string())?;
+    tokio::fs::create_dir_all(&dir).await.map_err(|error| {
+        format!(
+            "failed to create activity export directory {}: {error}",
+            dir.display()
+        )
+    })?;
     let ts = Utc::now().format("%Y-%m-%dT%H%M%SZ");
     let filename = format!(
         "flightdeck-activity-view-{}-{ts}.md",
         sanitize_filename(session_id)
     );
     let path = dir.join(filename);
-    let mut file = tokio::fs::File::create(&path)
-        .await
-        .map_err(|error| error.to_string())?;
+    let mut file = tokio::fs::File::create(&path).await.map_err(|error| {
+        format!(
+            "failed to create activity export {}: {error}",
+            path.display()
+        )
+    })?;
     file.write_all(format_activity_markdown(session_id, &events).as_bytes())
         .await
-        .map_err(|error| error.to_string())?;
-    file.flush().await.map_err(|error| error.to_string())?;
+        .map_err(|error| {
+            format!(
+                "failed to write activity export {}: {error}",
+                path.display()
+            )
+        })?;
+    file.flush().await.map_err(|error| {
+        format!(
+            "failed to flush activity export {}: {error}",
+            path.display()
+        )
+    })?;
 
     if std::env::var_os("TMUX").is_some() {
         if let Some(editor) = std::env::var_os("VISUAL").or_else(|| std::env::var_os("EDITOR")) {
@@ -59,18 +75,22 @@ pub async fn export_activity_markdown(
             let output = Command::new("tmux")
                 .args(["new-window", "-n", "fd-activity", &command])
                 .output()
-                .await
-                .map_err(|error| error.to_string())?;
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-                return Err(if stderr.is_empty() {
-                    format!(
-                        "activity exported to {} but tmux editor launch failed",
+                .await;
+            let output = match output {
+                Ok(output) => output,
+                Err(error) => {
+                    return Ok(format!(
+                        "Activity exported: {} (editor launch failed: {error})",
                         path.display()
-                    )
-                } else {
-                    stderr
-                });
+                    ));
+                }
+            };
+            if !output.status.success() {
+                return Ok(format!(
+                    "Activity exported: {} (editor launch failed: {})",
+                    path.display(),
+                    tmux_failure_reason(&output)
+                ));
             }
             return Ok(format!("Activity exported and opened: {}", path.display()));
         }
@@ -163,6 +183,19 @@ fn sanitize_filename(value: &str) -> String {
 
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+fn tmux_failure_reason(output: &std::process::Output) -> String {
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    if !stderr.is_empty() {
+        return stderr;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    if stdout.is_empty() {
+        output.status.to_string()
+    } else {
+        stdout
+    }
 }
 
 fn pane_registry_bin() -> PathBuf {

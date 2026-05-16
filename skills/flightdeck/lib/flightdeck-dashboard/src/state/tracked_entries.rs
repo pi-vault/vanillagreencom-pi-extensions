@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
+use super::archive_order;
 use super::normalizers::{self, WarnCallback};
 use super::schema::{MasterState, TrackedEntry};
 use super::snapshot::DashboardSnapshot;
@@ -558,17 +559,7 @@ where
             archives.push(path);
         }
     }
-    archives.sort_by(|left, right| {
-        let left_name = left
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("");
-        let right_name = right
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("");
-        right_name.cmp(left_name)
-    });
+    archives.sort_by(|left, right| archive_order::cmp_archive_paths_desc(left, right));
     Ok(archives)
 }
 

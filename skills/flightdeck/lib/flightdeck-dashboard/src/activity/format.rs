@@ -1,7 +1,3 @@
-use ratatui::style::Style;
-
-use crate::app::theme::Palette;
-
 use super::{ActivityEvent, Severity};
 
 #[must_use]
@@ -24,16 +20,6 @@ pub fn event_chip(event_type: &str) -> &'static str {
 #[must_use]
 pub fn event_chip_for(event: &ActivityEvent) -> &'static str {
     event_chip(event.event_type.as_str())
-}
-
-#[must_use]
-pub fn severity_style(severity: Severity, theme: &Palette) -> Style {
-    match severity {
-        Severity::Debug | Severity::Info => theme.muted(),
-        Severity::Success => theme.ok(),
-        Severity::Warning => theme.warning(),
-        Severity::Error => theme.error(),
-    }
 }
 
 #[must_use]

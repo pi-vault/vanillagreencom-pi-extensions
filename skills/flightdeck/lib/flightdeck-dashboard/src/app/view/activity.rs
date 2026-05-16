@@ -1,11 +1,12 @@
 use chrono::Local;
 use ratatui::layout::{Alignment, Constraint, Rect};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap};
 use ratatui::Frame;
 
-use crate::activity::format::{event_chip_for, severity_label, severity_style};
-use crate::activity::{ActivityEvent, Importance};
+use crate::activity::format::{event_chip_for, severity_label};
+use crate::activity::{ActivityEvent, Importance, Severity};
 use crate::app::hitmap::{ClickAction, HitMap, ScrollSource};
 use crate::app::model::Model;
 use crate::app::motion::{Effect, EffectKind, EffectTarget};
@@ -169,6 +170,15 @@ fn row_for_folded_noise<'a>(count: usize, idx: usize, model: &Model, theme: &Pal
     } else {
         theme.frame()
     })
+}
+
+pub(crate) fn severity_style(severity: Severity, theme: &Palette) -> Style {
+    match severity {
+        Severity::Debug | Severity::Info => theme.muted(),
+        Severity::Success => theme.ok(),
+        Severity::Warning => theme.warning(),
+        Severity::Error => theme.error(),
+    }
 }
 
 fn is_active(model: &Model, kind: EffectKind, target: EffectTarget) -> bool {

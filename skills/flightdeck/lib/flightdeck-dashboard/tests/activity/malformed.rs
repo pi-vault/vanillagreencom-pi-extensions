@@ -25,3 +25,24 @@ fn malformed_jsonl_lines_are_skipped_and_counted() {
     assert_eq!(events[0].id, "ok-1");
     assert_eq!(events[1].id, "ok-2");
 }
+
+#[test]
+fn non_v1_schema_version_is_skipped_and_counted() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("flightdeck-activity-S.jsonl");
+    fs::write(
+        &path,
+        concat!(
+            "{\"schema_version\":2,\"id\":\"bad-version\",\"ts\":\"2026-05-15T10:00:00Z\",\"session_id\":\"S\",\"source\":\"flightdeck\",\"type\":\"session.started\",\"severity\":\"info\",\"importance\":\"normal\",\"summary\":\"bad version\"}\n",
+            "{\"schema_version\":1,\"id\":\"ok-version\",\"ts\":\"2026-05-15T10:00:01Z\",\"session_id\":\"S\",\"source\":\"flightdeck\",\"type\":\"session.started\",\"severity\":\"info\",\"importance\":\"normal\",\"summary\":\"ok\"}\n",
+        ),
+    )
+    .expect("write fixture");
+
+    let mut source = JsonlActivitySource::new(dir.path(), "S");
+    let events = source.poll();
+
+    assert_eq!(events.len(), 1);
+    assert_eq!(source.malformed_lines(), 1);
+    assert_eq!(events[0].id, "ok-version");
+}

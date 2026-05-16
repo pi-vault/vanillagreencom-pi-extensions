@@ -9,6 +9,8 @@ use serde_json::Value;
 
 pub use jsonl::{JsonlActivitySource, MAX_EVENTS_IN_MEMORY};
 
+const ACTIVITY_SCHEMA_VERSION: u8 = 1;
+
 pub trait ActivitySource {
     fn poll(&mut self) -> Vec<ActivityEvent>;
     fn last_id(&self) -> Option<String>;
@@ -16,6 +18,7 @@ pub trait ActivitySource {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ActivityEvent {
+    #[serde(deserialize_with = "deserialize_schema_version")]
     pub schema_version: u8,
     pub id: String,
     pub ts: DateTime<Utc>,
@@ -38,6 +41,20 @@ pub struct ActivityEvent {
     pub details: Option<BTreeMap<String, Value>>,
     #[serde(default)]
     pub noisy: bool,
+}
+
+fn deserialize_schema_version<'de, D>(deserializer: D) -> Result<u8, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let version = u8::deserialize(deserializer)?;
+    if version == ACTIVITY_SCHEMA_VERSION {
+        Ok(version)
+    } else {
+        Err(serde::de::Error::custom(format!(
+            "unsupported activity schema_version {version}; expected {ACTIVITY_SCHEMA_VERSION}"
+        )))
+    }
 }
 
 impl ActivityEvent {
