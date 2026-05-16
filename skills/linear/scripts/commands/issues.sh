@@ -103,9 +103,9 @@ linear_update_activity_type() {
     state=$(echo "$normalized" | jq -r '.data.issue.state.name // empty' 2>/dev/null || true)
     state_type=$(echo "$normalized" | jq -r '.data.issue.state.type // empty' 2>/dev/null || true)
     case "$(printf '%s' "$state_type:$state" | tr '[:upper:]' '[:lower:]')" in
-        completed:*|*:done|*:complete|*:completed) printf 'linear.issue_finished success' ;;
-        canceled:*|cancelled:*|*:canceled|*:cancelled|*:canceled*|*:cancelled*) printf 'linear.issue_cancelled warning' ;;
-        *) printf 'linear.issue_updated info' ;;
+        completed:*|*:done|*:complete|*:completed) printf 'linear.issue_finished success\n' ;;
+        canceled:*|cancelled:*|*:canceled|*:cancelled|*:canceled*|*:cancelled*) printf 'linear.issue_cancelled warning\n' ;;
+        *) printf 'linear.issue_updated info\n' ;;
     esac
 }
 
