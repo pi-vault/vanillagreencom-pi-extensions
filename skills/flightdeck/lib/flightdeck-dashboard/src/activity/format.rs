@@ -9,6 +9,7 @@ pub fn event_chip(event_type: &str) -> &'static str {
         "question" | "prompt" => "question",
         "decision" => "decision",
         "pr" | "github" => "pr",
+        "issue" => "issue",
         "linear" => "linear",
         "daemon" => "daemon",
         "session" | "entry" => "session",

@@ -191,8 +191,8 @@ impl Default for FeedFilter {
     }
 }
 
-pub const ACTIVITY_TYPE_CHIPS: [&str; 8] = [
-    "agent", "bg", "question", "decision", "pr", "linear", "daemon", "session",
+pub const ACTIVITY_TYPE_CHIPS: [&str; 9] = [
+    "agent", "bg", "question", "decision", "pr", "issue", "linear", "daemon", "session",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -77,6 +77,27 @@ describe("activity event normalization", () => {
 			.toThrow(ActivityValidationError);
 	});
 
+	test("accepts new pr/issue labeled and unlabeled types", () => {
+		for (const type of ["pr.labeled", "pr.unlabeled", "issue.labeled", "issue.unlabeled"]) {
+			const event = normalizeActivityEvent(
+				{
+					details: { label: "defer-ci", reason: "skip heavy CI" },
+					refs: { pr_number: 44 },
+					source: "github",
+					summary: `Added defer-ci via ${type}`,
+					type,
+				},
+				{ naturalKey: `pr:44:${type}`, sessionId: "S1" },
+			);
+			expect(event.type).toBe(type);
+			expect(event.severity).toBe("info");
+			expect(event.importance).toBe("normal");
+			expect(event.refs?.pr_number).toBe(44);
+			expect(event.details?.label).toBe("defer-ci");
+			expect(event.details?.reason).toBe("skip heavy CI");
+		}
+	});
+
 	test("normalizes refs, links, noisy flag, and caps oversized details", () => {
 		const event = normalizeActivityEvent({
 			details: { huge: "x".repeat(128) },
