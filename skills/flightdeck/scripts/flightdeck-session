@@ -253,7 +253,7 @@ build_pi_prompt_cmd() {
     rm -f "$prompt_file"
     return 1
   fi
-  inner_cmd=$(shell_join "${FLIGHTDECK_CHILD_PANE_ENV[@]}" "$pi_bin" "${bridge_args[@]}")
+  inner_cmd=$(shell_join env FLIGHTDECK_MANAGED=1 FLIGHTDECK_CHILD_PANE=1 "FLIGHTDECK_ENTRY_ID=${session_id}" "$pi_bin" "${bridge_args[@]}")
   prompt_arg=$(shell_join "$prompt_file")
   body="IFS= read -r -d '' p < ${prompt_arg} || true; rm -f ${prompt_arg}; exec ${inner_cmd} \"\$p\""
   built_cmd=$(shell_join bash -c "$body")
@@ -268,16 +268,38 @@ build_pi_prompt_cmd() {
 }
 
 register_entry() {
-  local entry_id="$1" title="$2" kind="$3" cwd="$4" window_index="$5" harness="$6" pane_id="$7" pane_target="$8" window_id="$9" launch_cmd="${10}" worktree="${11:-}" pr="${12:-}"
+  local entry_id="$1" title="$2" kind="$3" cwd="$4" window_index="$5" harness="$6" pane_id="$7" pane_target="$8" window_id="$9" launch_cmd="${10}" worktree="${11:-}" pr="${12:-}" branch="${13:-}"
   local args=(init-entry "$entry_id" --title "$title" --kind "$kind" --cwd "$cwd" --window "$window_index" --harness "$harness" --pane-id "$pane_id" --pane-target "$pane_target" --window-id "$window_id" --window-index "$window_index")
   [[ -n "$worktree" ]] && args+=(--worktree "$worktree")
   [[ -n "$pr" ]] && args+=(--pr "$pr")
+  [[ -n "$branch" ]] && args+=(--branch "$branch")
   [[ -n "$launch_cmd" ]] && args+=(--launch-cmd "$launch_cmd")
   [[ -n "${PI_BRIDGE_PID:-}" ]] && args+=(--pi-bridge-pid "$PI_BRIDGE_PID")
   [[ -n "${PI_BRIDGE_SOCKET:-}" ]] && args+=(--pi-bridge-socket "$PI_BRIDGE_SOCKET")
   [[ -n "${PI_SESSION_ID:-}" ]] && args+=(--pi-session-id "$PI_SESSION_ID")
   [[ -n "${PI_DISCOVERY_ERROR:-}" ]] && args+=(--discovery-error "$PI_DISCOVERY_ERROR")
   "$PANE_REGISTRY" "${args[@]}"
+}
+
+# vstack#101: capture git branch at spawn time. Silent when not a git
+# repo or HEAD is detached (output starts with HEAD or is empty).
+capture_git_branch() {
+  local dir="$1" out
+  out=$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+  case "$out" in
+    ""|HEAD|HEAD*) printf '%s' "" ;;
+    *) printf '%s' "$out" ;;
+  esac
+}
+
+# vstack#100: build the per-session child-pane env. Includes the canonical
+# FLIGHTDECK_MANAGED + FLIGHTDECK_CHILD_PANE signals and binds
+# FLIGHTDECK_ENTRY_ID=<session_id> so wrapped tools inside the pane
+# (linear/github wrappers, activity emitter) attribute their events to
+# the originating entry without each caller passing --entry-id explicitly.
+flightdeck_session_pane_env_str() {
+  local entry_id="$1"
+  flightdeck_shell_join env FLIGHTDECK_MANAGED=1 FLIGHTDECK_CHILD_PANE=1 "FLIGHTDECK_ENTRY_ID=${entry_id}"
 }
 
 # Archive a stale state file before a fresh session start. Predicates:
@@ -378,7 +400,7 @@ cmd_start() {
       *) echo "Error: --prompt launch currently supports --harness pi; use --cmd for $harness" >&2; exit 2 ;;
     esac
   else
-    launch_cmd="$(flightdeck_child_pane_env_str) $cmd"
+    launch_cmd="$(flightdeck_session_pane_env_str "$session_id") $cmd"
   fi
 
   local pane_id
@@ -414,7 +436,9 @@ cmd_start() {
   fi
 
   [[ -n "$worktree" ]] || [[ "$kind" != "issue" ]] || worktree="$abs_cwd"
-  register_entry "$session_id" "$title" "$kind" "${CAPTURE_PANE_CWD:-$abs_cwd}" "$CAPTURE_WINDOW_INDEX" "$harness" "$CAPTURE_PANE_ID" "$CAPTURE_PANE_TARGET" "$CAPTURE_WINDOW_ID" "$launch_cmd" "$worktree" "$pr"
+  local branch
+  branch=$(capture_git_branch "$abs_cwd")
+  register_entry "$session_id" "$title" "$kind" "${CAPTURE_PANE_CWD:-$abs_cwd}" "$CAPTURE_WINDOW_INDEX" "$harness" "$CAPTURE_PANE_ID" "$CAPTURE_PANE_TARGET" "$CAPTURE_WINDOW_ID" "$launch_cmd" "$worktree" "$pr" "$branch"
   printf 'flightdeck-session: started %s kind=%s pane_id=%s target=%s\n' "$session_id" "$kind" "$CAPTURE_PANE_ID" "$CAPTURE_PANE_TARGET"
 }
 
@@ -454,7 +478,9 @@ cmd_attach() {
       session_id="pane-${CAPTURE_PANE_ID#%}"
     fi
   fi
-  register_entry "$session_id" "$title" "$kind" "$CAPTURE_PANE_CWD" "$CAPTURE_WINDOW_INDEX" "$harness" "$CAPTURE_PANE_ID" "$CAPTURE_PANE_TARGET" "$CAPTURE_WINDOW_ID" "" "" ""
+  local branch=""
+  [[ -n "$CAPTURE_PANE_CWD" ]] && branch=$(capture_git_branch "$CAPTURE_PANE_CWD")
+  register_entry "$session_id" "$title" "$kind" "$CAPTURE_PANE_CWD" "$CAPTURE_WINDOW_INDEX" "$harness" "$CAPTURE_PANE_ID" "$CAPTURE_PANE_TARGET" "$CAPTURE_WINDOW_ID" "" "" "" "$branch"
   printf 'flightdeck-session: attached %s kind=%s pane_id=%s target=%s\n' "$session_id" "$kind" "$CAPTURE_PANE_ID" "$CAPTURE_PANE_TARGET"
 }
 

@@ -233,6 +233,37 @@ describe("pane-registry parity", () => {
 		expect(readIssues(tsRepo)).toEqual({});
 	});
 
+	test("init-entry --branch persists entry.branch on the tracked entry", () => {
+		const r = run(tsRepo, [
+			"init-entry", "adhoc-with-branch",
+			"--title", "Branch demo",
+			"--kind", "adhoc",
+			"--cwd", "/tmp/scratch",
+			"--window", "42",
+			"--harness", "pi",
+			"--pane-id", "%4242",
+			"--branch", "feature/cross-source",
+		]);
+		expect(r.status).toBe(0);
+		const entries = readEntries(tsRepo) as Record<string, Record<string, unknown>>;
+		expect(entries["adhoc-with-branch"]!.branch).toBe("feature/cross-source");
+	});
+
+	test("init-entry without --branch leaves entry.branch null", () => {
+		const r = run(tsRepo, [
+			"init-entry", "adhoc-no-branch",
+			"--title", "No branch",
+			"--kind", "adhoc",
+			"--cwd", "/tmp/no-branch",
+			"--window", "43",
+			"--harness", "pi",
+			"--pane-id", "%4343",
+		]);
+		expect(r.status).toBe(0);
+		const entries = readEntries(tsRepo) as Record<string, Record<string, unknown>>;
+		expect(entries["adhoc-no-branch"]!.branch).toBeNull();
+	});
+
 	test("init-entry kind=issue records issue metadata under domain.issue", () => {
 		const r = run(tsRepo, [
 			"init-entry", "ISSUE-42",

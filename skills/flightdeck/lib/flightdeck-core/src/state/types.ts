@@ -83,6 +83,14 @@ export interface TrackedEntry {
 	unknown_since?: string | null;
 	merge_commit?: string | null;
 	/**
+	 * Git branch captured at spawn time by `flightdeck-session start`
+	 * via `git -C <cwd> rev-parse --abbrev-ref HEAD`. Null when the cwd
+	 * is not a git repo or HEAD is detached. Informational — staleness
+	 * is acceptable; agents that switch branches mid-session will not
+	 * automatically refresh this field (vstack#101).
+	 */
+	branch?: string | null;
+	/**
 	 * ISO8601 timestamp recorded when a synthetic terminal-state
 	 * transition fires (vstack#95C). Suppresses re-emission when an
 	 * operator manually resets state back from a terminal value;

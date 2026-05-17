@@ -147,6 +147,7 @@ function lookupId(raw: string): string {
 }
 
 interface InitFields {
+	branch: string;
 	cc_port: string;
 	cc_session_uuid: string;
 	cc_transcript: string;
@@ -179,6 +180,7 @@ interface InitFields {
 
 function defaultInitFields(entryId: string, kind = "adhoc"): InitFields {
 	return {
+		branch: "",
 		cc_port: "", cc_session_uuid: "", cc_transcript: "", cc_url: "",
 		cwd: "",
 		cx_thread_id: "", cx_ws: "",
@@ -197,6 +199,7 @@ function defaultInitFields(entryId: string, kind = "adhoc"): InitFields {
 }
 
 const INIT_FLAG_MAP: Record<string, keyof InitFields> = {
+	"--branch": "branch",
 	"--cc-port": "cc_port",
 	"--cc-session-uuid": "cc_session_uuid",
 	"--cc-transcript": "cc_transcript",
@@ -330,6 +333,7 @@ function cmdInitEntry(entryId: string, args: string[], mode: "entry" | "issue" =
 	const ts = nowIso();
 	const entry = {
 		adapter,
+		branch: strOrNull(fields.branch),
 		cwd: fields.cwd,
 		decisions_log: [],
 		discovery_error: strOrNull(fields.discovery_error),
