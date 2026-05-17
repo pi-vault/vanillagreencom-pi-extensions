@@ -12,7 +12,7 @@ Flightdeck core is the generic tmux-session manager. It owns `TrackedEntry` life
 
 `flightdeck-state init` writes `entries`, `merge_queue`, `conflict_graph`, and `owner`. All readers go through `readTrackedEntries(state)` for the canonical `TrackedEntry` view; `writeTrackedEntry` validates `entry.id` plus optional `entry.domain.issue.id` and stores the entry under `entries[id]`.
 
-Use the TrackedEntry seam everywhere new code reads tracked sessions. Core helpers (`readTrackedEntries`, `writeTrackedEntry`, `entryIdForIssue`, `issueIdForEntry`) live under `lib/flightdeck-core/src/state/`; `pane-registry list --format json` and `flightdeck-state tracked-entries` expose the same normalized view to scripts. `pi-flightdeck` consumes the same seam via read-only `TrackedSession` / `TrackedState` render types, reads `.entries`, and uses `owner.pane_id` for default owner-scoped rendering.
+Use the TrackedEntry seam everywhere new code reads tracked sessions. Core helpers (`readTrackedEntries`, `writeTrackedEntry`, `entryIdForIssue`, `issueIdForEntry`) live under `lib/flightdeck-core/src/state/`; `pane-registry list --format json` and `flightdeck-state tracked-entries` expose the same normalized view to scripts. The Rust dashboard (`lib/flightdeck-dashboard/`) is the canonical read-only consumer; it loads via `state::load` against the JSON file and falls back to the newest matching archive when the live file is gone. Any new dashboard work goes through that path — don't add a parallel reader.
 
 ## Activity stream architecture
 
@@ -36,7 +36,9 @@ Workflow emitter table:
 | `pane-registry set-state merge-ready/merged/aborted` | `pr.merge_queued`, `pr.merged`, `pr.merge_blocked` |
 | `pane-registry teardown-entry` | `entry.completed`, `entry.cancelled`, `entry.dead` |
 | `github.sh` wrappers | `pr.comments_left`, `pr.merged`, `pr.merge_queued`, `pr.merge_blocked`, `pr.checks_passed`, `pr.checks_failed` |
-| `linear.sh` wrappers | `linear.issue_created`, `linear.issue_updated`, `linear.issue_finished`, `linear.issue_cancelled`, `linear.relation_created` |
+| `linear.sh` wrappers | `linear.issue_created`, `linear.issue_updated`, `linear.issue_finished`, `linear.issue_cancelled`, `linear.relation_created`, `issue.labeled`, `issue.unlabeled` |
+| `github.sh` label wrappers | `pr.labeled`, `pr.unlabeled` |
+| `daemon/rate-limit-watchdog.ts` (Pi subscriber + pi-agents-tmux subagent watchdog) | `subagents:rate_limited`, `subagents:rate_limit_retry`, `subagents:rate_limit_resolved`, `subagents:rate_limit_exhausted` (broker events mirrored into the activity sidecar) |
 
 `workflow-emit.ts` resolves `FLIGHTDECK_ACTIVITY_FILE` first. Without it, it emits only when `FLIGHTDECK_MANAGED=1` and a state or explicit activity path resolves. Appends use `nonblocking: true`; failures warn once per `(file,type,reason)` and never fail the workflow mutation.
 
@@ -214,9 +216,15 @@ If flightdeck seems stuck on a prompt, the usual cause is a novel prompt shape t
 ## Operational caveats
 
 - **Batch polling is timeout-bounded but still sequential.** Adapter reads honor `FD_ADAPTER_READ_TIMEOUT_SEC` so no single pane can wedge the tick, but panes are still polled one after the other. Full async parallelism arrives in a later iteration.
-- **Daemon PID changes across `FD_MAX_LIFETIME` boundaries.** The daemon spawns a detached successor on max-lifetime rollover instead of `exec`-replacing itself in place. PID_FILE is updated by the successor; external watchers must re-read PID_FILE each call rather than caching the initial PID. The successor is invoked with the internal `--from-handoff` flag so it preserves the predecessor's wake-pending / events / wake-events.log instead of running the fresh-start wipe. Master and pi-flightdeck dashboard contracts are unaffected (master uses `BUSY_FILE.pid` which is the master's own PID, not the daemon's; the dashboard re-reads PID_FILE each tick).
+- **Daemon PID changes across `FD_MAX_LIFETIME` boundaries.** The daemon spawns a detached successor on max-lifetime rollover instead of `exec`-replacing itself in place. PID_FILE is updated by the successor; external watchers must re-read PID_FILE each call rather than caching the initial PID. The successor is invoked with the internal `--from-handoff` flag so it preserves the predecessor's wake-pending / events / wake-events.log instead of running the fresh-start wipe. Master and dashboard contracts are unaffected (master uses `BUSY_FILE.pid` which is the master's own PID, not the daemon's; the dashboard re-reads PID_FILE each tick).
 - **Session-lock hot path uses in-process `flock(2)`** via `bun:ffi` for per-tick session-lock decisions, avoiding a per-call `flock(1)` fork. Falls back to spawning `flock(1)` on runtimes where `bun:ffi` can't dlopen libc.
 - **Subscribers carry a parent-watchdog.** Each subscriber polls the daemon's PID every 5s and exits cleanly when the daemon dies, so a crashed daemon doesn't orphan tail/jq processes.
+
+## Rate-limit watchdog (vstack#108)
+
+`lib/flightdeck-core/src/daemon/rate-limit-watchdog.ts` is the canonical pure decision module. Two layered consumers wrap it: (a) the Pi subscriber's wake branch in `scripts/lib/subscribers.bash` invokes the TS CLI (`bun rate-limit-watchdog.ts decide --event <json> --pane <id> --attempt <n>`) so flightdeck-managed tracked panes get retry-with-backoff; (b) `pi-extensions/pi-agents-tmux/extensions/subagent/rate-limit-watchdog.ts` carries a vendored mirror plus a stateful per-pane wrapper for subagent panes (the two copies are parity-tested under `tests/parity/`). Both layers gate the agent-end-watchdog's `needs_completion` synthetic outbox so a rate-limited pane recovers via `pi-bridge steer` instead of escalating.
+
+Env knobs: `VSTACK_RATE_LIMIT_WATCHDOG=0` kills it, `VSTACK_RATE_LIMIT_MAX_ATTEMPTS` overrides the cap (default `5`), `VSTACK_RATE_LIMIT_BACKOFF_LADDER` overrides the ladder (default `60,120,300,600,1800`). Anthropic-provided `retry_after_ms` / `retryAfterMs` always wins. Classifier emits `pi-rate-limit-retry` / `pi-rate-limit-exhausted` wake tags; the broker emits `subagents:rate_limited|retry|resolved|exhausted` activity rows.
 
 ## Adapter read recovery
 

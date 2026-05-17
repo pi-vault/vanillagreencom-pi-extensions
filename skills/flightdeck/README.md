@@ -50,46 +50,33 @@ Issue mode adds the optional `github`, `linear`, `worktree`, and `project-manage
 
 Runtime requirements for the shipped core scripts remain `bash` 4+, `tmux` 3.x, `jq`, `flock`, and `bun` (https://bun.sh). Issue mode additionally needs the GitHub/Linear CLIs or auth wrappers used by those skills, plus normal git worktree support. Mac users: install GNU coreutils for `sha256sum` and GNU date.
 
-## Rust dashboard
+## Dashboard
 
-The Rust dashboard binary lives at `skills/flightdeck/lib/flightdeck-dashboard/`, with the user-facing trampoline at `skills/flightdeck/scripts/flightdeck-dashboard`. It is a ratatui view of the master state file: it renders tracked sessions, owner/observer status, pause/stale/archive/pre-purge banners, cross-harness cost/token totals, the Activity tab (formerly Live feed), conversations, decisions, merges, and daemon health. Live mode file-watches the state/archive/activity paths with debounced reloads; the optional Rust daemon adds a UDS JSON-RPC snapshot stream and Pi-only wake subscriber absorption. Mouse support covers tabs, rows, pause/banner chips, the daemon/theme/cost chips, footer hints, popup controls, and panel scrolling. The only write actions are confirmation-gated shells to canonical helpers: prune stale registry entries through `pane-registry remove` and focus a session through `tmux select-window`.
+Flightdeck ships a ratatui terminal dashboard that opens automatically in its own tmux window when you run `flightdeck start`. It shows:
 
-`flightdeck-dashboard launch` is the best-effort startup hook used by Flightdeck. It opens one tracked tmux window through `flightdeck-session start --kind workflow --harness shell`, registers `.entries.flightdeck-dashboard`, and skips cleanly outside tmux, when disabled, or when tmux idempotency probes fail. Use `launch --theme moon|dawn|pantera|system` to forward a theme to the child TUI. It honors:
+- Tracked sessions with state, kind (adhoc / issue / workflow), harness, title, PR/branch, age, last decision.
+- Pause-for-user banner above the table when flightdeck is waiting on you.
+- Cross-harness cost and token totals, with a per-source breakdown popup.
+- Activity feed, conversations, decisions log, conflict/merge planning, and daemon health, each on its own tab.
+- Themes (`moon`, `dawn`, `pantera`, `system`) selectable from the picker (`T`) or `--theme`.
 
-| Variable | Purpose |
-| --- | --- |
-| `FLIGHTDECK_DASHBOARD=0` | Exit `0` silently without launching the dashboard. |
-| `FLIGHTDECK_DASHBOARD_WINDOW` | Tmux window name, default `flightdeck`. |
-| `FLIGHTDECK_DASHBOARD_MOTION` | Motion level: `full`, `reduced`, or `off`; `NO_MOTION` / `NO_COLOR` force `off`. |
-| `FLIGHTDECK_DASHBOARD_THEME` | Theme: `moon` (default Rose Pine Moon), `dawn`, `pantera` (Crush-inspired neon), or `system`; CLI `--theme` overrides it. |
-| `FLIGHTDECK_DAEMON_RUST=1` | Opt into the Rust daemon wake side; default off keeps the canonical TypeScript daemon in charge of wake delivery. |
-| `FLIGHTDECK_DASHBOARD_BELL=0` | Suppress the pause-edge terminal bell. |
-| `FLIGHTDECK_DASHBOARD_COST_POLL_SECS` | Cost-source poll interval, default `5`. |
-| `FLIGHTDECK_DASHBOARD_PRICING_FILE` | Override the bundled per-million-token pricing TOML; malformed files warn and fall back to bundled rates. |
-| `FLIGHTDECK_DASHBOARD_QUICK_FOCUS=1` | Skip the focus confirmation popup for power users. Prune always requires confirmation. |
-| `TMUX_PROBE_TTL` | Cached `tmux list-panes` stale-row probe TTL, default `5` seconds. |
-| `FLIGHTDECK_DASHBOARD_STALE_WARN_SECS` / `FLIGHTDECK_DASHBOARD_STALE_DEAD_SECS` | Tune stale-chip thresholds. |
+Most actions are read-only. The only writes are confirmation-gated: prune a stale registry entry (`D`), or focus a tmux window (`g`).
 
-`flightdeck-dashboard tui --demo[=NAME]` runs compiled demo fixtures (`empty`, `one-adhoc`, `one-issue`, `mixed`, `terminated`, `paused`, `observer`, `conversations`, `no-issue`, `decisions`). `tui --state-file <path>` reads a concrete master-state JSON file, and `tui --session <name>` resolves `<project-root>/<FLIGHTDECK_STATE_DIR>/flightdeck-state-<name>.json` (default state dir `tmp/`) with terminated-archive fallback. With neither flag inside tmux, the dashboard uses the current tmux session. Use `--theme moon|dawn|pantera|system` to select Rose Pine Moon, Rose Pine Dawn, Pantera neon, or terminal-system colors. `?` opens Help with the legend, `T` opens the theme picker, `/` opens the filter popup, `Enter` opens the selected session/decision/event detail popup, `g` confirms focus for the selected pane, and `D` confirms prune for stale rows.
-
-The legacy in-Pi dashboard extension remains documented in [`pi-extensions/pi-flightdeck/README.md`](../../pi-extensions/pi-flightdeck/README.md), but it is deprecated for new sessions. Prefer the Rust dashboard for new Flightdeck runs.
-
-After `vstack add`, build the release binary with:
+Manual invocations a power user might want:
 
 ```bash
-cd skills/flightdeck/lib/flightdeck-dashboard
-cargo build --release
+flightdeck-dashboard tui                            # current tmux session, live
+flightdeck-dashboard tui --session <name>           # any past or current session
+flightdeck-dashboard tui --demo                     # try it without a live session
 ```
 
-The script prefers `lib/flightdeck-dashboard/target/release/flightdeck-dashboard` and falls back to `cargo run --release` when the binary is absent.
-
-## Pi dashboard (optional)
-
-New sessions should prefer the Rust dashboard above. If your master agent runs in Pi and you still want in-editor mission control, the deprecated [`pi-flightdeck`](../../pi-extensions/pi-flightdeck/README.md) extension remains available as a read-only overlay — pause banner, persistent dashboard above the editor, `/flightdeck` popup with six tabs. The skill works identically with or without it.
+Rebuild the release binary after pulling changes:
 
 ```bash
-vstack add vanillagreencom/vstack --pi-extension pi-flightdeck --harness pi -y
+cd skills/flightdeck/lib/flightdeck-dashboard && cargo build --release
 ```
+
+The trampoline falls back to `cargo run --release` if no release binary is present.
 
 ## Settings worth knowing
 
@@ -102,25 +89,19 @@ Most users never touch these. The ones that occasionally matter:
 | `FLIGHTDECK_LAUNCH_MODEL` / `FLIGHTDECK_LAUNCH_EFFORT` | Default model + thinking level for spawned agents when the user doesn't pass them explicitly. |
 | `FLIGHTDECK_STATE_DIR` | Where flightdeck writes its session state file inside the project. Defaults to `tmp/`. |
 | `FLIGHTDECK_ACTIVITY_FILE` | Override the activity JSONL sidecar path for wrapper/workflow emitters and `flightdeck-state activity append`. |
-| `FLIGHTDECK_DASHBOARD` | Set to `0` to disable the Rust dashboard launch hook silently. |
-| `FLIGHTDECK_DASHBOARD_WINDOW` | Tmux window name for the Rust dashboard launch hook. Defaults to `flightdeck`. |
-| `FLIGHTDECK_DASHBOARD_MOTION` | Rust dashboard motion level: `full`, `reduced`, or `off`. `NO_MOTION` and `NO_COLOR` also disable motion. |
-| `FLIGHTDECK_DASHBOARD_THEME` | Rust dashboard theme: `moon` (default), `dawn`, `pantera`, or `system`. CLI `--theme` wins over the env var. |
-| `FLIGHTDECK_DAEMON_RUST` | Set to `1` to let `flightdeck-dashboard launch` start the Rust daemon; unset/`0` defers daemon ownership to the canonical TypeScript path. |
-| `FLIGHTDECK_DASHBOARD_BELL` | Set to `0` to suppress the terminal bell on a new pause-for-user edge. The dashboard never auto-focuses tmux windows. |
-| `FLIGHTDECK_DASHBOARD_COST_POLL_SECS` | Rust dashboard cost-source poll interval (default `5`). |
+| `FLIGHTDECK_DASHBOARD` | Set to `0` to disable the dashboard launch hook silently. |
+| `FLIGHTDECK_DASHBOARD_WINDOW` | Tmux window name for the dashboard launch hook. Defaults to `flightdeck`. |
+| `FLIGHTDECK_DASHBOARD_THEME` | Dashboard theme: `moon` (default), `dawn`, `pantera`, or `system`. |
+| `FLIGHTDECK_DASHBOARD_MOTION` | Dashboard motion level: `full`, `reduced`, or `off`. `NO_MOTION` and `NO_COLOR` also disable motion. |
+| `FLIGHTDECK_DASHBOARD_BELL` | Set to `0` to suppress the terminal bell when flightdeck pauses for you. |
+| `FLIGHTDECK_DASHBOARD_QUICK_FOCUS` | Set to `1` to make `g` focus a tmux window without the confirmation popup. Prune always confirms. |
 | `FLIGHTDECK_DASHBOARD_PRICING_FILE` | Path to a pricing TOML override for dashboard cost calculations. |
-| `FLIGHTDECK_DASHBOARD_QUICK_FOCUS` | Set to `1` to make `g` focus without confirmation. |
-| `TMUX_PROBE_TTL` | Stale-pane probe cache TTL in seconds (default `5`). |
-| `FLIGHTDECK_DASHBOARD_STALE_WARN_SECS` | Rust dashboard stale-warning threshold in seconds (default `30`). |
-| `FLIGHTDECK_DASHBOARD_STALE_DEAD_SECS` | Rust dashboard stale/dead threshold in seconds (default `300`). |
-| `FLIGHTDECK_PI_ACTIVITY_BROKER` | Set to `0` to disable `pi-session-bridge` `vstack_activity` broker consumption and rely on legacy Pi wake messages only. Default `1`. |
 
-Activity history lives beside the master state as `<FLIGHTDECK_STATE_DIR>/flightdeck-activity-<session>.jsonl`. `flightdeck-state activity path|append|tail|export` exposes the path, writes normalized activity rows, tails recent rows, or exports JSONL/Markdown. Event families include tracked entries (`entry.*`), agents (`agent.*`), background tasks (`bg_task.*`), PRs (`pr.*`), Linear writes (`linear.*`), questions, and daemon/subscriber lifecycle rows. Pi sessions also append activity-only rows from the `pi-session-bridge` activity broker (`vstack_activity`) when enabled. `flightdeck-state archive` archives the activity JSONL next to the master-state archive.
+Activity history lives beside the master state as `<FLIGHTDECK_STATE_DIR>/flightdeck-activity-<session>.jsonl`. The dashboard's Activity tab reads it; you can also tail or export it with `flightdeck-state activity tail|export`.
 
 Daemon-private files live outside your project under `$XDG_RUNTIME_DIR/flightdeck` (fallback `/tmp/flightdeck-$UID`) so they don't show up in commits.
 
-Daemon tuning (`FD_*` env vars) is documented in [`DEVELOPMENT.md`](./DEVELOPMENT.md). Defaults work for normal use.
+Daemon tuning (`FD_*` env vars) and contributor-only knobs are documented in [`DEVELOPMENT.md`](./DEVELOPMENT.md). Defaults work for normal use.
 
 ## Out of scope
 
