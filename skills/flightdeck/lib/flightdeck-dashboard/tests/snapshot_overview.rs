@@ -402,6 +402,66 @@ fn alt_m_renders_compact_overview() {
 }
 
 #[test]
+fn wide_char_fixture_renders_with_aligned_single_column_rows() {
+    let model = common::model_for_fixture("wide-char", MotionLevel::Off);
+    // Single-column mode (<= 80 cols) is where row-level column alignment is
+    // measured directly: no left rail / detail rail to pad rows differently.
+    let narrow = common::render_model_with_size(&model, 80, common::SNAPSHOT_HEIGHT);
+    let wide_row = narrow
+        .lines()
+        .find(|line| line.contains("\u{1f680}"))
+        .expect("wide-char row present in single-column render");
+    let plain_row = narrow
+        .lines()
+        .find(|line| line.contains("plain ASCII"))
+        .expect("plain row present in single-column render");
+    // ratatui TestBackend prints one char per backend cell; for 2-cell wide
+    // chars the second cell is rendered as an empty marker that the Display
+    // impl preserves. The trailing `│` border is the canonical right edge
+    // — it must sit at the same string offset on every row when columns
+    // truly align by display width.
+    // Slice up to and including the right border, then measure display
+    // width via unicode-width — plain row chars = 80 cells, wide row also =
+    // 80 cells (3 wide chars * 2 cells each + remaining ASCII), so both
+    // measurements MUST agree when display-width truncation is correct.
+    let wide_cells = display_cells_to_right_border(wide_row);
+    let plain_cells = display_cells_to_right_border(plain_row);
+    assert_eq!(
+        wide_cells, plain_cells,
+        "single-column rows must align by display width: wide_cells={wide_cells} plain_cells={plain_cells}\nwide:  {wide_row}\nplain: {plain_row}"
+    );
+    // The full default-width render captures the cross-column layout
+    // including the detail rail showing the wide-char title verbatim.
+    insta::assert_snapshot!("overview_wide_char", common::render_model(&model));
+    insta::assert_snapshot!("overview_wide_char_80_cols", narrow);
+}
+
+fn display_cells_to_right_border(line: &str) -> usize {
+    use unicode_width::UnicodeWidthStr;
+    let border_byte = line
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| *ch == '│')
+        .map(|(idx, ch)| idx + ch.len_utf8())
+        .unwrap_or(0);
+    UnicodeWidthStr::width(&line[..border_byte])
+}
+
+#[test]
+fn truncate_to_width_keeps_emoji_intact_at_one_cell_remaining() {
+    use flightdeck_dashboard::util::display_width::{display_width, truncate_to_width};
+    // 4-cell budget: emoji (2) + space (1) + ellipsis (1) = 4. The 's' that
+    // would have followed the space is dropped instead of split.
+    let trimmed = truncate_to_width("\u{1f680} ship", 4);
+    assert_eq!(trimmed.as_ref(), "\u{1f680} \u{2026}");
+    assert_eq!(display_width(trimmed.as_ref()), 4);
+    // 3-cell budget: emoji (2) + ellipsis (1) = 3. No room for the leading space.
+    let tighter = truncate_to_width("\u{1f680} ship", 3);
+    assert_eq!(tighter.as_ref(), "\u{1f680}\u{2026}");
+    assert_eq!(display_width(tighter.as_ref()), 3);
+}
+
+#[test]
 fn observer_banner() {
     let mut model = common::model_for_fixture("observer", MotionLevel::Off);
     model.current_pane_id = Some("%99".to_owned());

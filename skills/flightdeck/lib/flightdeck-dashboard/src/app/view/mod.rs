@@ -21,6 +21,7 @@ use crate::app::model::{Model, Tab};
 use crate::app::theme::Palette;
 use crate::cost::{format_cost, format_summary};
 use crate::state::snapshot::Staleness;
+use crate::util::display_width::display_width;
 
 const HEADER_COMPACT_WIDTH: u16 = 200;
 const HEADER_OBSERVER_MIN_WIDTH: u16 = 120;
@@ -68,7 +69,7 @@ impl BaseSegment {
     fn width(&self) -> usize {
         self.spans
             .iter()
-            .map(|span| span.content.chars().count())
+            .map(|span| display_width(span.content.as_ref()))
             .sum()
     }
 }
@@ -292,7 +293,7 @@ fn render_status(
 
     let inner_x = area.x.saturating_add(1);
     let inner_y = area.y.saturating_add(1);
-    let theme_width = u16::try_from(theme_chip.chars().count()).unwrap_or(u16::MAX);
+    let theme_width = u16::try_from(display_width(&theme_chip)).unwrap_or(u16::MAX);
     let theme_rect = Rect::new(
         area.x
             .saturating_add(area.width.saturating_sub(theme_width.saturating_add(2))),
@@ -322,7 +323,7 @@ fn render_status(
             Rect::new(
                 inner_x.saturating_add(daemon_x),
                 inner_y,
-                daemon.len() as u16,
+                u16::try_from(display_width(&daemon)).unwrap_or(u16::MAX),
                 1,
             ),
             ClickAction::SelectTab(Tab::Daemon),
@@ -334,7 +335,7 @@ fn render_status(
             Rect::new(
                 inner_x.saturating_add(cost_x),
                 inner_y,
-                cost_chip.len() as u16,
+                u16::try_from(display_width(&cost_chip)).unwrap_or(u16::MAX),
                 1,
             ),
             ClickAction::SelectTab(Tab::Costs),
@@ -403,8 +404,8 @@ fn render_tabs(
     let mut x = area.x.saturating_add(2);
     let y = area.y.saturating_add(1);
     for tab in &model.tabs_enabled {
-        let width = u16::try_from(model.tab_label_for_width(*tab, area.width).chars().count())
-            .unwrap_or(u16::MAX);
+        let label = model.tab_label_for_width(*tab, area.width);
+        let width = u16::try_from(display_width(label)).unwrap_or(u16::MAX);
         hitmap.push(Rect::new(x, y, width, 1), ClickAction::SelectTab(*tab), 0);
         x = x.saturating_add(width.saturating_add(3));
     }
@@ -493,22 +494,22 @@ fn render_footer(
         let right = format!("{noisy}  ·  {filter}");
         let padding = area
             .width
-            .saturating_sub((left.chars().count() + right.chars().count()) as u16)
+            .saturating_sub((display_width(left) + display_width(&right)) as u16)
             .max(1) as usize;
         let line = format!("{left}{}{right}", " ".repeat(padding));
         let right_x = area
             .width
-            .saturating_sub(right.chars().count() as u16)
+            .saturating_sub(display_width(&right) as u16)
             .saturating_add(area.x);
         push_rect_target(
             hitmap,
-            Rect::new(right_x, area.y, noisy.chars().count() as u16, area.height),
+            Rect::new(right_x, area.y, display_width(noisy) as u16, area.height),
             ClickAction::ToggleNoiseFilter,
         );
-        let filter_x = right_x.saturating_add(noisy.chars().count() as u16 + 5);
+        let filter_x = right_x.saturating_add(display_width(noisy) as u16 + 5);
         push_rect_target(
             hitmap,
-            Rect::new(filter_x, area.y, filter.chars().count() as u16, area.height),
+            Rect::new(filter_x, area.y, display_width(&filter) as u16, area.height),
             ClickAction::OpenFilter,
         );
         Line::from(Span::styled(line, theme.footer()))
@@ -562,7 +563,7 @@ fn assemble_header_spans(
             .iter()
             .enumerate()
             .filter(|(idx, _)| kept[*idx])
-            .map(|(_, chip)| chip.separator.chars().count() + chip.text.chars().count())
+            .map(|(_, chip)| display_width(chip.separator) + display_width(&chip.text))
             .sum()
     };
 
@@ -645,7 +646,7 @@ fn header_chip_x(spans: &[Span<'_>], needle: &str) -> Option<u16> {
         if value == needle {
             return u16::try_from(offset).ok();
         }
-        offset = offset.saturating_add(value.chars().count());
+        offset = offset.saturating_add(display_width(value));
     }
     None
 }
@@ -660,7 +661,7 @@ fn push_footer_target(
     let rect = Rect::new(
         area.x.saturating_add(column_offset),
         area.y,
-        u16::try_from(label.chars().count()).unwrap_or(u16::MAX),
+        u16::try_from(display_width(label)).unwrap_or(u16::MAX),
         area.height,
     );
     push_rect_target(hitmap, rect, action);
@@ -704,14 +705,8 @@ fn owner_parts(model: &Model, compact: bool) -> (String, Option<String>) {
     (format!("Master {harness}"), Some(cwd))
 }
 
-fn trim_for_header(value: &str, max_chars: usize) -> String {
-    let mut chars = value.chars();
-    let trimmed = chars.by_ref().take(max_chars).collect::<String>();
-    if chars.next().is_some() {
-        format!("{trimmed}…")
-    } else {
-        trimmed
-    }
+fn trim_for_header(value: &str, max_cells: usize) -> String {
+    crate::util::display_width::truncate_to_width(value, max_cells).into_owned()
 }
 
 fn duration_label(duration: std::time::Duration) -> String {

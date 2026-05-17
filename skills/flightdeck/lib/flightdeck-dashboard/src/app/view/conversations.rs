@@ -239,7 +239,7 @@ fn render_entry_panel(
             relative_time(summary.last_event_at, now),
         )
     };
-    let footer_len = footer.chars().count();
+    let footer_len = crate::util::display_width::display_width(&footer);
     let footer_pad = (inner.width as usize).saturating_sub(footer_len);
 
     let lines = vec![
@@ -373,12 +373,6 @@ fn time_label(ts: Option<DateTime<Utc>>) -> String {
         .unwrap_or_else(|| String::from("—"))
 }
 
-fn truncate(value: &str, max_chars: usize) -> String {
-    let mut chars = value.chars();
-    let truncated = chars.by_ref().take(max_chars).collect::<String>();
-    if chars.next().is_some() {
-        format!("{truncated}…")
-    } else {
-        truncated
-    }
+fn truncate(value: &str, max_cells: usize) -> String {
+    crate::util::display_width::truncate_overflow_to_width(value, max_cells).into_owned()
 }

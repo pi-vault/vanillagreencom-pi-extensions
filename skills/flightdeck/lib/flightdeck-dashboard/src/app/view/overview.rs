@@ -12,6 +12,9 @@ use crate::app::view::{fx, human_duration};
 use crate::cost::{format_compact, format_cost, format_tokens};
 use crate::state::snapshot::{SessionState, TrackedSession};
 use crate::state::tracked_entries::PRE_PURGE_BANNER;
+use crate::util::display_width::{
+    display_width, pad_end_to_width, truncate_start_to_width, truncate_to_width,
+};
 
 const RIGHT_RAIL_MIN_WIDTH: u16 = 100;
 const SINGLE_COLUMN_WIDTH: u16 = 80;
@@ -225,7 +228,10 @@ fn render_single_column(
                 style,
             ),
             Span::raw(" "),
-            Span::styled(format!("{:<40}", truncate(&session.title, 40)), style),
+            Span::styled(
+                pad_end_to_width(&truncate_to_width(&session.title, 40), 40).into_owned(),
+                style,
+            ),
             Span::styled(stale.to_owned(), theme.muted()),
             Span::styled(pr, style),
         ]));
@@ -594,9 +600,9 @@ fn title_cell(
 ) -> Cell<'static> {
     if model.session_is_stale(session) {
         const STALE_SUFFIX: &str = " (stale)";
-        let suffix_chars = STALE_SUFFIX.chars().count() as u16;
-        if max_width > suffix_chars {
-            let title_width = max_width.saturating_sub(suffix_chars);
+        let suffix_cells = u16::try_from(display_width(STALE_SUFFIX)).unwrap_or(u16::MAX);
+        if max_width > suffix_cells {
+            let title_width = max_width.saturating_sub(suffix_cells);
             return Cell::from(Line::from(vec![
                 Span::raw(truncate_end(&session.title, title_width)),
                 Span::raw(" "),
@@ -707,50 +713,12 @@ fn activity_label(session: &TrackedSession, now: DateTime<Utc>) -> String {
     age_label(activity, now)
 }
 
-fn truncate(value: &str, max_chars: usize) -> String {
-    let mut chars = value.chars();
-    let truncated = chars.by_ref().take(max_chars).collect::<String>();
-    if chars.next().is_some() {
-        format!("{truncated}…")
-    } else {
-        truncated
-    }
-}
-
 pub(crate) fn truncate_end(value: &str, max_width: u16) -> String {
-    let max = max_width as usize;
-    if max == 0 {
-        return String::new();
-    }
-    let count = value.chars().count();
-    if count <= max {
-        return value.to_owned();
-    }
-    if max == 1 {
-        return String::from("…");
-    }
-    let mut out: String = value.chars().take(max - 1).collect();
-    out.push('…');
-    out
+    truncate_to_width(value, max_width as usize).into_owned()
 }
 
 pub(crate) fn truncate_start(value: &str, max_width: u16) -> String {
-    let max = max_width as usize;
-    if max == 0 {
-        return String::new();
-    }
-    let count = value.chars().count();
-    if count <= max {
-        return value.to_owned();
-    }
-    if max == 1 {
-        return String::from("…");
-    }
-    let chars: Vec<char> = value.chars().collect();
-    let start = chars.len().saturating_sub(max - 1);
-    let mut out = String::from("…");
-    out.extend(chars[start..].iter());
-    out
+    truncate_start_to_width(value, max_width as usize).into_owned()
 }
 
 fn age_label(value: Option<DateTime<Utc>>, now: DateTime<Utc>) -> String {

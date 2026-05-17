@@ -10,6 +10,7 @@ const ONE_ADHOC: &str = include_str!("fixtures/one-adhoc.json");
 const ONE_ISSUE: &str = include_str!("fixtures/one-issue.json");
 const MIXED: &str = include_str!("fixtures/mixed.json");
 const STALE_MIXED: &str = include_str!("fixtures/stale-mixed.json");
+const WIDE_CHAR: &str = include_str!("fixtures/wide-char.json");
 const TERMINATED: &str = include_str!("fixtures/terminated.json");
 const PAUSED: &str = include_str!("fixtures/paused.json");
 const OBSERVER: &str = include_str!("fixtures/observer.json");
@@ -20,7 +21,7 @@ const ACTIVITY_MIXED: &str = include_str!("fixtures/activity-mixed.jsonl");
 
 #[derive(Debug, Error)]
 pub enum FixtureError {
-    #[error("unknown demo fixture {0:?}; available: empty, one-adhoc, one-issue, mixed, stale-mixed, terminated, paused, observer, conversations, no-issue, decisions")]
+    #[error("unknown demo fixture {0:?}; available: empty, one-adhoc, one-issue, mixed, stale-mixed, wide-char, terminated, paused, observer, conversations, no-issue, decisions")]
     UnknownFixture(String),
     #[error(transparent)]
     State(#[from] StateError),
@@ -34,6 +35,7 @@ pub fn available() -> &'static [&'static str] {
         "one-issue",
         "mixed",
         "stale-mixed",
+        "wide-char",
         "terminated",
         "paused",
         "observer",
@@ -50,6 +52,7 @@ pub fn canonical_name(name: &str) -> Result<&'static str, FixtureError> {
         "one-issue" => Ok("one-issue"),
         "mixed" => Ok("mixed"),
         "stale-mixed" => Ok("stale-mixed"),
+        "wide-char" => Ok("wide-char"),
         "terminated" => Ok("terminated"),
         "paused" => Ok("paused"),
         "observer" => Ok("observer"),
@@ -67,6 +70,7 @@ pub fn fixture_source(name: &str) -> Result<&'static str, FixtureError> {
         "one-issue" => Ok(ONE_ISSUE),
         "mixed" => Ok(MIXED),
         "stale-mixed" => Ok(STALE_MIXED),
+        "wide-char" => Ok(WIDE_CHAR),
         "terminated" => Ok(TERMINATED),
         "paused" => Ok(PAUSED),
         "observer" => Ok(OBSERVER),

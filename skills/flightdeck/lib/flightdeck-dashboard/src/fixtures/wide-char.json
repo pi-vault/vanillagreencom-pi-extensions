@@ -1,0 +1,69 @@
+{
+  "session_id": "demo-wide-char",
+  "started_at": "2026-05-15T09:00:00Z",
+  "updated_at": "2026-05-15T10:06:00Z",
+  "terminated": false,
+  "terminated_at": null,
+  "owner": {
+    "harness": "pi",
+    "pane_id": "%25",
+    "pane_target": "demo:1.0",
+    "cwd": "/repo/demo",
+    "pid": 2001,
+    "pi_session_id": "pi-demo-wide-char",
+    "pi_bridge_socket": "/run/user/1000/pi-demo.sock",
+    "discovery_error": null
+  },
+  "entries": {
+    "WIDE-1": {
+      "id": "WIDE-1",
+      "title": "🚀 ship it · 测试 dashboard rendering",
+      "kind": "issue",
+      "state": "prompting",
+      "substate": "wide-char fixture",
+      "harness": "opencode",
+      "cwd": "/repo/worktrees/wide-1",
+      "window": "WIDE-1",
+      "pane_target": "demo:3.0",
+      "pane_id": "%41",
+      "launch": { "model": "gpt-5.5", "effort": "xhigh", "cmd": "opencode run wide-char" },
+      "adapter": { "oc_url": "http://127.0.0.1:5050", "oc_session_id": "oc-wide-1" },
+      "domain": {
+        "issue": {
+          "id": "WIDE-1",
+          "worktree": "/repo/worktrees/wide-1",
+          "pr_number": 1,
+          "scope_files_declared": 4,
+          "scope_files_actual": 4,
+          "orchestration_started": true,
+          "merge_commit": null
+        }
+      },
+      "last_response_at": "2026-05-15T09:58:00Z",
+      "spawned_at": "2026-05-15T09:00:00Z",
+      "last_polled_at": "2026-05-15T10:06:00Z",
+      "decisions_log": []
+    },
+    "plain-2": {
+      "id": "plain-2",
+      "title": "plain ASCII row for alignment check",
+      "kind": "adhoc",
+      "state": "waiting",
+      "harness": "pi",
+      "cwd": "/repo/demo",
+      "window": "plain-2",
+      "pane_target": "demo:2.0",
+      "pane_id": "%31",
+      "launch": { "model": "gpt-5.5", "effort": "medium", "cmd": "tail -f tmp/log" },
+      "adapter": { "pi_bridge_pid": 2311, "pi_bridge_socket": "/run/user/1000/pi-plain.sock", "pi_session_id": "pi-plain" },
+      "domain": null,
+      "last_response_at": "2026-05-15T10:00:00Z",
+      "spawned_at": "2026-05-15T09:05:00Z",
+      "last_polled_at": "2026-05-15T10:06:00Z",
+      "decisions_log": []
+    }
+  },
+  "merge_queue": ["WIDE-1"],
+  "conflict_graph": { "edges": [], "computed_at": "2026-05-15T10:04:00Z" },
+  "paused_for_user": null
+}

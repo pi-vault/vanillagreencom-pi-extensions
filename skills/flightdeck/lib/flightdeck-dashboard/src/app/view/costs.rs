@@ -8,6 +8,7 @@ use crate::app::model::{Model, Tab};
 use crate::app::theme::Palette;
 use crate::app::view::overview::truncate_end;
 use crate::cost::{format_compact, format_cost, format_summary, format_tokens, HarnessTotal};
+use crate::util::display_width::display_width;
 
 const SESSION_COL_WIDTH: u16 = 14;
 const HARNESS_COL_WIDTH: u16 = 10;
@@ -119,7 +120,7 @@ pub fn render(
             Rect::new(
                 area.x.saturating_add(1),
                 pricing_hit_y,
-                u16::try_from(pricing_line_text.chars().count()).unwrap_or(u16::MAX),
+                u16::try_from(display_width(&pricing_line_text)).unwrap_or(u16::MAX),
                 1,
             ),
             ClickAction::OpenPricingDetail,
@@ -165,7 +166,7 @@ fn harness_line(harness: &str, total: &HarnessTotal) -> String {
 
 fn pad_or_truncate(value: &str, width: u16) -> String {
     let truncated = truncate_end(value, width);
-    let pad = (width as usize).saturating_sub(truncated.chars().count());
+    let pad = (width as usize).saturating_sub(display_width(&truncated));
     let mut out = truncated;
     out.extend(std::iter::repeat(' ').take(pad));
     out.push(' ');
