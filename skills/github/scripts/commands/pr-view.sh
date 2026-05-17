@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+# shellcheck source=../lib/pr-branch.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/pr-branch.sh"
+
 show_help() {
     cat << 'EOF'
 View PR details
@@ -227,21 +230,31 @@ emit_checks_activity() {
                     exit 0
                 fi
                 pr_checks_record_outcome "$state_file" "$outcome" "$pr_number"
-                bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../_activity-emit.sh" "$type" \
-                    --severity "$severity" \
-                    --importance normal \
-                    --summary "$summary" \
-                    --pr-number "$pr_number" || true
+                local pr_branch_locked
+                pr_branch_locked=$(pr_branch_name "$pr_number")
+                local checks_args=(
+                    --severity "$severity"
+                    --importance normal
+                    --summary "$summary"
+                    --pr-number "$pr_number"
+                )
+                [ -n "$pr_branch_locked" ] && checks_args+=(--branch "$pr_branch_locked")
+                bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../_activity-emit.sh" "$type" "${checks_args[@]}" || true
             )
             return 0
         fi
     fi
 
-    bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../_activity-emit.sh" "$type" \
-        --severity "$severity" \
-        --importance normal \
-        --summary "$summary" \
-        --pr-number "$pr_number" || true
+    local pr_branch_fallback
+    pr_branch_fallback=$(pr_branch_name "$pr_number")
+    local fallback_args=(
+        --severity "$severity"
+        --importance normal
+        --summary "$summary"
+        --pr-number "$pr_number"
+    )
+    [ -n "$pr_branch_fallback" ] && fallback_args+=(--branch "$pr_branch_fallback")
+    bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../_activity-emit.sh" "$type" "${fallback_args[@]}" || true
 }
 
 main "$@"

@@ -77,6 +77,25 @@ describe("activity event normalization", () => {
 			.toThrow(ActivityValidationError);
 	});
 
+	test("normalizes refs.branch (vstack#101) and skips empty values", () => {
+		const withBranch = normalizeActivityEvent({
+			refs: { branch: "feature/spike", pr_number: 88 },
+			source: "github",
+			summary: "PR with branch",
+			type: "pr.merged",
+		}, { naturalKey: "pr:88:merged", sessionId: "S1" });
+		expect(withBranch.refs?.branch).toBe("feature/spike");
+		expect(withBranch.refs?.pr_number).toBe(88);
+
+		const emptyBranch = normalizeActivityEvent({
+			refs: { branch: "", pr_number: 88 },
+			source: "github",
+			summary: "PR no branch",
+			type: "pr.merged",
+		}, { naturalKey: "pr:88:merged:nobranch", sessionId: "S1" });
+		expect(emptyBranch.refs?.branch).toBeUndefined();
+	});
+
 	test("normalizes refs, links, noisy flag, and caps oversized details", () => {
 		const event = normalizeActivityEvent({
 			details: { huge: "x".repeat(128) },

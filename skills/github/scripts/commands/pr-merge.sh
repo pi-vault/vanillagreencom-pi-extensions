@@ -18,6 +18,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Source shared library for load_bot_token (also sets PROJECT_ROOT)
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/github-api.sh"
+# shellcheck source=../lib/pr-branch.sh
+source "$SCRIPT_DIR/../lib/pr-branch.sh"
 
 # Issue prefixes that resolve on their own once GitHub finishes computing or
 # CI completes. Callers should `await-mergeable` and retry rather than fix.
@@ -261,6 +263,12 @@ main() {
         exit 0
     fi
 
+    # vstack#101: resolve PR head branch once. Empty when gh fails;
+    # `--branch` is conditionally appended below so empty silently omits
+    # refs.branch from the activity row.
+    local pr_branch
+    pr_branch=$(pr_branch_name "$pr_num")
+
     local token
     token=$(load_bot_token)
 
@@ -277,12 +285,15 @@ main() {
             if [ "$auto" != true ]; then
                 local blocked_severity
                 blocked_severity=$(merge_blocked_severity "$check_result")
-                bash "$SCRIPT_DIR/../_activity-emit.sh" pr.merge_blocked \
-                    --severity "$blocked_severity" \
-                    --importance important \
-                    --summary "PR #$pr_num merge blocked" \
-                    --pr-number "$pr_num" \
-                    --details-json "$check_result" || true
+                local block_args=(
+                    --severity "$blocked_severity"
+                    --importance important
+                    --summary "PR #$pr_num merge blocked"
+                    --pr-number "$pr_num"
+                    --details-json "$check_result"
+                )
+                [ -n "$pr_branch" ] && block_args+=(--branch "$pr_branch")
+                bash "$SCRIPT_DIR/../_activity-emit.sh" pr.merge_blocked "${block_args[@]}" || true
                 print_blocked "$check_result" "$pr_num"
                 exit 1
             fi
@@ -324,12 +335,15 @@ main() {
 
     if [ "$merge_exit" -ne 0 ]; then
         # Merge command itself failed. Surface as BLOCKED with raw output.
-        bash "$SCRIPT_DIR/../_activity-emit.sh" pr.merge_blocked \
-            --severity error \
-            --importance important \
-            --summary "PR #$pr_num merge blocked" \
-            --pr-number "$pr_num" \
-            --details-json "$(jq -cn --arg output "$merge_output" '{merge_output: $output, transient: false}')" || true
+        local fail_args=(
+            --severity error
+            --importance important
+            --summary "PR #$pr_num merge blocked"
+            --pr-number "$pr_num"
+            --details-json "$(jq -cn --arg output "$merge_output" '{merge_output: $output, transient: false}')"
+        )
+        [ -n "$pr_branch" ] && fail_args+=(--branch "$pr_branch")
+        bash "$SCRIPT_DIR/../_activity-emit.sh" pr.merge_blocked "${fail_args[@]}" || true
         echo "BLOCKED PR #$pr_num — gh pr merge failed" >&2
         printf '%s\n' "$merge_output" | sed 's/^/  /' >&2
         exit 1
@@ -346,12 +360,15 @@ main() {
         echo "MERGED PR #$pr_num" >&2
         local merge_commit
         merge_commit=$(gh pr view "$pr_num" --json mergeCommit --jq '.mergeCommit.oid // ""' 2>/dev/null || true)
-        bash "$SCRIPT_DIR/../_activity-emit.sh" pr.merged \
-            --severity success \
-            --importance important \
-            --summary "PR #$pr_num merged" \
-            --pr-number "$pr_num" \
-            --commit "$merge_commit" || true
+        local merged_args=(
+            --severity success
+            --importance important
+            --summary "PR #$pr_num merged"
+            --pr-number "$pr_num"
+            --commit "$merge_commit"
+        )
+        [ -n "$pr_branch" ] && merged_args+=(--branch "$pr_branch")
+        bash "$SCRIPT_DIR/../_activity-emit.sh" pr.merged "${merged_args[@]}" || true
         # Delete remote branch via API (avoids gh's local git checkout, which
         # fails inside worktrees). Best-effort — branch may already be gone.
         if [ "$delete_branch" = true ]; then
@@ -365,11 +382,14 @@ main() {
     fi
 
     if [ "$auto" = true ] && [ "$post_auto" = "true" ]; then
-        bash "$SCRIPT_DIR/../_activity-emit.sh" pr.merge_queued \
-            --severity info \
-            --importance normal \
-            --summary "PR #$pr_num queued for auto-merge" \
-            --pr-number "$pr_num" || true
+        local queued_args=(
+            --severity info
+            --importance normal
+            --summary "PR #$pr_num queued for auto-merge"
+            --pr-number "$pr_num"
+        )
+        [ -n "$pr_branch" ] && queued_args+=(--branch "$pr_branch")
+        bash "$SCRIPT_DIR/../_activity-emit.sh" pr.merge_queued "${queued_args[@]}" || true
         echo "QUEUED FOR AUTO-MERGE PR #$pr_num — will fire when CI + branch protection clear" >&2
         echo "  Track with: github.sh await-mergeable $pr_num" >&2
         exit 75
@@ -377,12 +397,15 @@ main() {
 
     # gh exited 0 but PR isn't merged and isn't queued. Treat as BLOCKED so
     # callers don't assume success based on exit code alone.
-    bash "$SCRIPT_DIR/../_activity-emit.sh" pr.merge_blocked \
-        --severity error \
-        --importance important \
-        --summary "PR #$pr_num merge blocked" \
-        --pr-number "$pr_num" \
-        --details-json "$(jq -cn --arg state "$post_state" --arg auto "$post_auto" --arg output "$merge_output" '{state: $state, auto_merge: $auto, merge_output: $output, transient: false}')" || true
+    local blocked_args=(
+        --severity error
+        --importance important
+        --summary "PR #$pr_num merge blocked"
+        --pr-number "$pr_num"
+        --details-json "$(jq -cn --arg state "$post_state" --arg auto "$post_auto" --arg output "$merge_output" '{state: $state, auto_merge: $auto, merge_output: $output, transient: false}')"
+    )
+    [ -n "$pr_branch" ] && blocked_args+=(--branch "$pr_branch")
+    bash "$SCRIPT_DIR/../_activity-emit.sh" pr.merge_blocked "${blocked_args[@]}" || true
     echo "BLOCKED PR #$pr_num — gh reported success but state=$post_state, autoMerge=$post_auto" >&2
     printf '%s\n' "$merge_output" | sed 's/^/  /' >&2
     exit 1

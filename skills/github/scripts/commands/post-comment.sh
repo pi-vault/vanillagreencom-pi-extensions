@@ -6,6 +6,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/github-api.sh"
+# shellcheck source=../lib/pr-branch.sh
+source "$SCRIPT_DIR/../lib/pr-branch.sh"
 
 show_help() {
     cat << 'EOF'
@@ -137,12 +139,17 @@ post_comment() {
     local url
     url=$(echo "$result" | jq -r '.html_url // .url // ""')
 
-    bash "$SCRIPT_DIR/../_activity-emit.sh" pr.comments_left \
-        --severity info \
-        --importance normal \
-        --summary "Comment left on PR #$pr_num" \
-        --pr-number "$pr_num" \
-        --details-json "$(jq -cn --arg url "$url" '{url: $url}')" || true
+    local pr_branch
+    pr_branch=$(pr_branch_name "$pr_num")
+    local emit_args=(
+        --severity info
+        --importance normal
+        --summary "Comment left on PR #$pr_num"
+        --pr-number "$pr_num"
+        --details-json "$(jq -cn --arg url "$url" '{url: $url}')"
+    )
+    [ -n "$pr_branch" ] && emit_args+=(--branch "$pr_branch")
+    bash "$SCRIPT_DIR/../_activity-emit.sh" pr.comments_left "${emit_args[@]}" || true
 
     if [ -n "$url" ]; then
         echo "{\"success\": true, \"url\": \"$url\"}"

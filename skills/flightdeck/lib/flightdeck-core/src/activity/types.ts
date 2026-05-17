@@ -44,6 +44,8 @@ export interface ActivityRefs {
 	linear_id?: string;
 	commit?: string;
 	check_name?: string;
+	/** PR head branch name carried alongside pr.* events (vstack#101). */
+	branch?: string;
 }
 
 export interface FlightdeckActivityEventV1 {
@@ -221,7 +223,7 @@ function normalizeLinks(value: unknown): ActivityLink[] {
 function normalizeRefs(value: unknown): ActivityRefs {
 	if (!isRecord(value)) return {};
 	const refs: ActivityRefs = {};
-	for (const key of ["task_id", "agent", "bg_task_id", "question_id", "issue_id", "linear_id", "commit", "check_name"] as const) {
+	for (const key of ["task_id", "agent", "bg_task_id", "question_id", "issue_id", "linear_id", "commit", "check_name", "branch"] as const) {
 		const v = optionalString(value[key]);
 		if (v) refs[key] = v;
 	}

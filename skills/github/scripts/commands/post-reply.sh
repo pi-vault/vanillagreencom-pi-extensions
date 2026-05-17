@@ -6,6 +6,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/github-api.sh"
+# shellcheck source=../lib/pr-branch.sh
+source "$SCRIPT_DIR/../lib/pr-branch.sh"
 
 show_help() {
     cat << 'EOF'
@@ -193,6 +195,7 @@ post_reply() {
             --importance normal \
             --summary "Reply left on PR review thread" \
             --details-json "$(jq -cn --arg url "$reply_url" --arg thread_id "$id" '{url: $url, thread_id: $thread_id}')" || true
+        # Thread-id GraphQL path has no PR number in scope — skip branch lookup.
         echo "$reply_result"
     else
         # REST for numeric comment IDs
@@ -208,12 +211,17 @@ post_reply() {
         local reply_result reply_url
         reply_result=$(reply_via_rest "$id" "$body" "$pr_num" "$owner" "$repo") || return 1
         reply_url=$(echo "$reply_result" | jq -r '.url // ""' 2>/dev/null || true)
-        bash "$SCRIPT_DIR/../_activity-emit.sh" pr.comments_left \
-            --severity info \
-            --importance normal \
-            --summary "Reply left on PR #$pr_num" \
-            --pr-number "$pr_num" \
-            --details-json "$(jq -cn --arg url "$reply_url" --arg comment_id "$id" '{url: $url, comment_id: $comment_id}')" || true
+        local pr_branch
+        pr_branch=$(pr_branch_name "$pr_num")
+        local emit_args=(
+            --severity info
+            --importance normal
+            --summary "Reply left on PR #$pr_num"
+            --pr-number "$pr_num"
+            --details-json "$(jq -cn --arg url "$reply_url" --arg comment_id "$id" '{url: $url, comment_id: $comment_id}')"
+        )
+        [ -n "$pr_branch" ] && emit_args+=(--branch "$pr_branch")
+        bash "$SCRIPT_DIR/../_activity-emit.sh" pr.comments_left "${emit_args[@]}" || true
         echo "$reply_result"
     fi
 }
