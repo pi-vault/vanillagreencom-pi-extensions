@@ -71,6 +71,7 @@ Open `/extensions:settings`; settings appear under the **Tool Renderer** tab.
 | --- | --- |
 | Register tool_batch | Add the composite tool. |
 | Batch max calls | Max calls per `tool_batch` invocation. |
+| Batch per-call timeout (ms) | Max time any one child call may run before `tool_batch` reports that child as timed out. |
 
 ### Messages
 
