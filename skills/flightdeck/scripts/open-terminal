@@ -10,6 +10,8 @@
 #   --harness NAME  Harness to launch: claude, codex, opencode, pi, omp
 #   --model MODEL   Model for this launch/session (defaults per harness)
 #   --effort LEVEL  Effort/thinking for this launch/session (defaults per harness)
+#   --tracker NAME  Issue tracker: linear (default) or github
+#   --repo OWNER/REPO GitHub repo for --tracker github (defaults from origin or gh repo view)
 #   --cmd "..."     Command to run in each worktree. Use {issue} as placeholder
 #                   for the issue ID. Overrides --harness/--model/--effort.
 #   --tmux          Open tmux windows (requires active tmux session)
@@ -71,6 +73,12 @@ GROUP_ID=""
 CMD_TEMPLATE=""
 MODEL_OVERRIDE=""
 EFFORT_OVERRIDE=""
+TRACKER="linear"
+GITHUB_REPO=""
+GITHUB_REPO_RESOLVED=""
+GITHUB_ISSUE_URL=""
+GITHUB_FULL_PROMPT=""
+GITHUB_START_PROMPT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -82,6 +90,10 @@ while [[ $# -gt 0 ]]; do
     --model=*) MODEL_OVERRIDE="${1#--model=}"; shift ;;
     --effort|--thinking) EFFORT_OVERRIDE="$2"; shift 2 ;;
     --effort=*|--thinking=*) EFFORT_OVERRIDE="${1#*=}"; shift ;;
+    --tracker) TRACKER="$2"; shift 2 ;;
+    --tracker=*) TRACKER="${1#--tracker=}"; shift ;;
+    --repo) GITHUB_REPO="$2"; shift 2 ;;
+    --repo=*) GITHUB_REPO="${1#--repo=}"; shift ;;
     --cmd) CMD_TEMPLATE="$2"; shift 2 ;;
     --use-channels) USE_CHANNELS=1; shift ;;
     --no-channels)  USE_CHANNELS=0; shift ;;
@@ -92,6 +104,8 @@ while [[ $# -gt 0 ]]; do
       echo "  --harness <name>    Harness to launch: claude, codex, opencode, pi, omp"
       echo "  --model <model>     Model for this launch/session (defaults per harness)"
       echo "  --effort <level>    Effort/thinking level (defaults per harness): minimal, low, medium, high, xhigh, max"
+      echo "  --tracker <name>    Issue tracker: linear (default) or github"
+      echo "  --repo <owner/repo> GitHub repo for --tracker github (default: origin or gh repo view)"
       echo "  --tmux              Open tmux windows (requires active tmux session)"
       echo "  --ghostty           Open Ghostty terminals"
       echo "  --cmd \"command\"     Custom command ({issue} is replaced). Overrides --harness/--model/--effort."
@@ -101,8 +115,9 @@ while [[ $# -gt 0 ]]; do
       echo "  claude   → claude -n ISSUE --dangerously-skip-permissions --model 'opus[1m]' --effort max '/orchestration start ISSUE'"
       echo "  codex    → codex -m MODEL -c model_reasoning_effort=EFFORT '\$orchestration start ISSUE'"
       echo "  opencode → opencode --model MODEL --prompt '/orchestration start ISSUE' (effort unsupported by top-level opencode)"
-      echo "  omp      → omp '/skill:orchestration start ISSUE'"
-      echo "  pi       → pi --model MODEL --thinking EFFORT '/skill:orchestration start ISSUE'"
+      echo "  omp      → omp '<skill command> orchestration start ISSUE'"
+      echo "  pi       → pi --model MODEL --thinking EFFORT '<skill command> orchestration start ISSUE'"
+      echo "  github tracker uses a self-contained child prompt, never a flightdeck/orchestration slash command."
       echo ""
       echo "Recommended defaults for implementation panes:"
       echo "  claude:   --model 'opus[1m]' --effort max"
@@ -117,8 +132,18 @@ while [[ $# -gt 0 ]]; do
       echo "  OPEN_TERMINAL_NO_BYPASS=1 Disable per-harness permission-bypass flags (default: off)"
       exit 0
       ;;
-    [0-9]*) GROUP_ID="$1"; shift ;;
+    [0-9]*)
+      if [[ "$TRACKER" == "github" ]]; then
+        ISSUES+=("$1")
+      else
+        GROUP_ID="$1"
+      fi
+      shift
+      ;;
     *)
+      if [[ "$TRACKER" == "github" ]]; then
+        echo "Error: github tracker requires numeric issue IDs (got: $1)" >&2; exit 1
+      fi
       # Match against configurable issue pattern
       if echo "$1" | grep -qiE "^${GH_ISSUE_PATTERN}$"; then
         ISSUES+=("$(echo "$1" | tr '[:lower:]' '[:upper:]')"); shift
@@ -128,6 +153,15 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$TRACKER" != "linear" && "$TRACKER" != "github" ]]; then
+  echo "Error: --tracker must be linear or github" >&2
+  exit 1
+fi
+if [[ "$TRACKER" == "github" && -n "$CMD_TEMPLATE" ]]; then
+  echo "Error: --tracker github uses a self-contained child prompt; --cmd is not supported" >&2
+  exit 1
+fi
 
 # Auto-detect terminal mode
 if [[ -z "$TERMINAL_MODE" ]]; then
@@ -388,6 +422,135 @@ launch_metadata_json_args() {
     '{model:($model | if length > 0 then . else null end), effort:($effort | if length > 0 then . else null end), requested_model:($requested_model | if length > 0 then . else null end), requested_effort:($requested_effort | if length > 0 then . else null end), resolved_model:($resolved_model | if length > 0 then . else null end), resolved_effort:($resolved_effort | if length > 0 then . else null end), model_source:($model_source | if length > 0 then . else null end), effort_source:($effort_source | if length > 0 then . else null end), reasoning_status:$reasoning_status, unsupported_reason:($unsupported_reason | if length > 0 then . else null end)}'
 }
 
+github_repo_from_remote() {
+  local url=""
+  url=$(git config --get remote.origin.url 2>/dev/null || true)
+  [[ -n "$url" ]] || return 1
+  case "$url" in
+    git@github.com:*)
+      url="${url#git@github.com:}"
+      url="${url%.git}"
+      ;;
+    https://github.com/*|http://github.com/*)
+      url="${url#https://github.com/}"
+      url="${url#http://github.com/}"
+      url="${url%.git}"
+      ;;
+    ssh://git@github.com/*)
+      url="${url#ssh://git@github.com/}"
+      url="${url%.git}"
+      ;;
+    *) return 1 ;;
+  esac
+  [[ "$url" == */* ]] || return 1
+  printf '%s\n' "$url"
+}
+
+resolve_github_repo() {
+  if [[ -n "$GITHUB_REPO" ]]; then
+    printf '%s\n' "$GITHUB_REPO"
+    return 0
+  fi
+  if github_repo_from_remote; then
+    return 0
+  fi
+  if command -v gh >/dev/null 2>&1; then
+    gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null && return 0
+  fi
+  echo "Error: cannot resolve GitHub repo; pass --repo owner/name" >&2
+  return 1
+}
+
+compose_github_child_prompt() {
+  local repo="$1" issue="$2" title="$3" body="$4" url="$5"
+  cat <<EOF
+Fix GitHub issue ${repo}#${issue}: ${title}
+
+Issue body:
+${body}
+
+URL: ${url}
+
+Instructions:
+- Read the project's CLAUDE.md or AGENTS.md for binding repo rules.
+- Verify the bug or scope against the actual source before writing code (verify-don't-trust).
+- Push commits to branch issue-${issue}.
+- Open a PR with \`Fixes #${issue}\` in the body so GitHub auto-closes on merge.
+- Do NOT bump any version numbers.
+- Do NOT merge the PR yourself; the supervisor reviews + merges.
+- Print the PR URL as the LAST line of your final message.
+EOF
+}
+
+fetch_github_issue_context() {
+  local issue="$1" repo issue_json title body url prompt gh_err_file gh_err
+  repo=$(resolve_github_repo) || return 1
+  gh_err_file=$(mktemp)
+  if ! issue_json=$(gh issue view "$issue" --repo "$repo" --json number,title,body,url,labels 2>"$gh_err_file"); then
+    gh_err=$(cat "$gh_err_file" 2>/dev/null || true)
+    rm -f "$gh_err_file"
+    echo "Error: gh issue view $issue --repo $repo failed: ${gh_err:-no stderr}" >&2
+    return 1
+  fi
+  rm -f "$gh_err_file"
+  title=$(jq -r '.title // ""' <<< "$issue_json")
+  body=$(jq -r '.body // ""' <<< "$issue_json")
+  url=$(jq -r '.url // ""' <<< "$issue_json")
+  if [[ -z "$title" || -z "$url" ]]; then
+    echo "Error: gh issue view $issue --repo $repo returned missing title/url" >&2
+    return 1
+  fi
+  prompt=$(compose_github_child_prompt "$repo" "$issue" "$title" "$body" "$url")
+  GITHUB_REPO_RESOLVED="$repo"
+  GITHUB_ISSUE_URL="$url"
+  GITHUB_FULL_PROMPT="$prompt"
+  GITHUB_START_PROMPT="$prompt"
+}
+
+materialize_github_start_prompt() {
+  local issue="$1" wt_path="$2" prompt prompt_bytes brief_path brief_tmp
+  prompt="$GITHUB_FULL_PROMPT"
+  if [[ -z "$prompt" ]]; then
+    echo "Error: missing GitHub issue prompt for $issue" >&2
+    return 1
+  fi
+  prompt_bytes=$(printf '%s' "$prompt" | wc -c | tr -d ' ')
+  if (( prompt_bytes > 4096 )); then
+    if ! mkdir -p "$wt_path/tmp"; then
+      echo "Error: failed to create GitHub issue brief directory: $wt_path/tmp" >&2
+      return 1
+    fi
+    brief_path="$wt_path/tmp/brief.md"
+    brief_tmp="$brief_path.tmp.$$"
+    if ! printf '%s\n' "$prompt" > "$brief_tmp"; then
+      echo "Error: failed to write GitHub issue brief: $brief_path" >&2
+      rm -f "$brief_tmp"
+      return 1
+    fi
+    if ! mv "$brief_tmp" "$brief_path"; then
+      echo "Error: failed to finalize GitHub issue brief: $brief_path" >&2
+      rm -f "$brief_tmp"
+      return 1
+    fi
+    prompt="Read tmp/brief.md and execute. Print the PR URL as the LAST line of your final message."
+  fi
+  GITHUB_START_PROMPT="$prompt"
+}
+
+start_prompt_for_harness() {
+  local tracker="$1" issue="$2" harness="$3"
+  if [[ "$tracker" == "github" ]]; then
+    printf '%s\n' "$GITHUB_START_PROMPT"
+    return 0
+  fi
+  case "$harness" in
+    claude|opencode) printf '/orchestration start %s\n' "$issue" ;;
+    codex) printf '$orchestration start %s\n' "$issue" ;;
+    omp|pi) printf '/%s:orchestration start %s\n' "skill" "$issue" ;;
+    *) printf '\n' ;;
+  esac
+}
+
 # Env-prefix tokens that mark every flightdeck-spawned pane as managed live
 # in lib/pane-env.sh. Use "${FLIGHTDECK_PANE_ENV[@]}" inside arrays or
 # `flightdeck_pane_env_str` for string-form tmux send-keys paths.
@@ -397,30 +560,31 @@ detect_start_cmd() {
     echo "${CMD_TEMPLATE//\{issue\}/$issue}"
     return
   fi
-  local cmd=() launch_args=() bypass
+  local cmd=() launch_args=() bypass prompt
   add_launch_args "$HARNESS" launch_args || return 1
   bypass="$(bypass_flag_for_harness "$HARNESS")"
+  prompt="$(start_prompt_for_harness "$TRACKER" "$issue" "$HARNESS")"
   case "$HARNESS" in
     claude)
       cmd=("${FLIGHTDECK_PANE_ENV[@]}" claude -n "$issue")
       [[ -n "$bypass" ]] && cmd+=("$bypass")
-      cmd+=("${launch_args[@]}" "/orchestration start $issue")
+      cmd+=("${launch_args[@]}" "$prompt")
       shell_join "${cmd[@]}"
       ;;
     codex)
-      cmd=("${FLIGHTDECK_PANE_ENV[@]}" codex "${launch_args[@]}" "\$orchestration start $issue")
+      cmd=("${FLIGHTDECK_PANE_ENV[@]}" codex "${launch_args[@]}" "$prompt")
       shell_join "${cmd[@]}"
       ;;
     opencode)
-      cmd=("${FLIGHTDECK_PANE_ENV[@]}" opencode "${launch_args[@]}" --prompt "/orchestration start $issue")
+      cmd=("${FLIGHTDECK_PANE_ENV[@]}" opencode "${launch_args[@]}" --prompt "$prompt")
       shell_join "${cmd[@]}"
       ;;
     omp)
-      cmd=("${FLIGHTDECK_PANE_ENV[@]}" omp "/skill:orchestration start $issue")
+      cmd=("${FLIGHTDECK_PANE_ENV[@]}" omp "$prompt")
       shell_join "${cmd[@]}"
       ;;
     pi)
-      cmd=("${FLIGHTDECK_PANE_ENV[@]}" pi "${launch_args[@]}" "/skill:orchestration start $issue")
+      cmd=("${FLIGHTDECK_PANE_ENV[@]}" pi "${launch_args[@]}" "$prompt")
       shell_join "${cmd[@]}"
       ;;
     *)        echo "" ;;
@@ -561,7 +725,7 @@ create_oc_session() {
   echo "$sid"
 }
 
-# Fire `/orchestration start <issue>` as a backgrounded follow-up. This
+# Fire the tracker-aware start prompt as a backgrounded follow-up. This
 # is what actually starts the per-issue agent's work; it can run for
 # minutes and is fire-and-forget from open-terminal's perspective. The
 # user-visible `opencode attach` TUI in step 2 will display the turn
@@ -569,8 +733,8 @@ create_oc_session() {
 # exit and doesn't pollute the launcher's stdio.
 #
 # Env overrides (intended for tests / alt workflows):
-#   FLIGHTDECK_OC_FOLLOWUP_PROMPT — replace the default `/orchestration
-#       start <ISSUE>` prompt entirely. Use literal `__ISSUE__` in the
+#   FLIGHTDECK_OC_FOLLOWUP_PROMPT — replace the default tracker prompt
+#       entirely. Use literal `__ISSUE__` in the
 #       value to substitute the issue id at fire time (multi-issue
 #       spawns share one env, but each issue gets its own substitution).
 #   FLIGHTDECK_OC_SKIP_FOLLOWUP=1 — skip the followup fire entirely;
@@ -586,12 +750,12 @@ fire_orchestration_async() {
   if [[ -n "${FLIGHTDECK_OC_FOLLOWUP_PROMPT:-}" ]]; then
     prompt="${FLIGHTDECK_OC_FOLLOWUP_PROMPT//__ISSUE__/$issue}"
   else
-    prompt="/orchestration start $issue"
+    prompt="$(start_prompt_for_harness "$TRACKER" "$issue" opencode)"
   fi
   local launch_args=()
   add_launch_args opencode launch_args || return 1
   # FLIGHTDECK_MANAGED=1 also exports into the fire-and-forget
-  # `/orchestration start` invocation so any tool calls (e.g.
+  # start invocation so any tool calls (e.g.
   # merge-pr.md § 5 running flightdeck-mode) see the canonical signal.
   # Outer redirect detaches the subshell's FDs from anything the caller
   # might be capturing — same hazard as start_oc_server.
@@ -602,12 +766,16 @@ fire_orchestration_async() {
 }
 
 register_precreated_tmux_entry() {
-  local pane_id="$1" issue="$2" harness="$3"
+  local pane_id="$1" issue="$2" harness="$3" wt_path="${4:-}"
   local model effort args
   [[ -x "$SCRIPT_DIR/flightdeck-session" ]] || { echo "  flightdeck-session-unavailable: cannot register pre-created pane" >&2; return 1; }
   model=$(launch_model_for_harness "$harness")
   effort=$(launch_effort_for_harness "$harness")
   args=(attach --pane "$pane_id" --harness "$harness" --title "$issue" --session-id "$issue" --kind issue)
+  [[ -n "$wt_path" ]] && args+=(--worktree "$wt_path")
+  if [[ "$TRACKER" == "github" ]]; then
+    args+=(--tracker github --github-url "$GITHUB_ISSUE_URL")
+  fi
   [[ -n "$model" ]] && args+=(--model "$model")
   [[ -n "$effort" ]] && args+=(--effort "$effort")
   "$SCRIPT_DIR/flightdeck-session" "${args[@]}"
@@ -705,7 +873,7 @@ spawn_oc_attach_tmux() {
     '{url:$url, session_id:$sid, directory:$dir, port:$port, server_pid:$server_pid, launch:$launch, allocated_at:$ts}' \
     > "$spawn_file"
 
-  if ! register_precreated_tmux_entry "$pane_id" "$issue" opencode; then
+  if ! register_precreated_tmux_entry "$pane_id" "$issue" opencode "$wt_path"; then
     echo "  oc-attach-unavailable: failed to register tracked entry for $issue" >&2
     rm -f "$spawn_file"
     kill -- -"$server_pid" 2>/dev/null || kill "$server_pid" 2>/dev/null || true
@@ -714,9 +882,9 @@ spawn_oc_attach_tmux() {
     return 1
   fi
 
-  # Fire the actual orchestration workflow as a backgrounded follow-up.
+  # Fire the actual tracker prompt as a backgrounded follow-up.
   # The bootstrap above only created the session (with a "READY" reply);
-  # this is what kicks off /orchestration start <issue>. Logs to
+  # this is what kicks off implementation. Logs to
   # oc-serve-<port>.log.orch so the master can tail if needed.
   fire_orchestration_async "$bin" "http://127.0.0.1:$port" "$sid" "$issue" "$wt_path"
 
@@ -820,10 +988,12 @@ build_claude_channel_cmd() {
   # near the top of this file).
   local cmd=("${FLIGHTDECK_PANE_ENV[@]}" "$bin" -n "$issue")
   local launch_args=()
+  local prompt
+  prompt="$(start_prompt_for_harness "$TRACKER" "$issue" claude)"
   [[ -n "$bypass" ]] && cmd+=("$bypass")
   add_launch_args claude launch_args || return 1
   cmd+=("${launch_args[@]}" --session-id "$uuid" --mcp-config "$mcp_path" \
-    --dangerously-load-development-channels server:webhook -- "/orchestration start $issue")
+    --dangerously-load-development-channels server:webhook -- "$prompt")
   shell_join "${cmd[@]}"
 }
 
@@ -948,9 +1118,6 @@ spawn_pi_bridge_tmux() {
   # auto-loads deterministically regardless of settings.json drift. When
   # it's empty, the bridge loads via the `packages` array.
   #
-  # Pi's slash grammar requires the `/skill:` prefix for native skill
-  # expansion (`_expandSkillCommand` only matches `/skill:`). Bare
-  # `/orchestration` would fall through to the LLM as raw text.
   local cmd launch_args=() bridge_args=()
   add_launch_args pi launch_args || return 1
   if [[ -n "$ext_path" ]]; then bridge_args=(-e "$ext_path"); fi
@@ -961,7 +1128,9 @@ spawn_pi_bridge_tmux() {
   # signal plus the legacy FLIGHTDECK_CHILD_PANE=1 retained for the
   # pi-flightdeck dashboard extension's child-pane widget suppression
   # (issue #8). See FLIGHTDECK_PANE_ENV near the top of this file.
-  cmd=$(shell_join "${FLIGHTDECK_PI_PANE_ENV[@]}" "$pi_bin" "${launch_args[@]}" "${bridge_args[@]}" "/skill:orchestration start $issue")
+  local prompt
+  prompt="$(start_prompt_for_harness "$TRACKER" "$issue" pi)"
+  cmd=$(shell_join "${FLIGHTDECK_PI_PANE_ENV[@]}" "$pi_bin" "${launch_args[@]}" "${bridge_args[@]}" "$prompt")
 
   # Snapshot existing pi-bridge pids BEFORE spawning so discovery can
   # exclude already-running pi processes in the same worktree (bugs
@@ -1053,9 +1222,10 @@ spawn_cx_remote_tmux() {
   # canonical flightdeck managed-pane env (see FLIGHTDECK_PANE_ENV near
   # the top of this file) so orchestration's flightdeck-mode helper
   # detects the pane as Flightdeck-managed.
-  local cmd launch_args=()
+  local cmd launch_args=() prompt
   add_launch_args codex launch_args || return 1
-  cmd=$(shell_join "${FLIGHTDECK_PANE_ENV[@]}" "$cx_bin" "${launch_args[@]}" --remote "$ws_url")
+  prompt="$(start_prompt_for_harness "$TRACKER" "$issue" codex)"
+  cmd=$(shell_join "${FLIGHTDECK_PANE_ENV[@]}" "$cx_bin" "${launch_args[@]}" --remote "$ws_url" "$prompt")
   if ! open_tmux "$wt_path" "$issue" "$cmd"; then
     return 1
   fi
@@ -1144,6 +1314,9 @@ open_tmux() {
       --worktree "$dir" \
       --harness "${HARNESS:-unknown}" \
       --cmd "$cmd")
+    if [[ "$TRACKER" == "github" ]]; then
+      session_args+=(--tracker github --github-url "$GITHUB_ISSUE_URL")
+    fi
     local launch_model launch_effort
     launch_model=$(launch_model_for_harness "${HARNESS:-unknown}")
     launch_effort=$(launch_effort_for_harness "${HARNESS:-unknown}")
@@ -1236,15 +1409,33 @@ LAUNCHED=0
 FAILED=()
 
 for ISSUE in "${ISSUES[@]}"; do
+  if [[ "$TRACKER" == "github" ]]; then
+    if ! fetch_github_issue_context "$ISSUE"; then
+      FAILED+=("$ISSUE")
+      continue
+    fi
+  fi
+
   # Create worktree (reuses existing) — capture stderr separately
   _wt_err=$(mktemp)
-  if ! WT_PATH=$("$WORKTREE_CLI" create "$ISSUE" 2>"$_wt_err"); then
+  WORKTREE_CREATE_ARGS=(create "$ISSUE")
+  if [[ "$TRACKER" == "github" ]]; then
+    WORKTREE_CREATE_ARGS+=("issue-$ISSUE")
+  fi
+  if ! WT_PATH=$("$WORKTREE_CLI" "${WORKTREE_CREATE_ARGS[@]}" 2>"$_wt_err"); then
     echo "  Failed to create worktree: $(cat "$_wt_err")" >&2
     rm -f "$_wt_err"
     FAILED+=("$ISSUE")
     continue
   fi
   rm -f "$_wt_err"
+
+  if [[ "$TRACKER" == "github" ]]; then
+    if ! materialize_github_start_prompt "$ISSUE" "$WT_PATH"; then
+      FAILED+=("$ISSUE")
+      continue
+    fi
+  fi
 
   # Only pretrust for Claude harness
   if command -v claude &>/dev/null; then

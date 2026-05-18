@@ -10,6 +10,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(HERE, "../fixtures/prompt-classify");
 const TS_SCRIPT = resolve(HERE, "../../src/bin/prompt-classify.ts");
 const HANDLER_DOC = resolve(HERE, "../../../../workflows/shared/session-handle-prompt.md");
+const GITHUB_HANDLE_DOC = resolve(HERE, "../../../../workflows/github/handle-prompt.md");
+const GITHUB_CLOSE_DOC = resolve(HERE, "../../../../workflows/github/close-issue.md");
+const GITHUB_WATCH_DOC = resolve(HERE, "../../../../workflows/github/watch.md");
 
 const GENERIC_PROMPT = `Choose the next action.
 
@@ -91,5 +94,41 @@ describe("handler domain guards", () => {
 		expect(doc).toContain("generic mode does not require those CLIs");
 		expect(doc).toContain("gh pr view");
 		expect(doc).toContain("linear");
+	});
+
+	test("github merge-now requires CLEAN before answering Merge", () => {
+		const doc = readFileSync(GITHUB_HANDLE_DOC, "utf8");
+		expect(doc).toContain("gh pr view <PR> --json mergeStateStatus,reviewDecision,statusCheckRollup");
+		expect(doc).toContain('mergeStateStatus === "CLEAN"');
+		expect(doc).toContain("Predicate true → answer `Merge`");
+		expect(doc).toContain('`mergeStateStatus === "UNKNOWN"`');
+		expect(doc).toContain("Do not auto-Merge");
+	});
+
+	test("github close-issue requires authoritative merged PR and merge commit", () => {
+		const doc = readFileSync(GITHUB_CLOSE_DOC, "utf8");
+		expect(doc).toContain("Pane-buffer text alone is never sufficient");
+		expect(doc).toContain("gh pr view <PR> --json state,mergeStateStatus,mergeCommit");
+		expect(doc).toContain('state === "MERGED"');
+		expect(doc).toContain("mergeCommit !== null");
+		expect(doc).toContain("Pane text like `MERGED`");
+		expect(doc).toContain("never closes an issue by itself");
+		expect(doc.indexOf("gh pr view <PR> --json state,mergeStateStatus,mergeCommit")).toBeLessThan(doc.lastIndexOf("gh issue close <N> --reason completed"));
+	});
+
+	test("github force-merge handlers honor FLIGHTDECK_AUTO_MERGE=0", () => {
+		const doc = readFileSync(GITHUB_HANDLE_DOC, "utf8");
+		expect(doc).toContain('If `FLIGHTDECK_AUTO_MERGE=0`, set `paused_for_user = {issue_id:<N>, reason:"auto-merge-disabled", prompt_text:<buffer>}` and return.');
+		expect(doc).toContain("Do not answer wait, Merge, force-merge, or transition to `force-merge-confirm` while auto-merge is disabled.");
+		expect(doc).toContain("do not answer the force-merge option");
+	});
+
+	test("github force-merge predicate requires strict approval and UNKNOWN timer", () => {
+		for (const doc of [readFileSync(GITHUB_HANDLE_DOC, "utf8"), readFileSync(GITHUB_WATCH_DOC, "utf8")]) {
+			expect(doc).toContain('reviewDecision == "APPROVED"');
+			expect(doc).toContain('do not substitute unset review with "no pending reviewers"');
+			expect(doc).toContain("disjoint");
+			expect(doc).toContain("unknown_since > FLIGHTDECK_FORCE_MERGE_AFTER_SECS");
+		}
 	});
 });
