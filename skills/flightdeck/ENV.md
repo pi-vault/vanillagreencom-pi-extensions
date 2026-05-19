@@ -4,6 +4,15 @@ Reference doc extracted from `SKILL.md`. See [`SKILL.md`](./SKILL.md) for the lo
 
 ## Configuration
 
+Rust dashboard users can press `S` (or `Alt+S`) to open the Settings popup.
+Editable values are persisted in `<project-root>/tmp/flightdeck-settings.toml`;
+`flightdeck-dashboard` commands load that file at startup and apply its values
+inside the dashboard process without mutating the parent shell. These overrides
+are dashboard-scoped: they affect dashboard launch/TUI/daemon behavior, not the
+master workflow shell or already-running child panes. Rows marked as
+restart-required in the popup take effect on the next dashboard launch or
+`flightdeck-dashboard` command.
+
 Master-loop env vars consulted by workflows:
 
 | Variable | Default | Purpose |
@@ -82,3 +91,4 @@ Additional tuning:
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `FD_ADAPTER_READ_TIMEOUT_SEC` | `2` | Bounds per-adapter read subprocesses in `pane-poll` (fractional values honored). Stale adapters fall through to tmux capture rather than wedging the tick. |
+| `FD_ADAPTER_FRESHNESS_TTL` | `5` | Freshness probe cache TTL in seconds for adapter reads; set `0` to disable cache reuse. |

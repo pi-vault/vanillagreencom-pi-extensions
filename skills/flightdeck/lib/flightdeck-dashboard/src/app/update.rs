@@ -3,6 +3,7 @@ use futures::FutureExt;
 
 use crate::actions::{self, WriteAction};
 use crate::daemon::rpc::DaemonStatus as RuntimeDaemonStatus;
+use crate::settings_catalog::{SettingsError, SettingsSaveRequest};
 use crate::state::snapshot::{DaemonStatus as SnapshotDaemonStatus, EventImportance};
 use crate::watcher::WatcherEvent;
 
@@ -15,6 +16,7 @@ use super::msg::Msg;
 use super::theme::Theme;
 
 const PAGE_STEP: usize = 10;
+const SETTINGS_VISIBLE_ROWS: usize = 15;
 
 pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
     match msg {
@@ -81,6 +83,23 @@ pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
                 vec![Cmd::Render]
             }
         }
+        Msg::SettingsSaved(result) => {
+            match result {
+                Ok(result) => {
+                    let notice = result.change.notice();
+                    model.settings.apply_save_result(result);
+                    set_status(model, notice, true);
+                    model.error = None;
+                }
+                Err(error) => {
+                    model.settings.set_error(error.clone());
+                    set_status(model, error.clone(), false);
+                    model.error = Some(error);
+                    push_effect(model, EffectKind::ErrorFlash, EffectTarget::Global);
+                }
+            }
+            vec![Cmd::Render]
+        }
         Msg::ActionCompleted(result) => {
             match result {
                 Ok(message) => {
@@ -136,7 +155,12 @@ fn handle_snapshot_updated(
     model.initialize_overview_selection();
     let mut commands = vec![Cmd::ProbePanes, Cmd::Render];
     if pause_edge && model.motion.allows_rich_motion() {
-        commands.push(Cmd::PauseSideEffects);
+        commands.push(Cmd::PauseSideEffects {
+            bell: model
+                .settings
+                .value_bool("FLIGHTDECK_DASHBOARD_BELL")
+                .unwrap_or(true),
+        });
     }
     commands.extend(pending_reload);
     commands
@@ -242,6 +266,7 @@ fn handle_key(model: &mut Model, key: &KeyEvent) -> Vec<Cmd> {
         }
         Action::OpenThemePicker => open_theme_picker(model),
         Action::OpenPricingDetail => open_pricing_detail(model),
+        Action::OpenSettings => open_settings(model),
         Action::Quit => {
             model.quit_requested = true;
             vec![Cmd::Render]
@@ -268,6 +293,7 @@ fn handle_popup_key(model: &mut Model, key: &KeyEvent) -> Vec<Cmd> {
         ModalState::FilterInput => handle_filter_key(model, key),
         ModalState::ConfirmAction => handle_confirm_key(model, key),
         ModalState::PricingDetail => handle_pricing_detail_key(model, key),
+        ModalState::Settings => handle_settings_key(model, key),
         ModalState::None => Vec::new(),
     }
 }
@@ -300,6 +326,85 @@ fn handle_pricing_detail_key(model: &mut Model, key: &KeyEvent) -> Vec<Cmd> {
         }
         KeyCode::End => {
             model.popup_scroll = usize::MAX / 2;
+            vec![Cmd::Render]
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn handle_settings_key(model: &mut Model, key: &KeyEvent) -> Vec<Cmd> {
+    if model.settings.editing_selected() {
+        return handle_settings_edit_key(model, key);
+    }
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => {
+            close_overlay(model);
+            vec![Cmd::Render]
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            move_settings_selection(model, 1);
+            vec![Cmd::Render]
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            move_settings_selection(model, -1);
+            vec![Cmd::Render]
+        }
+        KeyCode::PageDown => {
+            move_settings_selection(model, PAGE_STEP as isize);
+            vec![Cmd::Render]
+        }
+        KeyCode::PageUp => {
+            move_settings_selection(model, -(PAGE_STEP as isize));
+            vec![Cmd::Render]
+        }
+        KeyCode::Home => {
+            model.settings.select(0);
+            model.popup_scroll = 0;
+            vec![Cmd::Render]
+        }
+        KeyCode::End => {
+            let last = model.settings.entries.len().saturating_sub(1);
+            model.settings.select(last);
+            clamp_settings_scroll(model);
+            vec![Cmd::Render]
+        }
+        KeyCode::Enter => {
+            if model.settings.selected_is_bool() {
+                queue_settings_save(model, |settings| settings.toggle_selected_request())
+            } else {
+                match model.settings.begin_edit_selected() {
+                    Ok(()) => vec![Cmd::Render],
+                    Err(error) => settings_error(model, error.to_string()),
+                }
+            }
+        }
+        KeyCode::Char(' ') => {
+            if model.settings.selected_is_bool() {
+                queue_settings_save(model, |settings| settings.toggle_selected_request())
+            } else {
+                Vec::new()
+            }
+        }
+        KeyCode::Char('r') | KeyCode::Char('R') => {
+            queue_settings_save(model, |settings| settings.reset_selected_request())
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn handle_settings_edit_key(model: &mut Model, key: &KeyEvent) -> Vec<Cmd> {
+    match key.code {
+        KeyCode::Enter => queue_settings_save(model, |settings| settings.commit_edit_request()),
+        KeyCode::Esc => {
+            model.settings.cancel_edit();
+            vec![Cmd::Render]
+        }
+        KeyCode::Backspace => {
+            model.settings.pop_edit_char();
+            vec![Cmd::Render]
+        }
+        KeyCode::Char(ch) if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT => {
+            model.settings.push_edit_char(ch);
             vec![Cmd::Render]
         }
         _ => Vec::new(),
@@ -404,6 +509,58 @@ fn move_theme_picker(model: &mut Model, delta: isize) {
     };
 }
 
+fn move_settings_selection(model: &mut Model, delta: isize) {
+    model.settings.move_selection(delta);
+    clamp_settings_scroll(model);
+}
+
+fn clamp_settings_scroll(model: &mut Model) {
+    let selected = model.settings.selected;
+    if selected < model.popup_scroll {
+        model.popup_scroll = selected;
+    } else if selected >= model.popup_scroll.saturating_add(SETTINGS_VISIBLE_ROWS) {
+        model.popup_scroll = selected
+            .saturating_add(1)
+            .saturating_sub(SETTINGS_VISIBLE_ROWS);
+    }
+}
+
+fn queue_settings_save<F>(model: &mut Model, action: F) -> Vec<Cmd>
+where
+    F: FnOnce(
+        &crate::settings_catalog::SettingsState,
+    ) -> Result<SettingsSaveRequest, SettingsError>,
+{
+    match action(&model.settings) {
+        Ok(request) => {
+            set_status(model, "settings save queued", true);
+            vec![save_settings(request), Cmd::Render]
+        }
+        Err(error) => settings_error(model, error.to_string()),
+    }
+}
+
+fn save_settings(request: SettingsSaveRequest) -> Cmd {
+    Cmd::Spawn(
+        async move {
+            let result = tokio::task::spawn_blocking(move || request.save())
+                .await
+                .map_err(|error| error.to_string())
+                .and_then(|result| result.map_err(|error| error.to_string()));
+            Msg::SettingsSaved(result)
+        }
+        .boxed(),
+    )
+}
+
+fn settings_error(model: &mut Model, error: String) -> Vec<Cmd> {
+    model.settings.set_error(error.clone());
+    set_status(model, error.clone(), false);
+    model.error = Some(error);
+    push_effect(model, EffectKind::ErrorFlash, EffectTarget::Global);
+    vec![Cmd::Render]
+}
+
 fn handle_click(model: &mut Model, action: ClickAction) -> Vec<Cmd> {
     match action {
         ClickAction::SelectTab(tab) => {
@@ -478,6 +635,11 @@ fn handle_click(model: &mut Model, action: ClickAction) -> Vec<Cmd> {
         }
         ClickAction::OpenThemePicker => open_theme_picker(model),
         ClickAction::OpenPricingDetail => open_pricing_detail(model),
+        ClickAction::SelectSetting(index) => {
+            model.settings.select(index);
+            clamp_settings_scroll(model);
+            vec![Cmd::Render]
+        }
         ClickAction::SelectTheme(theme) => {
             model.theme = theme;
             model.theme_picker_index = theme.index();
@@ -580,7 +742,7 @@ fn prompt_focus(model: &mut Model, index: usize) -> Vec<Cmd> {
     let action = WriteAction::FocusWindow {
         pane_target: pane_target.clone(),
     };
-    if quick_focus_enabled() {
+    if quick_focus_enabled(model) {
         return vec![run_write_action(action)];
     }
     model.confirm = Some(ConfirmDialog {
@@ -624,10 +786,11 @@ fn set_status(model: &mut Model, message: impl Into<String>, success: bool) {
     });
 }
 
-fn quick_focus_enabled() -> bool {
-    std::env::var("FLIGHTDECK_DASHBOARD_QUICK_FOCUS")
-        .ok()
-        .is_some_and(|value| value.trim() == "1")
+fn quick_focus_enabled(model: &Model) -> bool {
+    model
+        .settings
+        .value_bool("FLIGHTDECK_DASHBOARD_QUICK_FOCUS")
+        .unwrap_or(false)
 }
 
 fn open_theme_picker(model: &mut Model) -> Vec<Cmd> {
@@ -643,6 +806,13 @@ fn open_pricing_detail(model: &mut Model) -> Vec<Cmd> {
     }
     model.popup_scroll = 0;
     model.modal = ModalState::PricingDetail;
+    vec![Cmd::Render]
+}
+
+fn open_settings(model: &mut Model) -> Vec<Cmd> {
+    model.popup_scroll = 0;
+    model.settings.cancel_edit();
+    model.modal = ModalState::Settings;
     vec![Cmd::Render]
 }
 
@@ -721,6 +891,7 @@ fn close_overlay(model: &mut Model) {
     model.ui.filter_open = false;
     model.event_detail = None;
     model.confirm = None;
+    model.settings.cancel_edit();
     model.popup_scroll = 0;
 }
 

@@ -1,7 +1,7 @@
 mod terminal_guard;
 
 use std::io::{self, IsTerminal, Stdout};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use clap::Parser;
@@ -23,6 +23,7 @@ use flightdeck_dashboard::daemon::client::DaemonClient;
 use flightdeck_dashboard::daemon::rpc::DaemonStatus as RuntimeDaemonStatus;
 use flightdeck_dashboard::events::{self, EventSource};
 use flightdeck_dashboard::fixtures;
+use flightdeck_dashboard::settings_catalog::{self, SettingsState};
 use flightdeck_dashboard::state::snapshot::{
     DaemonStatus as SnapshotDaemonStatus, DashboardSnapshot,
 };
@@ -44,44 +45,101 @@ const CLOCK_TICK_MS: u64 = 1_000;
 const WATCH_DEBOUNCE_MS: u64 = 150;
 const DEFAULT_COST_POLL_SECS: u64 = 5;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     color_eyre::install()?;
-    let _log_guard = logging::init_file_logging()?;
     let cli = Cli::parse();
-    match cli.command {
-        Command::Tui(args) => run_tui(args).await,
-        Command::Daemon(args) => flightdeck_dashboard::daemon::cli::run_daemon(args).await,
-        Command::Status(args) => {
-            flightdeck_dashboard::daemon::cli::run_daemon(DaemonArgs {
-                action: DaemonAction::Status(args),
-            })
-            .await
+    let settings_project_root = settings_catalog::resolve_project_root();
+    let ambient_settings = settings_catalog::capture_ambient_env();
+    // Keep env mutation before logging/runtime setup. `init_file_logging` starts
+    // a tracing appender worker thread, and `env::set_var` is only safe here
+    // while the process is still single-threaded.
+    let settings_error = match &settings_project_root {
+        Ok(project_root) => settings_catalog::apply_project_overrides_pre_runtime(project_root)
+            .err()
+            .map(|error| error.to_string()),
+        Err(error) => Some(error.to_string()),
+    };
+    let _log_guard = logging::init_file_logging()?;
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    runtime.block_on(async move {
+        match cli.command {
+            Command::Tui(args) => {
+                run_tui(
+                    args,
+                    settings_project_root,
+                    ambient_settings,
+                    settings_error,
+                )
+                .await
+            }
+            Command::Daemon(args) => {
+                warn_settings_error(settings_error);
+                flightdeck_dashboard::daemon::cli::run_daemon(args).await
+            }
+            Command::Status(args) => {
+                warn_settings_error(settings_error);
+                flightdeck_dashboard::daemon::cli::run_daemon(DaemonArgs {
+                    action: DaemonAction::Status(args),
+                })
+                .await
+            }
+            Command::Supervise(args) => {
+                warn_settings_error(settings_error);
+                flightdeck_dashboard::daemon::cli::run_supervise(args).await
+            }
+            Command::Launch(args) => {
+                warn_settings_error(settings_error);
+                flightdeck_dashboard::launch::run(args).await
+            }
         }
-        Command::Supervise(args) => flightdeck_dashboard::daemon::cli::run_supervise(args).await,
-        Command::Launch(args) => flightdeck_dashboard::launch::run(args).await,
+    })
+}
+
+fn warn_settings_error(error: Option<String>) {
+    if let Some(error) = error {
+        eprintln!("Warning: {error}");
     }
 }
 
-async fn run_tui(args: TuiArgs) -> Result<()> {
+async fn run_tui(
+    args: TuiArgs,
+    settings_project_root: Result<PathBuf, settings_catalog::SettingsError>,
+    ambient_settings: std::collections::BTreeMap<String, String>,
+    settings_error: Option<String>,
+) -> Result<()> {
     let mut initial = initial_snapshot(&args).await?;
     if !matches!(initial.source, SnapshotSource::Socket(_)) {
         initial.snapshot.daemon = file_mode_daemon_status();
     }
     let theme = theme_choice(args.theme);
+    let settings = SettingsState::load_from_root_result(settings_project_root, ambient_settings);
+    let settings_error = settings_error.or_else(|| settings.last_error.clone());
     tracing::info!(source = ?initial.source, theme = theme.as_str(), "dashboard read mode selected");
-    let mut model = Model::new(
+    let mut model = Model::new_with_settings(
         initial.snapshot,
         initial.source,
         motion_level(&args),
         theme,
+        settings,
         utc_now,
     );
     model.read_source_state = initial.source_state;
     if let Some(error) = initial.status_error {
         model.error = Some(error);
     }
+    let settings_error_for_stderr = settings_error.clone();
+    if let Some(error) = settings_error {
+        model.status_message = Some(flightdeck_dashboard::app::model::ActionStatus {
+            message: format!("settings override ignored: {error}"),
+            success: false,
+        });
+    }
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        if let Some(error) = settings_error_for_stderr {
+            eprintln!("Warning: settings override ignored: {error}");
+        }
         tracing::info!(
             source = ?model.snapshot_source,
             entries = model.snapshot.sessions.len(),
