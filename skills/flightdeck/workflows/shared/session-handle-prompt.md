@@ -103,7 +103,8 @@ A generic entry reported completion.
 1. Verify the pane is no longer actively rendering.
 2. Mark the entry `complete` through the tracked-entry state path.
 3. Log `terminal-state-reached` with a short completion excerpt.
-4. Do not tear down the window automatically unless the caller explicitly requested stop/remove.
+4. Do not query GitHub, infer PR state, or run repository sync from the generic lane. PR-capable lanes must define an explicit domain workflow with authoritative merge proof.
+5. Do not tear down the window automatically unless the caller explicitly requested stop/remove.
 
 Issue mode overrides verification/teardown through `close-issue.md` after mapping to the generic `complete` state.
 

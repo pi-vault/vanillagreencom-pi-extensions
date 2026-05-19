@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
 	emitMergeAction,
 	emitMergePlanUpdated,
+	emitRepoMainSync,
 	emitSessionStarted,
 	emitWorkflowDecision,
 } from "../../src/activity/workflow-emit.ts";
@@ -130,6 +131,69 @@ describe("workflow activity helpers", () => {
 		const [row] = events(file);
 		expect(row).toMatchObject({ severity: "warning", source: "workflow", type: "daemon.warning" });
 		expect(row?.details).toMatchObject({ conflict_count: 1, queue_count: 2 });
+	});
+
+	test("repo main sync helper emits success, blocked, and failed rows", () => {
+		const file = activityPath();
+		process.env.FLIGHTDECK_ACTIVITY_FILE = file;
+		emitRepoMainSync({ sessionId: "S3b" }, {
+			ahead: 0,
+			behind: 0,
+			commands_suggested: [],
+			dirty_paths: [],
+			reason: "fast-forwarded-worktree",
+			status: "synced",
+		}, { branch: "main", remote: "origin" });
+		emitRepoMainSync({ sessionId: "S3b" }, {
+			ahead: 8,
+			behind: 9,
+			commands_suggested: ["git log --left-right main...origin/main", "leave local main divergent"],
+			dirty_paths: ["local.txt"],
+			reason: "local-branch-diverged",
+			status: "blocked",
+		});
+		emitRepoMainSync({ sessionId: "S3b" }, {
+			ahead: 0,
+			behind: 0,
+			commands_suggested: [],
+			diagnostics: [{ command: "git -C /repo fetch origin --prune", exit_status: 128, stderr: "fatal: network down" }],
+			dirty_paths: [],
+			reason: "git-fetch-failed: git -C /repo fetch origin --prune; exit 128; fatal: network down",
+			status: "failed",
+		});
+
+		const rows = events(file);
+		expect(rows[0]).toMatchObject({ severity: "success", source: "workflow", summary: "Local main synced to origin/main", type: "repo.main_synced" });
+		expect(rows[0]?.details).toMatchObject({
+			ahead: 0,
+			behind: 0,
+			branch: "main",
+			commands_suggested: [],
+			dirty_paths: [],
+			project_root: null,
+			reason: "fast-forwarded-worktree",
+			remote: "origin",
+			status: "synced",
+		});
+		expect(rows[1]).toMatchObject({ severity: "warning", summary: "Local main sync blocked: local-branch-diverged", type: "repo.main_sync_blocked" });
+		expect(rows[1]?.details).toMatchObject({
+			ahead: 8,
+			behind: 9,
+			branch: "main",
+			commands_suggested: ["git log --left-right main...origin/main", "leave local main divergent"],
+			dirty_paths: ["local.txt"],
+			reason: "local-branch-diverged",
+			remote: "origin",
+			status: "blocked",
+		});
+		expect(rows[2]).toMatchObject({ severity: "error", summary: "Local main sync failed: git-fetch-failed: git -C /repo fetch origin --prune; exit 128; fatal: network down", type: "repo.main_sync_failed" });
+		expect(rows[2]?.details).toMatchObject({
+			ahead: 0,
+			behind: 0,
+			diagnostics: [{ command: "git -C /repo fetch origin --prune", exit_status: 128, stderr: "fatal: network down" }],
+			reason: "git-fetch-failed: git -C /repo fetch origin --prune; exit 128; fatal: network down",
+			status: "failed",
+		});
 	});
 });
 

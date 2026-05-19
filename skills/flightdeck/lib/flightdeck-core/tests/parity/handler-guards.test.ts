@@ -13,6 +13,8 @@ const HANDLER_DOC = resolve(HERE, "../../../../workflows/shared/session-handle-p
 const GITHUB_HANDLE_DOC = resolve(HERE, "../../../../workflows/github/handle-prompt.md");
 const GITHUB_CLOSE_DOC = resolve(HERE, "../../../../workflows/github/close-issue.md");
 const GITHUB_WATCH_DOC = resolve(HERE, "../../../../workflows/github/watch.md");
+const LINEAR_CLOSE_DOC = resolve(HERE, "../../../../workflows/linear/close-issue.md");
+const LINEAR_MERGE_DOC = resolve(HERE, "../../../../workflows/linear/merge-plan.md");
 const PLAN_START_DOC = resolve(HERE, "../../../../workflows/plan/start.md");
 const PLAN_HANDLE_DOC = resolve(HERE, "../../../../workflows/plan/handle-prompt.md");
 const PLAN_CLOSE_DOC = resolve(HERE, "../../../../workflows/plan/close-item.md");
@@ -368,6 +370,75 @@ describe("handler domain guards", () => {
 		expect(doc).toContain("Pane text like `MERGED`");
 		expect(doc).toContain("never closes an issue by itself");
 		expectTextBeforeLast(doc, "gh pr view <PR> --json state,mergeStateStatus,mergeCommit", "gh issue close <N> --reason completed");
+	});
+
+
+	test("generic terminal handler stays domain-neutral and does not sync repos", () => {
+		const doc = readFileSync(HANDLER_DOC, "utf8");
+		expect(doc).toContain("Do not query GitHub, infer PR state, or run repository sync from the generic lane");
+		expect(doc).not.toContain("flightdeck-repo-sync main");
+	});
+
+	test("github close post-merge repo sync requires authoritative MERGED state", () => {
+		const doc = readFileSync(GITHUB_CLOSE_DOC, "utf8");
+		expect(doc).toContain("flightdeck-repo-sync main --project-root <PROJECT_ROOT> --remote origin --branch main --json");
+		expect(doc).toContain("gh pr view <PR> --json state,mergeStateStatus,mergeCommit");
+		expect(doc).toContain('state === "MERGED"');
+		expect(doc).toContain("mergeCommit !== null");
+		expect(doc).toContain("Do not run this helper for queued auto-merge");
+		expect(doc).toContain("repo.main_sync_blocked");
+	});
+
+	test("plan close post-merge repo sync requires authoritative MERGED state", () => {
+		const doc = readFileSync(PLAN_CLOSE_DOC, "utf8");
+		expect(doc).toContain("flightdeck-repo-sync main --project-root <PROJECT_ROOT> --remote origin --branch main --json");
+		expect(doc).toContain("gh pr view <PR> --json state,mergeStateStatus,mergeCommit");
+		expect(doc).toContain('state === "MERGED"');
+		expect(doc).toContain("mergeCommit !== null");
+		expect(doc).toContain("Do not run this helper for queued auto-merge");
+		expect(doc).toContain("repo.main_sync_failed");
+	});
+
+	test("linear close post-merge repo sync is not driven by pane text", () => {
+		const doc = readFileSync(LINEAR_CLOSE_DOC, "utf8");
+		const proof = doc.indexOf("gh pr view <PR> --json state,mergeStateStatus,mergeCommit");
+		const setState = doc.indexOf("pane-registry set-state <ISSUE_ID> <merged|aborted>");
+		const persistFields = doc.indexOf("Persist any captured summary fields");
+		const teardown = doc.indexOf("pane-registry teardown-window <ISSUE_ID>");
+		expect(doc).toContain("flightdeck-repo-sync main --project-root <PROJECT_ROOT> --remote origin --branch main --json");
+		expect(doc).toContain("gh pr view <PR> --json state,mergeStateStatus,mergeCommit");
+		expect(doc).toContain('state === "MERGED"');
+		expect(doc).toContain("mergeCommit !== null");
+		expect(doc).toContain("If the `merged` outcome came only from pane text");
+		expect(doc).toContain("Leave the entry non-terminal and return to the watch loop");
+		expect(doc).toContain("proceed to § 2 with candidate `state = merged`");
+		expect(doc).toContain("This fast-path only satisfies signal counting");
+		expect(doc).not.toContain("proceed directly to § 3 with `state = merged`");
+		expect(doc).toContain("Do not run this helper for queued auto-merge");
+		expect(proof).toBeGreaterThanOrEqual(0);
+		expect(setState).toBeGreaterThanOrEqual(0);
+		expect(persistFields).toBeGreaterThanOrEqual(0);
+		expect(teardown).toBeGreaterThanOrEqual(0);
+		expect(proof).toBeLessThan(setState);
+		expect(proof).toBeLessThan(persistFields);
+		expect(proof).toBeLessThan(teardown);
+	});
+
+	test("linear direct merge sync skips queued auto-merge", () => {
+		const doc = readFileSync(LINEAR_MERGE_DOC, "utf8");
+		const proof = doc.indexOf("gh pr view <PR> --json state,mergeStateStatus,mergeCommit");
+		expect(doc).toContain("flightdeck-repo-sync main --project-root <PROJECT_ROOT> --remote origin --branch main --json");
+		expect(doc).toContain("The `pr-merge` exit code is not proof by itself");
+		expect(doc).toContain('state === "MERGED"');
+		expect(doc).toContain("mergeCommit !== null");
+		expect(doc).toContain("do **not** call `pane-registry set-state`, persist `merge_commit`, run repo sync, recompute the graph, or perform terminal handling");
+		expect(doc).toContain("This step only runs after exit `0` plus authoritative");
+		expect(doc).toContain("It does not run for exit `75` queued auto-merge");
+		expect(doc).toContain("repo.main_synced");
+		expectTextBefore(doc, "gh pr view <PR> --json state,mergeStateStatus,mergeCommit", "pane-registry set-state <ISSUE_ID> merged");
+		expectTextBefore(doc, "gh pr view <PR> --json state,mergeStateStatus,mergeCommit", "pane-registry set <ISSUE_ID> merge_commit <mergeCommit.oid>");
+		expectTextBefore(doc, "gh pr view <PR> --json state,mergeStateStatus,mergeCommit", "flightdeck-repo-sync main --project-root <PROJECT_ROOT> --remote origin --branch main --json");
+		expect(proof).toBeGreaterThanOrEqual(0);
 	});
 
 	test("github force-merge handlers honor FLIGHTDECK_AUTO_MERGE=0", () => {
