@@ -30,13 +30,45 @@
 
 # Skill mappings per agent — always loaded into context
 [agent-skills]
-rust = ["rust-arch", "rust-cargo", "rust-conventions", "rust-safety"]
+rust = [
+    "rust-arch",
+    "rust-cargo",
+    "rust-conventions",
+    "rust-safety",
+    "github",
+    "linear",
+    "worktree",
+]
+
 iced = ["iced-rs"]
-reviewer-arch = ["rust-arch", "decider"]
-reviewer-perf = ["perf-profiling", "perf-latency"]
-reviewer-safety = ["rust-safety"]
-reviewer-structure = ["rust-arch"]
-reviewer-test = ["rust-conventions"]
+
+reviewer-arch = [
+    "rust-arch",
+    "decider",
+    "linear",
+]
+
+reviewer-perf = [
+    "perf-profiling",
+    "perf-latency",
+    "linear",
+]
+
+reviewer-safety = [
+    "rust-safety",
+    "linear",
+]
+
+reviewer-structure = [
+    "rust-arch",
+    "linear",
+]
+
+reviewer-test = [
+    "rust-conventions",
+    "linear",
+]
+
 generalist = [
     "decider",
     "github",
@@ -44,21 +76,33 @@ generalist = [
     "linear",
     "worktree",
 ]
-planner = []
-scout = []
+
+planner = [
+    "github",
+    "linear",
+]
+
+scout = [
+    "github",
+    "linear",
+]
+
 reviewer-doc = [
     "issue-lifecycle",
     "linear",
     "decider",
 ]
+
 reviewer-error = [
     "issue-lifecycle",
     "linear",
 ]
+
 reviewer-security = [
     "issue-lifecycle",
     "linear",
 ]
+
 tpm = [
     "decider",
     "github",
@@ -67,7 +111,13 @@ tpm = [
     "project-management",
     "worktree",
 ]
-researcher = ["deep-research", "decider"]
+
+researcher = [
+    "deep-research",
+    "decider",
+    "github",
+    "linear",
+]
 
 # Specialist skills — loaded on demand when the task matches
 [agent-skills-optional]
@@ -79,15 +129,18 @@ rust = [
   { skill = "rust-no-std", when = "Embedded targets, no_std, or custom allocators" },
   { skill = "second-opinion", when = "Cross-model code review, adversarial challenge, or second opinion from another AI" },
 ]
+
 generalist = [
   { skill = "second-opinion", when = "Cross-model code review, adversarial challenge, or second opinion from another AI" },
 ]
+
 iced = [
   { skill = "price-handling", when = "Price display, order entry, tick sizes, or feed parsing" },
   { skill = "trading-design", when = "UI layout design, typography, color, or visual density" },
   { skill = "iced-shadcn", when = "Implementing or auditing shadcn-inspired component families" },
   { skill = "second-opinion", when = "Cross-model code review, adversarial challenge, or second opinion from another AI" },
 ]
+
 reviewer-perf = [
   { skill = "perf-cache", when = "Cache optimization, CPU cache behavior, or coherency" },
   { skill = "perf-ebpf", when = "eBPF profiling, bpftrace, or kernel-level observation" },
@@ -121,6 +174,9 @@ reviewer = ["issue-lifecycle", "linear"]
 # Claude agents inherit `xhigh` from each agent's canonical `effort:` field.
 [agent-frontmatter.claude]
 iced = { effort = "max" }
+
 planner = { effort = "max" }
+
 researcher = { effort = "max" }
+
 rust = { effort = "max" }
