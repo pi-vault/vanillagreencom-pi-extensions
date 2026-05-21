@@ -293,14 +293,14 @@ mod parse_skills_field_tests {
 
     #[test]
     fn yaml_inline_list_brackets() {
-        let fm = "name: rust\nskills: [rust-arch, rust-async, \"rust-safety\"]";
+        let fm = "name: rust\nskills: [rust-tooling, rust-runtime, \"rust-unsafe\"]";
         let skills = parse_skills_field(fm);
         assert_eq!(
             skills,
             vec![
-                "rust-arch".to_string(),
-                "rust-async".to_string(),
-                "rust-safety".to_string(),
+                "rust-tooling".to_string(),
+                "rust-runtime".to_string(),
+                "rust-unsafe".to_string(),
             ]
         );
     }

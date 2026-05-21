@@ -184,14 +184,14 @@ mod tests {
     fn default_config_falls_back_to_prefix_matching() {
         let config = MappingConfig::default();
         let available = vec![
-            "rust-arch".into(),
-            "rust-async".into(),
+            "rust-tooling".into(),
+            "rust-runtime".into(),
             "python-web".into(),
             "issue-lifecycle".into(),
         ];
         let matched = config.skills_for_agent("rust", &AgentRole::Engineer, &available);
-        assert!(matched.contains(&"rust-arch".to_string()));
-        assert!(matched.contains(&"rust-async".to_string()));
+        assert!(matched.contains(&"rust-tooling".to_string()));
+        assert!(matched.contains(&"rust-runtime".to_string()));
         assert!(!matched.contains(&"python-web".to_string()));
     }
 
@@ -366,16 +366,16 @@ mod tests {
         // Only the listed skills (plus role-skills) should be attached.
         config
             .agent_skills
-            .insert("rust".into(), vec!["rust-arch".into(), "rust-async".into()]);
+            .insert("rust".into(), vec!["rust-tooling".into(), "rust-runtime".into()]);
         let available = vec![
-            "rust-arch".into(),
-            "rust-async".into(),
-            "rust-cargo".into(), // available but not in explicit list
+            "rust-tooling".into(),
+            "rust-runtime".into(),
+            "rust-build".into(), // available but not in explicit list
         ];
         let matched = config.skills_for_agent("rust", &AgentRole::Engineer, &available);
-        assert!(matched.contains(&"rust-arch".to_string()));
-        assert!(matched.contains(&"rust-async".to_string()));
-        // rust-cargo would be found by prefix matching, but explicit entry skips it
-        assert!(!matched.contains(&"rust-cargo".to_string()));
+        assert!(matched.contains(&"rust-tooling".to_string()));
+        assert!(matched.contains(&"rust-runtime".to_string()));
+        // rust-build would be found by prefix matching, but explicit entry skips it
+        assert!(!matched.contains(&"rust-build".to_string()));
     }
 }

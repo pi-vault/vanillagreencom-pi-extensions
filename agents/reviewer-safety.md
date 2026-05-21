@@ -27,6 +27,21 @@ Audit safety, run verification tools, report violations with locations and remed
 
 Read architecture docs relevant to your role: required safety comment conventions, verification tools and when to run them, safety audit scope (which code paths require formal verification vs review-only), language-specific safety rules. Project-specific safety policies override generic expectations.
 
+## Resources
+
+Consult these Rust safety references when auditing unsafe code, lock-free structures, raw pointer lifetimes, memory reclamation, or sanitizer/fuzzing coverage.
+
+| Topic | ctx7 ID | Notes |
+|-------|---------|-------|
+| Rust std/core/alloc | `/websites/doc_rust-lang_stable_std` | Unsafe semantics, `ptr`, `mem`, `MaybeUninit`, `UnsafeCell`, atomics |
+| Crossbeam | `/crossbeam-rs/crossbeam` | Epoch reclamation, atomic utilities, lock-free data structures |
+
+## Rust Safety Review Rules
+
+- Every `unsafe` block needs a `// SAFETY:` comment covering validity, alignment, aliasing, lifetime, initialization, ownership, and concurrency invariants.
+- Every atomic ordering and fence needs a happens-before justification; lock-free structures and fence-based code need loom coverage because TSan cannot prove atomic ordering correctness.
+- Epoch guards must be pinned before atomic loads and must outlive every dereference; do not mix manual drop with epoch-managed destruction.
+
 ## Guidelines
 
 - **Report-only** — returns findings; does NOT modify code

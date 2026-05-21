@@ -960,7 +960,7 @@ mod tests {
             "x",
             vec![source_tab(
                 "A",
-                vec![item("rust-async"), item("rust-cargo"), item("trading")],
+                vec![item("rust-runtime"), item("rust-build"), item("trading")],
             )],
         );
         sel.filter = Some("rust".into());

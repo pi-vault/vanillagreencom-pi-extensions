@@ -67,11 +67,11 @@ Claude Code · Cursor · OpenCode · Codex · Pi
 ```toml
 # Skills assigned to each agent.
 [agent-skills]
-rust = ["rust-arch", "rust-cargo", "github", "worktree"]
+rust = ["github", "worktree"]
 
 # Specialist skills loaded on demand.
 [agent-skills-optional]
-rust = [{ skill = "rust-async", when = "Async, tokio, channels" }]
+rust = [{ skill = "second-opinion", when = "Cross-model review" }]
 
 # Instructions added near the top of the generated agent file.
 [agent-launch-instructions]
@@ -147,32 +147,9 @@ Windows: CLI runs natively; symlink mode falls back to copy.
 
 `*` = needs project-local setup; see that skill's README.
 
-#### Rust
+#### Rust and Performance Guidance
 
-| Skill | Brief |
-|---|---|
-| [`rust-arch`](skills/rust-arch/) | Rust architecture rules, anti-patterns, and review heuristics. |
-| [`rust-async`](skills/rust-async/) | Async internals, runtime patterns, cancellation, and concurrency composition. |
-| [`rust-cargo`](skills/rust-cargo/) | Cargo workflows, workspaces, feature flags, and build/release config. |
-| [`rust-conventions`](skills/rust-conventions/) | Style, layout, tests, and definition-of-done conventions. |
-| [`rust-cross`](skills/rust-cross/) | Cross-compilation, target setup, and multi-platform builds. |
-| [`rust-debugging`](skills/rust-debugging/) | GDB/LLDB, tracing, panic triage, and async runtime debugging. |
-| [`rust-ffi`](skills/rust-ffi/) | Safe C interop and FFI wrapper patterns. |
-| [`rust-no-std`](skills/rust-no-std/) | `no_std` design, alloc boundaries, and embedded-friendly structure. |
-| [`rust-safety`](skills/rust-safety/) | Unsafe code review, SAFETY comments, and safety audit patterns. |
-
-#### Performance
-
-| Skill | Brief |
-|---|---|
-| [`perf-cache`](skills/perf-cache/) | Cache locality, false sharing, and data layout optimization. |
-| [`perf-ebpf`](skills/perf-ebpf/) | Aya/eBPF instrumentation and kernel-level observability. |
-| [`perf-latency`](skills/perf-latency/) | Benchmarking and percentile-focused latency measurement. |
-| [`perf-lock-free`](skills/perf-lock-free/) | Atomics, loom verification, and lock-free correctness. |
-| [`perf-profiling`](skills/perf-profiling/) | Flamegraphs, hotspot analysis, NUMA, and jitter investigation. |
-| [`perf-simd`](skills/perf-simd/) | SIMD, auto-vectorization, intrinsics, and runtime dispatch. |
-| [`perf-threading`](skills/perf-threading/) | Pinning, topology-aware concurrency, and jitter reduction. |
-| [`perf-zero-alloc`](skills/perf-zero-alloc/) | Eliminating allocations in hot paths. |
+Rust and performance reference material now lives directly in the `rust`, `reviewer-perf`, and `reviewer-safety` agent bodies as compact resource tables.
 
 #### UI / Domain
 

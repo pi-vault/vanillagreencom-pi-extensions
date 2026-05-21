@@ -100,7 +100,7 @@ On install vstack copies `pi-extensions/<name>/` into `<scope>/packages/<name>` 
 ### Mapping config (`vstack.toml`)
 ```toml
 [agent-skills]
-rust = ["rust-arch", "rust-async", "rust-cargo", ...]
+rust = ["github", "worktree", ...]
 iced = ["iced-rs", "iced-shadcn", ...]
 
 [role-skills]
@@ -121,11 +121,11 @@ Per-agent customization survives `vstack add` — re-applied on every install/re
 ```toml
 # Skills loaded into each agent's context.
 [agent-skills]
-rust = ["rust-arch", "rust-cargo"]
+rust = ["github", "worktree"]
 
 # Specialist skills loaded on demand with "when to load" hints.
 [agent-skills-optional]
-rust = [{ skill = "rust-async", when = "Async, tokio, channels" }]
+rust = [{ skill = "second-opinion", when = "Cross-model review" }]
 
 # Launch instructions added near the top of generated agent files.
 [agent-launch-instructions]

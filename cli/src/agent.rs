@@ -537,16 +537,16 @@ Does testing things.
     #[test]
     fn match_skills_by_prefix() {
         let available = vec![
-            "rust-arch".into(),
-            "rust-async".into(),
+            "rust-tooling".into(),
+            "rust-runtime".into(),
             "python-web".into(),
             "issue-lifecycle".into(),
             "github".into(),
             "worktree".into(),
         ];
         let matched = match_skills("rust", &AgentRole::Engineer, &available);
-        assert!(matched.contains(&"rust-arch".to_string()));
-        assert!(matched.contains(&"rust-async".to_string()));
+        assert!(matched.contains(&"rust-tooling".to_string()));
+        assert!(matched.contains(&"rust-runtime".to_string()));
         assert!(!matched.contains(&"python-web".to_string()));
         // Engineer gets workflow skills
         assert!(matched.contains(&"issue-lifecycle".to_string()));
@@ -557,13 +557,13 @@ Does testing things.
     #[test]
     fn match_skills_reviewer_prefix_strip() {
         let available = vec![
-            "rust-arch".into(),
-            "rust-async".into(),
+            "rust-tooling".into(),
+            "rust-runtime".into(),
             "issue-lifecycle".into(),
         ];
         let matched = match_skills("reviewer-rust", &AgentRole::Reviewer, &available);
-        assert!(matched.contains(&"rust-arch".to_string()));
-        assert!(matched.contains(&"rust-async".to_string()));
+        assert!(matched.contains(&"rust-tooling".to_string()));
+        assert!(matched.contains(&"rust-runtime".to_string()));
         assert!(matched.contains(&"issue-lifecycle".to_string()));
     }
 
@@ -655,7 +655,7 @@ Does testing things.
     fn load_skills_section_format() {
         let skills = vec![
             (
-                "rust-arch".into(),
+                "rust-tooling".into(),
                 "Architecture patterns for Rust: more details here.".into(),
             ),
             ("github".into(), "GitHub CLI integration".into()),
@@ -673,7 +673,7 @@ Does testing things.
         assert!(section.contains("Load any skill whose name or description matches"));
         assert!(section.contains("Skill descriptions are listed by the harness"));
         // Per-skill table rows are intentionally absent.
-        assert!(!section.contains("| `rust-arch` |"));
+        assert!(!section.contains("| `rust-tooling` |"));
         assert!(!section.contains("| `trading-design` |"));
     }
 

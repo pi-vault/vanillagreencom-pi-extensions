@@ -2578,7 +2578,7 @@ mod tests {
     fn project_config_parses_all_sections() {
         let toml = r#"
 [agent-skills]
-rust = ["rust-arch", "rust-async", "my-custom-skill"]
+rust = ["rust-tooling", "rust-runtime", "my-custom-skill"]
 
 [agent-colors]
 rust = "green"
@@ -2593,7 +2593,7 @@ rust = "Always run clippy before committing."
         let config: ProjectConfig = toml::from_str(toml).unwrap();
         let skills = config.agent_skills_for("rust").unwrap();
         assert_eq!(skills.len(), 3);
-        assert_eq!(skills[0], "rust-arch");
+        assert_eq!(skills[0], "rust-tooling");
         assert_eq!(skills[2], "my-custom-skill");
 
         assert_eq!(config.color_for("rust"), Some("green"));
@@ -2978,7 +2978,7 @@ rust = "Use for Rust work."
         let path = dir.join("vstack.toml");
 
         // Create initial config with "rust" agent
-        create_project_config(&path, &["rust".into()], &["rust-arch".into()]);
+        create_project_config(&path, &["rust".into()], &["rust-tooling".into()]);
         let initial = std::fs::read_to_string(&path).unwrap();
         assert!(initial.contains("rust = \"\""));
         // Legacy installed-skills reference block no longer emitted
@@ -2988,7 +2988,7 @@ rust = "Use for Rust work."
         update_project_config(
             &path,
             &["rust".into(), "iced".into()],
-            &["rust-arch".into(), "trading-design".into()],
+            &["rust-tooling".into(), "trading-design".into()],
         );
         let updated = std::fs::read_to_string(&path).unwrap();
 
@@ -3083,11 +3083,11 @@ rust = "Always use thiserror for errors."
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("vstack.toml");
 
-        create_project_config(&path, &["rust".into()], &["rust-arch".into()]);
+        create_project_config(&path, &["rust".into()], &["rust-tooling".into()]);
         let before = std::fs::read_to_string(&path).unwrap();
 
         // Same agents/skills — should not add "New agents" section
-        update_project_config(&path, &["rust".into()], &["rust-arch".into()]);
+        update_project_config(&path, &["rust".into()], &["rust-tooling".into()]);
         let after = std::fs::read_to_string(&path).unwrap();
 
         assert!(!after.contains("── New agents"));
@@ -3219,8 +3219,8 @@ generalist = \"\"\n";
         // contiguous comment run only, leaving any later TOML intact.
         let content = "[agent-skills]\nrust = []\n\n\
 # ── Installed skills (reference) ─────────────────────\n\
-#   rust-arch\n\
-#   rust-async\n\
+#   rust-tooling\n\
+#   rust-runtime\n\
 \n\
 [[custom-hooks]]\n\
 event = \"PreToolUse\"\n\
@@ -3262,7 +3262,7 @@ command = \"./scripts/x.sh\"\n";
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("vstack.toml");
 
-        create_project_config(&path, &["rust".into()], &["rust-arch".into()]);
+        create_project_config(&path, &["rust".into()], &["rust-tooling".into()]);
         // Manually append an active block AFTER the auto-generated reference
         let mut current = std::fs::read_to_string(&path).unwrap();
         current.push_str(
@@ -3272,11 +3272,11 @@ command = \"./scripts/x.sh\"\n";
 
         // First update may reorder (moves regenerated reference to end).
         // The test we care about: subsequent updates are byte-stable.
-        update_project_config(&path, &["rust".into()], &["rust-arch".into()]);
+        update_project_config(&path, &["rust".into()], &["rust-tooling".into()]);
         let after_first = std::fs::read_to_string(&path).unwrap();
 
         for _ in 0..3 {
-            update_project_config(&path, &["rust".into()], &["rust-arch".into()]);
+            update_project_config(&path, &["rust".into()], &["rust-tooling".into()]);
         }
         let after_n = std::fs::read_to_string(&path).unwrap();
 
@@ -3304,17 +3304,17 @@ command = \"./scripts/x.sh\"\n";
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("vstack.toml");
 
-        let legacy = "[agent-launch-instructions]\nrust = \"\"\n\n# ── Installed skills (reference) ─────────────────────\n#   rust-arch\n#   rust-ffi\n";
+        let legacy = "[agent-launch-instructions]\nrust = \"\"\n\n# ── Installed skills (reference) ─────────────────────\n#   rust-tooling\n#   rust-interop\n";
         std::fs::write(&path, legacy).unwrap();
 
         update_project_config(
             &path,
             &["rust".into()],
-            &["rust-arch".into(), "rust-ffi".into()],
+            &["rust-tooling".into(), "rust-interop".into()],
         );
         let updated = std::fs::read_to_string(&path).unwrap();
         assert!(!updated.contains("Installed skills (reference)"));
-        assert!(!updated.contains("#   rust-arch"));
+        assert!(!updated.contains("#   rust-tooling"));
         assert!(updated.contains("rust = \"\""));
 
         let _ = std::fs::remove_dir_all(&dir);

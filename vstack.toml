@@ -31,10 +31,6 @@
 # Skill mappings per agent — always loaded into context
 [agent-skills]
 rust = [
-    "rust-arch",
-    "rust-cargo",
-    "rust-conventions",
-    "rust-safety",
     "github",
     "linear",
     "worktree",
@@ -95,11 +91,6 @@ researcher = [
 # Specialist skills — loaded on demand when the task matches
 [agent-skills-optional]
 rust = [
-  { skill = "rust-async", when = "Async code, tokio, futures, channels, or cancellation" },
-  { skill = "rust-cross", when = "Cross-compilation or non-native target architectures" },
-  { skill = "rust-debugging", when = "Debugging crashes, memory issues, or using GDB/LLDB" },
-  { skill = "rust-ffi", when = "FFI boundaries, C interop, bindgen, or repr(C)" },
-  { skill = "rust-no-std", when = "Embedded targets, no_std, or custom allocators" },
   { skill = "second-opinion", when = "Cross-model code review, adversarial challenge, or second opinion from another AI" },
 ]
 
@@ -112,15 +103,6 @@ iced = [
   { skill = "trading-design", when = "UI layout design, typography, color, or visual density" },
   { skill = "iced-shadcn", when = "Implementing or auditing shadcn-inspired component families" },
   { skill = "second-opinion", when = "Cross-model code review, adversarial challenge, or second opinion from another AI" },
-]
-
-reviewer-perf = [
-  { skill = "perf-cache", when = "Cache optimization, CPU cache behavior, or coherency" },
-  { skill = "perf-ebpf", when = "eBPF profiling, bpftrace, or kernel-level observation" },
-  { skill = "perf-lock-free", when = "Atomic operations, lock-free data structures, or hazard pointers" },
-  { skill = "perf-simd", when = "SIMD intrinsics, auto-vectorization, or target features" },
-  { skill = "perf-threading", when = "Thread pools, work-stealing, or thread-local storage" },
-  { skill = "perf-zero-alloc", when = "Object pools, arena allocators, or allocation-sensitive paths" },
 ]
 
 # Skills given to all agents of a role

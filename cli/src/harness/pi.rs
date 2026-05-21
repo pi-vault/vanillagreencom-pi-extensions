@@ -210,7 +210,7 @@ mod tests {
             ..AgentExtras::default()
         };
         let skills = vec![(
-            "rust-arch".into(),
+            "rust-tooling".into(),
             "Architecture patterns for Rust: more details.".into(),
         )];
         let path = generate_agent(&agent, &dir, &skills, &[], &[], &extras).expect("generate ok");

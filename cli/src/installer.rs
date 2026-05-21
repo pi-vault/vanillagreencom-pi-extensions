@@ -1609,12 +1609,12 @@ mod tests {
             crate::config::now_iso().replace([':', '-'], "")
         ));
         let from = root.join("a").join("b");
-        let to = root.join("config").join("skills").join("rust-async");
+        let to = root.join("config").join("skills").join("rust-runtime");
         std::fs::create_dir_all(&from).unwrap();
         std::fs::create_dir_all(&to).unwrap();
 
         let rel = relative_path(&from, &to).unwrap();
-        assert_eq!(rel, PathBuf::from("../../config/skills/rust-async"));
+        assert_eq!(rel, PathBuf::from("../../config/skills/rust-runtime"));
 
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -1631,7 +1631,7 @@ mod tests {
         ));
         let real_parent = root.join("real").join("skills");
         let apparent_parent = root.join("apparent");
-        let target = root.join("config").join("skills").join("rust-async");
+        let target = root.join("config").join("skills").join("rust-runtime");
 
         std::fs::create_dir_all(&real_parent).unwrap();
         std::fs::create_dir_all(target.parent().unwrap()).unwrap();
