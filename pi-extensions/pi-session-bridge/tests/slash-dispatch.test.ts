@@ -226,38 +226,38 @@ describe("slash expansion", () => {
 	});
 
 	test("re-expands skill after SKILL.md content changes", () => {
-		const skillPath = p("skills/orchestration/SKILL.md");
+		const skillPath = p("skills/linear-orch/SKILL.md");
 		mkdirSync(dirname(skillPath), { recursive: true });
-		writeFileSync(skillPath, "---\nname: orchestration\n---\n# Orchestration v1\n");
-		const commands = [{ name: "skill:orchestration", source: "skill", sourceInfo: { path: skillPath } }] as SlashCommandInfoLike[];
+		writeFileSync(skillPath, "---\nname: linear-orch\n---\n# Linear Orchestration v1\n");
+		const commands = [{ name: "skill:linear-orch", source: "skill", sourceInfo: { path: skillPath } }] as SlashCommandInfoLike[];
 		const cache = new Map<string, Map<string, string>>();
 
-		const first = expandLoadedSlashContent("/skill:orchestration run", commands, readFileSync, {
+		const first = expandLoadedSlashContent("/skill:linear-orch run", commands, readFileSync, {
 			sessionId: "session-a",
 			skillExpansionCache: cache,
 		});
-		expect(first.text).toContain("# Orchestration v1");
+		expect(first.text).toContain("# Linear Orchestration v1");
 
-		const deduped = expandLoadedSlashContent("/skill:orchestration run", commands, readFileSync, {
+		const deduped = expandLoadedSlashContent("/skill:linear-orch run", commands, readFileSync, {
 			sessionId: "session-a",
 			skillExpansionCache: cache,
 		});
-		expect(deduped.text).toBe("Skill orchestration (previously loaded). Invocation: run");
+		expect(deduped.text).toBe("Skill linear-orch (previously loaded). Invocation: run");
 
-		writeFileSync(skillPath, "---\nname: orchestration\n---\n# Orchestration v2\n");
-		const changed = expandLoadedSlashContent("/skill:orchestration run", commands, readFileSync, {
+		writeFileSync(skillPath, "---\nname: linear-orch\n---\n# Linear Orchestration v2\n");
+		const changed = expandLoadedSlashContent("/skill:linear-orch run", commands, readFileSync, {
 			sessionId: "session-a",
 			skillExpansionCache: cache,
 		});
-		expect(changed.text).toContain(`<skill name="orchestration" location="${skillPath}">`);
-		expect(changed.text).toContain("# Orchestration v2");
-		expect(changed.text).not.toContain("# Orchestration v1");
+		expect(changed.text).toContain(`<skill name="linear-orch" location="${skillPath}">`);
+		expect(changed.text).toContain("# Linear Orchestration v2");
+		expect(changed.text).not.toContain("# Linear Orchestration v1");
 
-		const dedupedAgain = expandLoadedSlashContent("/skill:orchestration run", commands, readFileSync, {
+		const dedupedAgain = expandLoadedSlashContent("/skill:linear-orch run", commands, readFileSync, {
 			sessionId: "session-a",
 			skillExpansionCache: cache,
 		});
-		expect(dedupedAgain.text).toBe("Skill orchestration (previously loaded). Invocation: run");
+		expect(dedupedAgain.text).toBe("Skill linear-orch (previously loaded). Invocation: run");
 	});
 
 	test("dedup is independent per skill within a session (pins Map<sessionId, Map<skillName, hash>>)", () => {

@@ -6,11 +6,11 @@ Issue-mode workflow only. Generic/ad-hoc terminal signals stay in `workflows/sha
 
 **Inputs**: `<ISSUE_ID>`. Caller (`watch.md` § 2) routes here when `pane-poll` returns the `terminal-state-reached` tag.
 
-**Pre-conditions**: issue is registered; pane is alive but signaling completion; orchestration's own merge / cleanup steps already ran (their output is what we're reading).
+**Pre-conditions**: issue is registered; pane is alive but signaling completion; linear-orch's own merge / cleanup steps already ran (their output is what we're reading).
 
 **Post-condition**: issue's `state` = `merged` or `aborted` in master state; tmux window for the issue is gone; pane registry entry remains for `terminate.md` reporting and final cleanup; completion line emitted.
 
-**Cleanup scope under Flightdeck**: per-issue finalization (the inner pane's `orchestration merge-pr` flow) honors a Flightdeck-mode guard via `skills/orchestration/scripts/flightdeck-mode`. The inner sweep is restricted to artifacts owned by the asking issue (its registered worktree, its registered branch, and the remote branch of its PR). Cross-branch / cross-worktree maintenance is the master's responsibility (or a standalone manual `merge-pr` run from outside Flightdeck); if a destructive prompt about unrelated artifacts still surfaces, `patterns/prompt-handlers.md` (`stale-no-pr-branch`, `stale-orphan-worktree`) tells master to answer `Keep ...`. The helper reads tracked entries via `flightdeck-state tracked-entries`, which returns the canonical `.entries` map.
+**Cleanup scope under Flightdeck**: per-issue finalization (the inner pane's `linear-orch merge-pr` flow) honors a Flightdeck-mode guard via `skills/linear-orch/scripts/flightdeck-mode`. The inner sweep is restricted to artifacts owned by the asking issue (its registered worktree, its registered branch, and the remote branch of its PR). Cross-branch / cross-worktree maintenance is the master's responsibility (or a standalone manual `merge-pr` run from outside Flightdeck); if a destructive prompt about unrelated artifacts still surfaces, `patterns/prompt-handlers.md` (`stale-no-pr-branch`, `stale-orphan-worktree`) tells master to answer `Keep ...`. The helper reads tracked entries via `flightdeck-state tracked-entries`, which returns the canonical `.entries` map.
 
 ---
 

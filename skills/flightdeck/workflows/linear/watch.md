@@ -53,7 +53,7 @@ The generic state enum is canonical. Issue-mode entries may carry one of the iss
 |------------------|--------------------|---------------|
 | `waiting` | `waiting` | unchanged |
 | `prompting` | `prompting` | `substate=<tag>` |
-| `submitting` | `submitting` | orchestration in progress |
+| `submitting` | `submitting` | linear-orch in progress |
 | `merge-ready` | `ready` | `domain.issue.phase = "merge-ready"` |
 | `merged` | `complete` | `domain.issue.outcome = "merged"` |
 | `aborted` | `cancelled` | `domain.issue.outcome = "aborted"` |
@@ -78,7 +78,7 @@ POLL_INPUT=$(jq '[.[]
 ]' <<< "$REGISTRY_JSON")
 ```
 
-1. **Orchestration hijack/start check** — if `domain.issue.orchestration_started` is false, look for `tmp/workflow-state-<ISSUE>.json`. If absent beyond `FLIGHTDECK_HIJACK_GRACE_SECS` (default 90), set `paused_for_user = {issue_id, reason: "orchestration-never-started", prompt_text: ...}`.
+1. **linear-orch hijack/start check** — if `domain.issue.orchestration_started` is false, look for `tmp/workflow-state-<ISSUE>.json`. If absent beyond `FLIGHTDECK_HIJACK_GRACE_SECS` (default 90), set `paused_for_user = {issue_id, reason: "orchestration-never-started", prompt_text: ...}`.
 2. **Issue-only tags** — route only when `kind == "issue"`. Tags include:
    - `cleanup-prompt`
    - `bot-review-wait-stuck`
@@ -140,7 +140,7 @@ After generic session status, emit the issue summary expected by current users. 
 
 For each tracked issue, gather:
 
-- **Phase** — `flightdeck-state phase <ISSUE>` from orchestration workflow state, falling back to `fd:<state>`.
+- **Phase** — `flightdeck-state phase <ISSUE>` from linear-orch workflow state, falling back to `fd:<state>`.
 - **Last prompt** — most recent `decisions_log[-1].prompt_tag` plus a short prompt excerpt.
 - **Answer** — most recent `decisions_log[-1].answer`.
 - **PR** — `domain.issue.pr_number`.
@@ -173,7 +173,7 @@ At the end of each issue cycle:
 On re-entry, run the generic recovery in `session-watch.md` first, then issue-specific recovery:
 
 1. Re-fingerprint registered issue panes.
-2. Recompute issue state from fresh `pane-poll --batch -` output and orchestration workflow state.
+2. Recompute issue state from fresh `pane-poll --batch -` output and linear-orch workflow state.
 3. Preserve `unknown_since` so force-merge timers do not reset.
 4. Recompute the conflict graph against current PR file lists.
 5. Re-evaluate `paused_for_user`; if the user acted in the pane, reclassify and proceed.

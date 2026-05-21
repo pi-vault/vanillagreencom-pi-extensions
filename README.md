@@ -195,7 +195,7 @@ Windows: CLI runs natively; symlink mode falls back to copy.
 | [`reviewer`](skills/reviewer/)* | Code-review and QA-review workflows + the canonical finding/verdict JSON schema. Loaded by any `reviewer-*` agent. |
 | [`linear`](skills/linear/)* | Linear issue, cycle, milestone, and project workflows. |
 | [`flightdeck`](skills/flightdeck/)* | Master session lifecycle for multi-issue parallel dev work; tmux-only, with structured activity JSONL for dashboard/live inspection. |
-| [`orchestration`](skills/orchestration/)* | Per-issue lifecycle inside a worktree: dev → review → submit → merge. |
+| [`linear-orch`](skills/linear-orch/)* | Per-issue lifecycle inside a worktree: dev → review → submit → merge. |
 | [`project-management`](skills/project-management/)* | TPM-driven planning, audits, roadmaps, and research-backed decomposition. |
 | [`second-opinion`](skills/second-opinion/) | Cross-model review via the opposite AI CLI (Claude ↔ Codex). |
 | [`worktree`](skills/worktree/)* | Git worktree creation, env/config linkage, and isolated workflows. |

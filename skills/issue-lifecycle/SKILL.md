@@ -4,7 +4,7 @@ description: "Agent workflows for issue implementation, review fix delegation, p
 license: MIT
 user-invocable: true
 dependencies:
-  required: [orchestration, github, decider, linear]
+  required: [linear-orch, github, decider, linear]
 metadata:
   author: vanillagreen
   version: "1.2.0"
@@ -29,7 +29,7 @@ Review and QA-review workflows live in the reviewer skill: [`../reviewer/workflo
 |-------|--------|
 | Review finding schema | Reviewer skill (`schemas/review-finding.md`) |
 | Review / QA-review workflows | Reviewer skill (`workflows/review.md`, `workflows/qa-review.md`) |
-| Recommendation bias | Orchestration skill (`workflows/recommendation-bias.md`) |
+| Recommendation bias | linear-orch skill (`workflows/recommendation-bias.md`) |
 | Label application | Project label application guide |
 | Benchmark baselines | Project benchmarking skill if installed |
 | Regression classification | Project benchmarking skill if available |

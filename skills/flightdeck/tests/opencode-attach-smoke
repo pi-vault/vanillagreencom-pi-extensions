@@ -146,7 +146,7 @@ note "  session_id=$SESSION_ID"
 # {... "permission":[{"permission":"question","pattern":"*","action":"deny"},
 #                    {"permission":"plan_enter", ..., "action":"deny"}, ...] ...}
 # The deny entry is what closes the modal-escape hatch — without it the
-# orchestration agent can render question prompts that run --attach
+# linear-orch agent can render question prompts that run --attach
 # can't drive, breaking chat-text-only.
 note "step 3: verify session permission denies question tool"
 PERM_DENIES_QUESTION=0

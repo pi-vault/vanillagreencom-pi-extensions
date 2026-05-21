@@ -32,7 +32,7 @@ Format for parent/bundle issues that coordinate sub-issues across domains.
 2. **Same-project**: All children must be in the parent's project. See [dependencies.md](../../project-management/references/dependencies.md)
 3. **Each child entry**: `- [ISSUE_ID]: [title] (agent:X) [blocks [ISSUE_ID]]` — include blocking relations
 4. **Label**: `agent:multi` if children span 2+ distinct `agent:X` domains
-5. **Blocking relations**: Read [agent-sequencing.md](../../orchestration/workflows/agent-sequencing.md)
+5. **Blocking relations**: Read [agent-sequencing.md](../../linear-orch/workflows/agent-sequencing.md)
 6. **No implementation detail** — requirements live in children, parent holds only coordination context
 7. **Omit empty lines** — drop Research, Decision, Source, Acceptance Criteria lines with no data
 8. **Research/Decision at top** — matches convention in research-complete workflow and audit workflow

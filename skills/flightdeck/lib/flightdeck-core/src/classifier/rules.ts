@@ -107,7 +107,7 @@ export const POST_FOOTER_RULES: Rule[] = [
 		pattern: /Force[- ]push (to|over|the)|--force-with-lease|push.*\?.*force|Confirm force push/,
 	},
 	// Defensive coverage for Flightdeck-scope violations from older
-	// orchestration builds (issue #18). Master answers Keep on these tags
+	// linear-orch builds (issue #18). Master answers Keep on these tags
 	// regardless of buffer detail. Order matters — must match before
 	// cleanup-prompt so the more specific tag wins.
 	{

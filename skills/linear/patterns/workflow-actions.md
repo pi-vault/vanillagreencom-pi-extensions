@@ -2,7 +2,7 @@
 
 Portable multi-step issue-tracker CLI patterns for workflows that need more than basic CRUD.
 
-Use this reference when orchestration or TPM workflows need to:
+Use this reference when linear-orch or TPM workflows need to:
 - change issue/project state
 - move or regroup issues
 - repair relations

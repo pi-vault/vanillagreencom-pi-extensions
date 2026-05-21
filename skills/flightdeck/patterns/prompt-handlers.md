@@ -73,7 +73,7 @@ Answer YES iff the target worktree path equals the asking issue's registered `do
 
 ### `stale-no-pr-branch` / `stale-orphan-worktree`
 
-These are defensive tags for managed Flightdeck scope violations. Per-issue orchestration should suppress broad cleanup sweeps; if one reaches master, answer `Keep branch` / `Keep worktree` and record a process-violation note.
+These are defensive tags for managed Flightdeck scope violations. Per-issue linear-orch should suppress broad cleanup sweeps; if one reaches master, answer `Keep branch` / `Keep worktree` and record a process-violation note.
 
 ### `bot-review-wait-stuck`
 

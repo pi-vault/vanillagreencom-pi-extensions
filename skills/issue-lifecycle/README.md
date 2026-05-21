@@ -33,7 +33,7 @@ The workflow for dev agents receiving review fix delegations. Each review item i
 |------------|---------|----------|
 | Issue tracker CLI (e.g., `linear` skill) | Issue CRUD, cache, comments, labels | `.agents/skills/linear/scripts/linear.sh` |
 | Reviewer skill | Code-review + QA-review workflows and finding schema | Referenced by name |
-| Orchestration skill | Recommendation-bias patterns | Referenced by name |
+| linear-orch skill | Recommendation-bias patterns | Referenced by name |
 | Decider skill | Decision templates, search CLI, creation workflows | `.agents/skills/decider/scripts/decisions` |
 | Benchmarking | Run benchmarks if a benchmarking skill is installed | Optional |
 

@@ -39,7 +39,7 @@ Some agents propose cleanup of multiple worktrees. Issue mode may clean only the
 
 ## § 3: Handler — `stale-no-pr-branch` / `stale-orphan-worktree`
 
-Defensive coverage for older orchestration builds or bypassed managed-mode guards. These prompts are out of scope for a per-issue pane.
+Defensive coverage for older linear-orch builds or bypassed managed-mode guards. These prompts are out of scope for a per-issue pane.
 
 1. Identify the keep option:
    - `Keep branch` over `Delete branch`.
