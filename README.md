@@ -170,7 +170,7 @@ Rust and performance reference material now lives directly in the `rust`, `revie
 | [`github`](skills/github/)* | GitHub PR, thread, review, CI, and merge workflows. |
 | [`html-artifact`](skills/html-artifact/) | Standalone HTML artifacts for plans, reports, reviews, explainers, prototypes, and custom editors. |
 | [`issue-lifecycle`](skills/issue-lifecycle/)* | Delegated implementation and review-fix issue workflows for dev agents. |
-| [`linear`](skills/linear/)* | Linear issue, cycle, milestone, and project workflows. |
+| [`linear`](skills/linear/)* | Bash CLI over Linear's GraphQL API with local cache, mutation syncing, and structured output (issues, cycles, milestones, projects). |
 | [`linear-orch`](skills/linear-orch/)* | Per-issue lifecycle inside a worktree: dev → review → submit → merge. |
 | [`project-management`](skills/project-management/)* | TPM-driven planning, audits, roadmaps, and research-backed decomposition. |
 | [`reviewer`](skills/reviewer/)* | Code-review and QA-review workflows + the canonical finding/verdict JSON schema. Loaded by any `reviewer-*` agent. |
