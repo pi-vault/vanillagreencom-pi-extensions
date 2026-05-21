@@ -103,7 +103,7 @@ function renderUserMessageBorder(lines: string[], width: number, theme: any, cwd
 	], unwrapped.markers);
 }
 
-export const __test = { applyPromptZoneMarkers, renderUserMessageBorder, stripPromptZoneMarkers };
+export const __test = { applyPromptZoneMarkers, renderStyledCodeBlock, renderUserMessageBorder, stripPromptZoneMarkers };
 
 function appendUserMessageBreak(lines: string[], width: number, cwd?: string): string[] {
 	if (lines.length === 0 || !settingBoolean("userMessageTrailingBlankLine", true, cwd)) return lines;
@@ -419,9 +419,6 @@ function renderStyledCodeBlock(token: any, width: number, markdownTheme: any, ct
 		return code.split("\n").map((line) => (markdownTheme?.codeBlock ? markdownTheme.codeBlock(line) : line));
 	}
 
-	const blockIndent = "  ";
-	const panelWidth = Math.max(1, contentWidth - visibleWidth(blockIndent));
-
 	let highlightedLines: string[];
 	try {
 		highlightedLines = markdownTheme?.highlightCode ? markdownTheme.highlightCode(code, lang) : code.split("\n").map((line: string) => (markdownTheme?.codeBlock ? markdownTheme.codeBlock(line) : line));
@@ -429,23 +426,15 @@ function renderStyledCodeBlock(token: any, width: number, markdownTheme: any, ct
 		highlightedLines = code.split("\n").map((line: string) => (markdownTheme?.codeBlock ? markdownTheme.codeBlock(line) : line));
 	}
 
-	const bar = glyphs(ctx?.cwd).codeBar;
-	const strip = markdownTheme?.codeBlockBorder ? markdownTheme.codeBlockBorder(bar) : bar;
-	const stripWidth = Math.max(1, visibleWidth(strip));
-	const bodyWidth = Math.max(1, panelWidth - stripWidth);
-	const codeWidth = Math.max(1, bodyWidth - 2);
+	const codeWidth = Math.max(1, contentWidth);
 	const lines: string[] = [];
-	const blankBody = applyCodeBlockBg(" ".repeat(bodyWidth), ctx);
-	lines.push(`${blockIndent}${strip}${blankBody}`);
 	for (const highlightedLine of highlightedLines) {
 		const wrapped = wrapTextWithAnsi(highlightedLine, codeWidth);
 		const segments = wrapped.length > 0 ? wrapped : [""];
 		for (const segment of segments) {
-			const paddedCode = padAnsiLine(segment, codeWidth);
-			lines.push(`${blockIndent}${strip}${applyCodeBlockBg(` ${paddedCode} `, ctx)}`);
+			lines.push(applyCodeBlockBg(padAnsiLine(segment, codeWidth), ctx));
 		}
 	}
-	lines.push(`${blockIndent}${strip}${blankBody}`);
 	return lines;
 }
 

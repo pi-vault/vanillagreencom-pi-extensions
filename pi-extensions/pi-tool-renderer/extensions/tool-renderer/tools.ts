@@ -125,8 +125,7 @@ function renderBashTail(output: string, limit: number, theme: any, cwd?: string)
 	const trimmed = output.replace(/(?:\r?\n)+$/, "");
 	if (!trimmed) return "";
 	const tailLines = preview(trimmed, limit, "tail", cwd).split(/\r?\n/);
-	const connector = treeConnector(theme, "│", cwd);
-	return tailLines.map((line) => `${connector}${theme.fg("dim", line)}`).join("\n");
+	return tailLines.map((line) => theme.fg("dim", line)).join("\n");
 }
 
 export function registerRead(pi: ExtensionAPI, agent: any, cwd: string): void {
@@ -228,16 +227,16 @@ export function registerBash(pi: ExtensionAPI, agent: any, cwd: string): void {
 				const limit = Math.max(1, Math.floor(settingNumber(expanded ? "bashPreviewLines" : "bashCollapsedLines", expanded ? 80 : 10, effectiveCwd)));
 				text += `\n${preview(output, limit, "tail", effectiveCwd)
 					.split(/\r?\n/)
-					.map((line) => `${treeConnector(theme, "│")}${theme.fg("dim", line)}`)
+					.map((line) => theme.fg("dim", line))
 					.join("\n")}`;
-				if (count > limit) text += `\n${treeConnector(theme, "│")}${theme.fg("muted", `… ${count - limit} older line(s)`)}`;
+				if (count > limit) text += `\n${theme.fg("muted", `… ${count - limit} older line(s)`)}`;
 			} else if (!suppressDiffOutput && mode === "opencode" && expanded && output) {
 				const limit = Math.max(1, Math.floor(settingNumber("bashPreviewLines", 80, effectiveCwd)));
 				text += `\n${preview(output, limit, "tail", effectiveCwd)
 					.split(/\r?\n/)
-					.map((line) => `${treeConnector(theme, "│")}${theme.fg("dim", line)}`)
+					.map((line) => theme.fg("dim", line))
 					.join("\n")}`;
-				if (count > limit) text += `\n${treeConnector(theme, "│")}${theme.fg("muted", `… ${count - limit} older line(s)`)}`;
+				if (count > limit) text += `\n${theme.fg("muted", `… ${count - limit} older line(s)`)}`;
 			} else if (!suppressDiffOutput && mode === "opencode" && liveTailState.tailShown && output) {
 				const tailText = renderBashTail(output, bashLiveTailLines(effectiveCwd), theme, effectiveCwd);
 				if (tailText) text += `\n${tailText}`;

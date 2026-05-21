@@ -186,7 +186,7 @@
         {
           "key": "styledCodeBlocks",
           "label": "Styled markdown code blocks",
-          "description": "Render fenced markdown code blocks as syntax-highlighted panels with a subtle background and left accent strip instead of literal ``` fences.",
+          "description": "Render fenced markdown code blocks with syntax highlighting and a subtle background, flush-left with no copy gutter/prefix instead of literal ``` fences.",
           "type": "boolean",
           "default": true,
           "category": "Messages",
