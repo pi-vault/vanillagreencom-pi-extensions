@@ -99,8 +99,8 @@ const CANONICAL_TAGS = new Set<string>([
 	"cleanup-prompt",
 	"pre-pr-ready-for-review",
 	// Flightdeck cleanup-scope defensive tags (issue #18). Per-issue
-	// orchestration should never surface these under FLIGHTDECK_MANAGED=1,
-	// but if an older orchestration build does, master needs to wake on
+	// linear-orch should never surface these under FLIGHTDECK_MANAGED=1,
+	// but if an older linear-orch build does, master needs to wake on
 	// the stable buffer so the handler in handle-prompt.md § 4.6 can
 	// answer Keep. Without these in the allowlist the daemon records the
 	// hash as notified and never fires wake.

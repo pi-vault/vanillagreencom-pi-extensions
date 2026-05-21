@@ -9,7 +9,7 @@
     "coding-agent",
     "flightdeck",
     "tmux",
-    "orchestration"
+    "linear-orch"
   ],
   "pi": {
     "extensions": [

@@ -56,7 +56,7 @@ A drain failure is not a daemon failure: master still sees subsequent live `even
 
 ## Inner-pane subagent completions
 
-`pi-agents-tmux` may also emit `subagent-completion` custom messages from inner persistent panes. The daemon treats blocked/failed/needs-completion completions as `pi-subagent-completion` advisory wake events and logs successful completions without waking. Flightdeck must re-poll the outer orchestration pane and let that orchestrator consume the inner result. Do not call `subagent`, `steer_subagent`, or `get_subagent_result` for the orchestrator's inner panes from Flightdeck, and never target them by shared cwd/session metadata. If the orchestrator needs a decision about an inner result, it will surface a normal outer `pi-question` or prompt; answer that outer prompt only.
+`pi-agents-tmux` may also emit `subagent-completion` custom messages from inner persistent panes. The daemon treats blocked/failed/needs-completion completions as `pi-subagent-completion` advisory wake events and logs successful completions without waking. Flightdeck must re-poll the outer linear-orch pane and let that orchestrator consume the inner result. Do not call `subagent`, `steer_subagent`, or `get_subagent_result` for the orchestrator's inner panes from Flightdeck, and never target them by shared cwd/session metadata. If the orchestrator needs a decision about an inner result, it will surface a normal outer `pi-question` or prompt; answer that outer prompt only.
 
 ## Answering
 

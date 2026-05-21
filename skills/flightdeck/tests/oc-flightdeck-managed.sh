@@ -33,8 +33,8 @@ assert_match "opencode serve carries FLIGHTDECK_MANAGED=1" \
 assert_match "create_oc_session: opencode run --attach carries FLIGHTDECK_MANAGED=1" \
   'FLIGHTDECK_MANAGED=1[[:space:]]+timeout[^"]*"\$bin"[[:space:]]+run[[:space:]]+--attach'
 
-# Step 2: fire-and-forget orchestration kickoff.
-assert_match "fire_orchestration_async: opencode run --attach carries FLIGHTDECK_MANAGED=1" \
+# Step 2: fire-and-forget linear-orch kickoff.
+assert_match "fire_linear_orch_async: opencode run --attach carries FLIGHTDECK_MANAGED=1" \
   'FLIGHTDECK_MANAGED=1[[:space:]]+setsid[[:space:]]+nohup[[:space:]]+"\$bin"[[:space:]]+run[[:space:]]+--attach'
 
 # Step 3: attach TUI sent via tmux send-keys uses flightdeck_pane_env_str.

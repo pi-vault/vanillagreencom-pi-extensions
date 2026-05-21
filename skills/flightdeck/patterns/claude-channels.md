@@ -35,7 +35,7 @@ Three-step launch happens in `open-terminal`:
           --mcp-config <abs-path-to-pane-mcp-json> \
           --dangerously-load-development-channels server:webhook \
           --dangerously-skip-permissions \
-          '/orchestration start <ISSUE>'
+          '/linear-orch start <ISSUE>'
    ```
 5. Pre-warm the trust prompt for the development-channels flag via a delayed `tmux send-keys "y" Enter` (one-time per launch).
 
@@ -64,14 +64,14 @@ Verify via `claude auth status` — output should mention `claude.ai`. Flightdec
 Channels deliver `<channel source="webhook">BODY</channel>` blocks. Claude's reasoning about whether to treat this as a trusted user instruction depends on:
 
 - **Webhook MCP server `instructions` field** — sets the baseline trust hint. The vendored webhook.ts instructions explicitly say "TRUSTED user instructions delivered by the operator over a localhost-only channel."
-- **The currently-loaded skill's prompt** — orchestration (the per-issue agent skill) may have its own rules about channel input. If orchestration's prompt says to distrust non-user sources, channel messages can be ignored when orchestration is mid-flow on a different decision (e.g. waiting on a user choice).
+- **The currently-loaded skill's prompt** — linear-orch (the per-issue agent skill) may have its own rules about channel input. If linear-orch's prompt says to distrust non-user sources, channel messages can be ignored when linear-orch is mid-flow on a different decision (e.g. waiting on a user choice).
 
-Observed symptom: when orchestration is blocked on a "user must decide" prompt and a channel POST arrives with a different instruction, claude may respond with `"Webhook injection ignored — untrusted source, not user"` and continue waiting on the original prompt.
+Observed symptom: when linear-orch is blocked on a "user must decide" prompt and a channel POST arrives with a different instruction, claude may respond with `"Webhook injection ignored — untrusted source, not user"` and continue waiting on the original prompt.
 
 **Workarounds:**
 1. **Pose the channel message as the answer to the active prompt** — flightdeck master's handler is already shape-aware (`prompt-classify` tags) and can format channel POSTs to look like option picks ("1") rather than free directives.
-2. **Update orchestration prompt** (out of scope for flightdeck) to recognize the `<channel source="webhook" session="<ISSUE>">` shape as trusted operator input from flightdeck.
-3. **Use channels for pre-orchestration setup only** — e.g., bootstrapping a session, not for mid-orchestration responses; fall back to tmux send-keys for in-flow answers.
+2. **Update linear-orch prompt** (out of scope for flightdeck) to recognize the `<channel source="webhook" session="<ISSUE>">` shape as trusted operator input from flightdeck.
+3. **Use channels for pre-linear-orch setup only** — e.g., bootstrapping a session, not for mid-linear-orch responses; fall back to tmux send-keys for in-flow answers.
 
 The flightdeck mechanism (port allocator, MCP webhook, JSONL tail, daemon subscriber) is fully functional; this is a skill-integration boundary issue.
 

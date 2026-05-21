@@ -287,20 +287,20 @@ mod auto_include_agent_skills_tests {
 
     #[test]
     fn transitive_required_dependencies_are_pulled_in() {
-        // orchestration -> issue-lifecycle (required dep). Agent only references
-        // orchestration; auto-include must transitively pull in issue-lifecycle.
+        // linear-orch -> issue-lifecycle (required dep). Agent only references
+        // linear-orch; auto-include must transitively pull in issue-lifecycle.
         let mut mapping = MappingConfig::default();
         mapping
             .role_skills
-            .insert("engineer".into(), vec!["orchestration".into()]);
+            .insert("engineer".into(), vec!["linear-orch".into()]);
         let all = vec![
-            skill("orchestration", &["issue-lifecycle"]),
+            skill("linear-orch", &["issue-lifecycle"]),
             skill("issue-lifecycle", &[]),
         ];
         let agents = vec![agent("planner", AgentRole::Engineer)];
         let mut selected = Vec::<Skill>::new();
         let added = auto_include_agent_skills(&agents, &mapping, &all, &mut selected);
-        assert!(added.contains(&"orchestration".into()));
+        assert!(added.contains(&"linear-orch".into()));
         assert!(added.contains(&"issue-lifecycle".into()));
     }
 

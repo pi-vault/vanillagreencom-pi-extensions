@@ -546,7 +546,7 @@ pub const SETTING_DEFINITIONS: &[SettingDefinition] = &[
         "FLIGHTDECK_HIJACK_GRACE_SECS",
         Some("90"),
         "90",
-        "Seconds before missing orchestration state escalates.",
+        "Seconds before missing linear-orch state escalates.",
         MasterLoop,
         Number,
         SettingValidation::PositiveInteger,

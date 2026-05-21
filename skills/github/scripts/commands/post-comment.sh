@@ -60,7 +60,7 @@ post_comment() {
     local dry_run="false"
 
     # Parse arguments. Positional body is kept for backward compatibility,
-    # but new orchestration callers should use --body-file.
+    # but new linear-orch callers should use --body-file.
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --help|-h)

@@ -14,7 +14,7 @@ This is the issue-mode start workflow. For ad-hoc or workflow sessions that are 
 
 ### 1.2 Present Preflight Status
 
-1. **Run**: `FLIGHTDECK_PREFLIGHT=1 .agents/skills/orchestration/scripts/session-init`
+1. **Run**: `FLIGHTDECK_PREFLIGHT=1 .agents/skills/linear-orch/scripts/session-init`
 
    The `FLIGHTDECK_PREFLIGHT=1` signal tells session-init to also check the runtime deps flightdeck itself needs (currently: `bun`, the runtime for every trampolined script plus the claude-channel and codex-bridge transports). If bun is missing, preflight output adds a hard warning — trampolines fail without it.
 
@@ -22,7 +22,7 @@ This is the issue-mode start workflow. For ad-hoc or workflow sessions that are 
 
 3. **If build errors or auth failures** → fix locally before proceeding to § 1.3.
 
-4. **If preflight status shows "Worktree session"** → STOP. Wrong workflow. Use the orchestration workflow from the worktree pane instead: [`../../../orchestration/workflows/start.md`](../../../orchestration/workflows/start.md).
+4. **If preflight status shows "Worktree session"** → STOP. Wrong workflow. Use the linear-orch workflow from the worktree pane instead: [`../../../linear-orch/workflows/start.md`](../../../linear-orch/workflows/start.md).
 
 ### 1.2.1 Rust Dashboard Verification
 
@@ -52,7 +52,7 @@ fi
    | Start in parallel: [ISSUE_ID], ... | Ask user: `Start [ISSUE_ID] only` (→ § 1.4) \| `Launch parallel group` (capture `[ISSUE_IDS]` → § 1.4) |
    | Start [ISSUE_ID] | Capture issue ID → § 1.4 |
 
-   Note: per-issue actions (`ci-fix`, `review-pr-comments`, `merge-pr`) are not surfaced here. Master directs the per-issue agent in its tmux pane to handle those — see `patterns/prompt-handlers.md`. If a PR genuinely needs out-of-session attention, the user invokes the orchestration command directly from a worktree pane.
+   Note: per-issue actions (`ci-fix`, `review-pr-comments`, `merge-pr`) are not surfaced here. Master directs the per-issue agent in its tmux pane to handle those — see `patterns/prompt-handlers.md`. If a PR genuinely needs out-of-session attention, the user invokes the linear-orch command directly from a worktree pane.
 
 3. **Ask user** with recommended as first option. The `👉` line format is `👉 Label — reason`. Use text before `—` as the option label, text after `—` as the option description.
 
@@ -354,7 +354,7 @@ Worktree creation is idempotent: existing worktrees are reused (rebased onto lat
 2. **Inform user**:
 
    <output_format>
-   If you are using a desktop app (no terminal), switch to the worktree(s) yourself and run `/orchestration start [ISSUE_ID]` (or `$orchestration start [ISSUE_ID]` on Codex, `/skill:orchestration start [ISSUE_ID]` on Pi).
+   If you are using a desktop app (no terminal), switch to the worktree(s) yourself and run `/linear-orch start [ISSUE_ID]` (or `$linear-orch start [ISSUE_ID]` on Codex, `/skill:linear-orch start [ISSUE_ID]` on Pi).
    </output_format>
 
 3. **Ask user**: `Launch [N] issues` | `Select subset` | `I'll launch them myself` | `Cancel`

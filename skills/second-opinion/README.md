@@ -92,4 +92,4 @@ Edit the full command string to change model, effort level, or tool access. No a
 
 ## review-pr Integration
 
-The orchestration skill's `review-pr` workflow optionally offers an external review at § 2.1. If accepted, the script produces review-finding JSON (same schema as internal review agents) that flows through the standard blocker/suggestion/issue pipeline.
+The linear-orch skill's `review-pr` workflow optionally offers an external review at § 2.1. If accepted, the script produces review-finding JSON (same schema as internal review agents) that flows through the standard blocker/suggestion/issue pipeline.

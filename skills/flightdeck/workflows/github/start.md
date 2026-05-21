@@ -32,7 +32,7 @@ Start a GitHub-issue Flightdeck session. This lane is intentionally **not** a su
 
 ## § 2: Compose child prompt
 
-The child prompt is plain text. It is the child's first user message and contains all issue context needed for implementation. It must not contain flightdeck or orchestration slash-command invocations.
+The child prompt is plain text. It is the child's first user message and contains all issue context needed for implementation. It must not contain flightdeck or linear-orch slash-command invocations.
 
 <child_prompt_format>
 Fix GitHub issue <REPO>#<N>: <TITLE>

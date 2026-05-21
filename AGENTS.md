@@ -58,7 +58,7 @@ color: orange
 
 ### Skill frontmatter (`skills/*/SKILL.md`)
 ```yaml
-name: orchestration
+name: linear-orch
 description: ...
 license: MIT
 user-invocable: true

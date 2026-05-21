@@ -112,12 +112,12 @@ while [[ $# -gt 0 ]]; do
       echo "  (default terminal)  Auto-detect: tmux if \$TMUX set, else GUI terminal"
       echo ""
       echo "Harness launch commands (with permission bypass enabled by default):"
-      echo "  claude   → claude -n ISSUE --dangerously-skip-permissions --model 'opus[1m]' --effort max '/orchestration start ISSUE'"
-      echo "  codex    → codex -m MODEL -c model_reasoning_effort=EFFORT '\$orchestration start ISSUE'"
-      echo "  opencode → opencode --model MODEL --prompt '/orchestration start ISSUE' (effort unsupported by top-level opencode)"
-      echo "  omp      → omp '<skill command> orchestration start ISSUE'"
-      echo "  pi       → pi --model MODEL --thinking EFFORT '<skill command> orchestration start ISSUE'"
-      echo "  github tracker uses a self-contained child prompt, never a flightdeck/orchestration slash command."
+      echo "  claude   → claude -n ISSUE --dangerously-skip-permissions --model 'opus[1m]' --effort max '/linear-orch start ISSUE'"
+      echo "  codex    → codex -m MODEL -c model_reasoning_effort=EFFORT '\$linear-orch start ISSUE'"
+      echo "  opencode → opencode --model MODEL --prompt '/linear-orch start ISSUE' (effort unsupported by top-level opencode)"
+      echo "  omp      → omp '<skill command> linear-orch start ISSUE'"
+      echo "  pi       → pi --model MODEL --thinking EFFORT '<skill command> linear-orch start ISSUE'"
+      echo "  github tracker uses a self-contained child prompt, never a flightdeck/linear-orch slash command."
       echo ""
       echo "Recommended defaults for implementation panes:"
       echo "  claude:   --model 'opus[1m]' --effort max"
@@ -590,9 +590,9 @@ start_prompt_for_harness() {
     return 0
   fi
   case "$harness" in
-    claude|opencode) printf '/orchestration start %s\n' "$issue" ;;
-    codex) printf '$orchestration start %s\n' "$issue" ;;
-    omp|pi) printf '/%s:orchestration start %s\n' "skill" "$issue" ;;
+    claude|opencode) printf '/linear-orch start %s\n' "$issue" ;;
+    codex) printf '$linear-orch start %s\n' "$issue" ;;
+    omp|pi) printf '/%s:linear-orch start %s\n' "skill" "$issue" ;;
     *) printf '\n' ;;
   esac
 }
@@ -642,13 +642,13 @@ detect_start_cmd() {
 # FLIGHTDECK_MANAGED env contract for OpenCode panes:
 # The authoritative process env is `opencode serve` (Step 0). Tool calls
 # fired during `opencode run --attach` (Step 1 bootstrap, Step 2
-# fire_orchestration_async, and the long-lived attach TUI) all execute
+# fire_linear_orch_async, and the long-lived attach TUI) all execute
 # inside the server process and inherit FLIGHTDECK_MANAGED=1 from there.
 # We additionally prefix every `run --attach` invocation with the env
 # var as belt-and-braces — if the server is ever restarted out-of-band
 # (e.g. crash + supervisor respawn from a context that drops the env),
 # subsequent run --attach calls still surface the signal to the
-# orchestration tools that read it. See tests/oc-flightdeck-managed.sh
+# linear-orch tools that read it. See tests/oc-flightdeck-managed.sh
 # for the static coverage check.
 #
 # Two-step launch (corrected from initial Phase 1 plan):
@@ -668,7 +668,7 @@ detect_start_cmd() {
 #
 # This replaces the original single-step `--port + --prompt` shape, which
 # created sessions with `permission: null` (question tool ENABLED) — the
-# orchestration agent would then render modal UI we couldn't drive.
+# linear-orch agent would then render modal UI we couldn't drive.
 
 resolve_opencode_bin() {
   if [[ -x /usr/bin/opencode ]]; then
@@ -707,7 +707,7 @@ start_oc_server() {
   # Export FLIGHTDECK_MANAGED=1 into the server's environment so any
   # `flightdeck-mode` invocation from inside an opencode tool call sees
   # the same managed signal as the attach TUI. Without this the long-
-  # lived server process would not carry the signal and orchestration
+  # lived server process would not carry the signal and linear-orch
   # tools executed via `opencode run --attach` would fall back to
   # registry/tmux detection only (reviewer-error finding, PR #21).
   ( cd "$wt_path" && FLIGHTDECK_MANAGED=1 setsid nohup "$bin" serve --port "$port" --hostname 127.0.0.1 \
@@ -741,10 +741,10 @@ start_oc_server() {
 
 # Step 1: create a session via run --attach with a minimal bootstrap
 # prompt. The bootstrap MUST complete quickly (single short reply) —
-# previously this was `/orchestration start $issue` which triggers the
+# previously this was `/linear-orch start $issue` which triggers the
 # full workflow and blocks past the 60s timeout, hanging the spawn.
-# Orchestration is fired as a backgrounded follow-up after the spawn
-# completes (see fire_orchestration_async below). Run from the worktree
+# Linear Orchestration is fired as a backgrounded follow-up after the spawn
+# completes (see fire_linear_orch_async below). Run from the worktree
 # so the session's cwd field reflects the worktree.
 create_oc_session() {
   local bin="$1" url="$2" wt_path="$3"
@@ -786,7 +786,7 @@ create_oc_session() {
 #   FLIGHTDECK_OC_SKIP_FOLLOWUP=1 — skip the followup fire entirely;
 #       useful when callers will drive the session via run --attach
 #       themselves and want the spawn to bring up only the bridge.
-fire_orchestration_async() {
+fire_linear_orch_async() {
   local bin="$1" url="$2" sid="$3" issue="$4" wt_path="$5"
   if [[ "${FLIGHTDECK_OC_SKIP_FOLLOWUP:-0}" == "1" ]]; then
     return 0
@@ -894,7 +894,7 @@ spawn_oc_attach_tmux() {
   # Using send-keys preserves the existing UX (clear → type cmd → Enter)
   # so the pane shows the command in its scrollback. Prefix with the
   # canonical flightdeck managed-pane env (see FLIGHTDECK_PANE_ENV near
-  # the top of this file) so orchestration's flightdeck-mode helper
+  # the top of this file) so linear-orch's flightdeck-mode helper
   # detects the pane as Flightdeck-managed without depending on tmux
   # set-environment propagation.
   local attach_cmd
@@ -932,7 +932,7 @@ spawn_oc_attach_tmux() {
   # The bootstrap above only created the session (with a "READY" reply);
   # this is what kicks off implementation. Logs to
   # oc-serve-<port>.log.orch so the master can tail if needed.
-  fire_orchestration_async "$bin" "http://127.0.0.1:$port" "$sid" "$issue" "$wt_path"
+  fire_linear_orch_async "$bin" "http://127.0.0.1:$port" "$sid" "$issue" "$wt_path"
 
   echo "  oc-attach: port=$port session=$sid server_pid=$server_pid"
   return 0
@@ -1277,7 +1277,7 @@ spawn_cx_remote_tmux() {
 
   # Spawn the per-pane TUI bound to the shared server. Prefix with the
   # canonical flightdeck managed-pane env (see FLIGHTDECK_PANE_ENV near
-  # the top of this file) so orchestration's flightdeck-mode helper
+  # the top of this file) so linear-orch's flightdeck-mode helper
   # detects the pane as Flightdeck-managed.
   local cmd launch_args=() prompt
   add_launch_args codex launch_args || return 1

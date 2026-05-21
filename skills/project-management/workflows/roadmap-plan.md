@@ -99,7 +99,7 @@ List implementation issues for your domain:
 | Field | Description |
 |-------|-------------|
 | Title | Verb: outcome format (e.g., "Add dispose safety seam") |
-| Estimate | 1-5 points -- see [recommendation-bias.md](../../orchestration/workflows/recommendation-bias.md): 1 parent + children = 1 PR |
+| Estimate | 1-5 points -- see [recommendation-bias.md](../../linear-orch/workflows/recommendation-bias.md): 1 parent + children = 1 PR |
 | Depends on (proposed) | Title reference to other proposed issues |
 | Depends on (existing) | [ISSUE_ID] references |
 | Conflicts with | Existing code/patterns that would be replaced |
