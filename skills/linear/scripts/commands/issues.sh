@@ -130,7 +130,7 @@ Actions:
   add-relation   Create a relation between issues
   remove-relation Delete an issue relation
 
-Workflow Actions (composite operations for issue-lifecycle):
+Workflow Actions (composite operations for linear-dev):
   activate       Claim issue: set "In Progress"
   block          Block issue: add label + relation + comment
   unblock        Unblock issue: remove label + comment
@@ -236,7 +236,7 @@ Examples:
   issues.sh list --project-id <uuid> --with-relations   # Single query with all relations
   issues.sh bulk-get PROJ-184 PROJ-185 PROJ-186 PROJ-187    # Multiple issues with full details
 
-  # Workflow actions (issue-lifecycle shortcuts)
+  # Workflow actions (linear-dev shortcuts)
   issues.sh activate PROJ-42 --agent rust        # Claim issue for work
   issues.sh block PROJ-42 --by PROJ-41 --reason "Need market data types first"
   issues.sh unblock PROJ-42                      # Resume after blocker resolved

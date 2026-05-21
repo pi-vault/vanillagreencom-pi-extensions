@@ -169,7 +169,7 @@ Rust and performance reference material now lives directly in the `rust`, `revie
 | [`flightdeck`](skills/flightdeck/)* | Generic tmux session supervisor for AI harness panes; optional Linear/GitHub/plan-file modes with structured activity JSONL and Rust dashboard. |
 | [`github`](skills/github/)* | Bash CLI over the GitHub API for PR operations: threads, comments, reviews, CI logs, merging, and cross-PR analysis. |
 | [`html-artifact`](skills/html-artifact/) | Standalone HTML artifacts for plans, reports, reviews, explainers, prototypes, and custom editors. |
-| [`issue-lifecycle`](skills/issue-lifecycle/)* | Delegated implementation and review-fix issue workflows for dev agents. |
+| [`linear-dev`](skills/linear-dev/)* | Delegated implementation and review-fix issue workflows for dev agents. |
 | [`linear`](skills/linear/)* | Bash CLI over Linear's GraphQL API with local cache, mutation syncing, and structured output (issues, cycles, milestones, projects). |
 | [`linear-orch`](skills/linear-orch/)* | Linear issue lifecycle workflows inside a worktree: dev → review → submit → merge, with specialist delegation and review pipelines. |
 | [`project-management`](skills/project-management/)* | TPM-driven planning, audits, roadmaps, and research-backed decomposition. |

@@ -283,11 +283,11 @@ mod parse_skills_field_tests {
     #[test]
     fn comma_separated_inline() {
         // Real-world shape from .claude/agents/<name>.md.
-        let fm = "name: reviewer-error\nskills: issue-lifecycle, linear\nrole: engineer";
+        let fm = "name: reviewer-error\nskills: linear-dev, linear\nrole: engineer";
         let skills = parse_skills_field(fm);
         assert_eq!(
             skills,
-            vec!["issue-lifecycle".to_string(), "linear".to_string()]
+            vec!["linear-dev".to_string(), "linear".to_string()]
         );
     }
 

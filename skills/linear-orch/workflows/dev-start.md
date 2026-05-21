@@ -66,7 +66,7 @@ Wait for completion. Parse: Branch, Commit, QA Labels, Summary.
 <delegation_format>
 Ultrathink.
 
-Follow workflow: .agents/skills/issue-lifecycle/workflows/dev-implement.md
+Follow workflow: .agents/skills/linear-dev/workflows/dev-implement.md
 
 Issue: [ISSUE_ID]
 Worktree: [WORKTREE_PATH]
@@ -97,7 +97,7 @@ Wait for completion. Parse: Branch, Commit, QA Labels, Summary.
 <delegation_format>
 Ultrathink.
 
-Follow workflow: .agents/skills/issue-lifecycle/workflows/dev-implement.md
+Follow workflow: .agents/skills/linear-dev/workflows/dev-implement.md
 
 Parent: [ISSUE_ID]
 Sub-Issues:

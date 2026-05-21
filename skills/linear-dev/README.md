@@ -1,11 +1,11 @@
-# Issue Lifecycle
+# Linear Dev Workflows
 
 Agent workflows for issue implementation, review fix delegation, pre-submission PR review, and QA review. Designed for specialist agents receiving delegations from an orchestrator.
 
 ## Structure
 
 ```
-skills/issue-lifecycle/
+skills/linear-dev/
 ├── SKILL.md              # Skill definition for AI agents and skill-aware harnesses
 ├── README.md             # This file — human-facing docs
 └── workflows/

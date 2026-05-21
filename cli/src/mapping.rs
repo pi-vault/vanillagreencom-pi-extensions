@@ -187,7 +187,7 @@ mod tests {
             "rust-tooling".into(),
             "rust-runtime".into(),
             "python-web".into(),
-            "issue-lifecycle".into(),
+            "linear-dev".into(),
         ];
         let matched = config.skills_for_agent("rust", &AgentRole::Engineer, &available);
         assert!(matched.contains(&"rust-tooling".to_string()));
@@ -232,7 +232,7 @@ mod tests {
             "linear".into(),
             "github".into(),
             "worktree".into(),
-            "issue-lifecycle".into(),
+            "linear-dev".into(),
         ];
 
         let planner = config.skills_for_agent("planner", &AgentRole::Analyst, &available);

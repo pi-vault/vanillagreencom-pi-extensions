@@ -437,14 +437,14 @@ dependencies:
         let mut graph = HashMap::new();
         graph.insert(
             "linear-orch".into(),
-            vec!["issue-lifecycle".into(), "decider".into()],
+            vec!["linear-dev".into(), "decider".into()],
         );
-        graph.insert("issue-lifecycle".into(), vec!["linear".into()]);
+        graph.insert("linear-dev".into(), vec!["linear".into()]);
 
         let selected = vec!["linear-orch".to_string()];
         let (expanded, added) = expand_dependencies(&selected, &graph);
 
-        assert!(expanded.contains(&"issue-lifecycle".to_string()));
+        assert!(expanded.contains(&"linear-dev".to_string()));
         assert!(expanded.contains(&"decider".to_string()));
         assert!(expanded.contains(&"linear".to_string()));
         assert_eq!(added.len(), 3);

@@ -1,6 +1,6 @@
 ---
-name: issue-lifecycle
-description: "Agent workflows for issue implementation, review fix delegation, pre-submission PR review, and QA review."
+name: linear-dev
+description: "Linear dev-agent workflows for issue implementation and review-fix delegation, invoked by an orchestrator (linear-orch) or specialist agents."
 license: MIT
 user-invocable: true
 dependencies:
@@ -10,9 +10,9 @@ metadata:
   version: "1.2.0"
 ---
 
-# Issue Lifecycle
+# Linear Dev Workflows
 
-Agent workflows for specialist agents receiving delegations from an orchestrator.
+Linear dev-agent workflows for specialist agents receiving delegations from an orchestrator.
 
 ## Workflows
 

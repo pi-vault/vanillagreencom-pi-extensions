@@ -51,7 +51,7 @@ reviewer-test = ["reviewer"]
 generalist = [
     "decider",
     "github",
-    "issue-lifecycle",
+    "linear-dev",
     "linear",
     "worktree",
 ]
@@ -75,7 +75,7 @@ reviewer-security = ["reviewer"]
 tpm = [
     "decider",
     "github",
-    "issue-lifecycle",
+    "linear-dev",
     "linear",
     "project-management",
     "worktree",
@@ -108,8 +108,8 @@ iced = [
 # Skills given to all agents of a role
 [role-skills]
 analyst = ["linear", "github"]
-engineer = ["issue-lifecycle", "github", "worktree", "decider", "linear"]
-manager = ["issue-lifecycle", "github", "worktree", "project-management", "linear", "decider"]
+engineer = ["linear-dev", "github", "worktree", "decider", "linear"]
+manager = ["linear-dev", "github", "worktree", "project-management", "linear", "decider"]
 reviewer = ["reviewer"]
 
 # Hook assignment by event:matcher → roles

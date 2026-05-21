@@ -88,14 +88,14 @@ Apply [Worktree Scope](../SKILL.md#worktree-scope): if current dir is a worktree
 
 4. **Delegate** to `[AGENT_TYPE]` agent (reuse existing dev agent if available).
 
-   ⚠ Fill placeholders only ([Format Tags Are Literal](../SKILL.md#format-tags-are-literal)). `Recommendation:` = technical fix, not procedure. The agent already owns validate/commit/return per `issue-lifecycle/workflows/dev-fix.md`.
+   ⚠ Fill placeholders only ([Format Tags Are Literal](../SKILL.md#format-tags-are-literal)). `Recommendation:` = technical fix, not procedure. The agent already owns validate/commit/return per `linear-dev/workflows/dev-fix.md`.
    - ✅ `"Read X from parent state and forward to child — fix in parent so descendants inherit."`
    - ❌ `"1. Apply fix. 2. Run validate. 3. Commit. 4. Let orchestrator handle linkage."`
 
    <delegation_format>
    Ultrathink.
 
-   Follow workflow: .agents/skills/issue-lifecycle/workflows/dev-fix.md
+   Follow workflow: .agents/skills/linear-dev/workflows/dev-fix.md
 
    Source: [SOURCE]
    Issue: [ISSUE_ID]

@@ -4,7 +4,7 @@ description: "Per-issue inside-worktree lifecycle: dev → review → submit →
 license: MIT
 user-invocable: true
 dependencies:
-  required: [linear, github, worktree, issue-lifecycle, project-management, decider]
+  required: [linear, github, worktree, linear-dev, project-management, decider]
 metadata:
   author: vanillagreen
   version: "2.0.0"
