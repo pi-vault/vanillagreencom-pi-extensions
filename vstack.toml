@@ -52,7 +52,6 @@ generalist = [
     "github",
     "linear-dev",
     "linear",
-    "worktree",
 ]
 
 planner = [
@@ -77,7 +76,6 @@ tpm = [
     "linear-dev",
     "linear",
     "project-management",
-    "worktree",
 ]
 
 researcher = [
@@ -91,7 +89,7 @@ researcher = [
 [role-skills]
 analyst = ["linear", "github"]
 engineer = ["linear-dev", "github", "decider", "linear"]
-manager = ["linear-dev", "github", "worktree", "project-management", "linear", "decider"]
+manager = ["linear-dev", "github", "project-management", "linear", "decider"]
 reviewer = ["reviewer"]
 
 # Hook assignment by event:matcher → roles
