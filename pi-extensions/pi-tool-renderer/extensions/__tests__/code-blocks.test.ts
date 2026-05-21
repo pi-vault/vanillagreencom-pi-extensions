@@ -30,10 +30,10 @@ describe("styled markdown code blocks", () => {
 		const rendered = __test.renderStyledCodeBlock({ type: "code", lang: "bash", text: "echo hi\nprintf ok" }, 20, theme);
 
 		expect(rendered).toHaveLength(4);
-		expect(stripControl(rendered[0]!)).toBe("-".repeat(19));
+		expect(stripControl(rendered[0]!)).toBe("┄".repeat(19));
 		expect(stripControl(rendered[1]!)).toBe("echo hi" + " ".repeat(12));
 		expect(stripControl(rendered[2]!)).toBe("printf ok" + " ".repeat(10));
-		expect(stripControl(rendered[3]!)).toBe("-".repeat(19));
+		expect(stripControl(rendered[3]!)).toBe("┄".repeat(19));
 		expect(stripControl(rendered[1]!).startsWith(" ")).toBe(false);
 		for (const line of rendered) {
 			expect(stripControl(line)).not.toContain("┃");

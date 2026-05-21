@@ -427,7 +427,9 @@ function renderStyledCodeBlock(token: any, width: number, markdownTheme: any, ct
 	}
 
 	const codeWidth = Math.max(1, contentWidth);
-	const border = markdownTheme?.codeBlockBorder ? markdownTheme.codeBlockBorder("-".repeat(codeWidth)) : "-".repeat(codeWidth);
+	const borderGlyph = glyphs(ctx?.cwd).line === "-" ? "-" : "┄";
+	const rawBorder = borderGlyph.repeat(codeWidth);
+	const border = ctx?.hasUI && ctx.ui.theme?.fg ? ctx.ui.theme.fg("muted", rawBorder) : rawBorder;
 	const lines: string[] = [applyCodeBlockBg(border, ctx)];
 	for (const highlightedLine of highlightedLines) {
 		const wrapped = wrapTextWithAnsi(highlightedLine, codeWidth);
