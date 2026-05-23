@@ -237,7 +237,7 @@ If a Pi extension declares production dependencies (`dependencies` or `optionalD
 
 ## Extras
 
-Extras are optional non-agent packages distributed by vstack, such as theme packs. See `extras/README.md` for the catalog and per-extra documentation.
+Extras are optional non-agent packages distributed by vstack, such as theme packs. See [`extras/README.md`](extras/README.md) for the catalog and per-extra documentation.
 
 ```bash
 vstack apply vanillagreen-themes --theme ghibli-serene-nature --target ghostty,vscodium
