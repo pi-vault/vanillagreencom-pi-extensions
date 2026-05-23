@@ -174,7 +174,9 @@ export function formatShortcutHint(shortcut: string): string {
 
 export function lineCount(text: string): number {
 	if (!text) return 0;
-	return text.split(/\r?\n/).length;
+	const normalized = text.replace(/\r?\n$/, "");
+	if (!normalized) return 0;
+	return normalized.split(/\r?\n/).length;
 }
 
 export function takeTailLines(text: string, maxLines: number): { hidden: number; lines: string[]; total: number } {
