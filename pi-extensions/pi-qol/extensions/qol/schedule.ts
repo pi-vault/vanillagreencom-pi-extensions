@@ -1,5 +1,6 @@
-import type { AutocompleteItem } from "@earendil-works/pi-tui";
+import { truncateToWidth, type AutocompleteItem } from "@earendil-works/pi-tui";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { ansiGreen } from "./ansi.js";
 import { stringifyError } from "./util.js";
 
 export const SCHEDULE_ENTRY_TYPE = "qol-schedule";
@@ -145,8 +146,17 @@ function dataToJob(data: ScheduleEntryData): ScheduledMessage | undefined {
 }
 
 export function createScheduleController(pi: ExtensionAPI, clock: ScheduleClock = DEFAULT_CLOCK) {
+	let onChange: (() => void) | undefined;
 	let sequence = 0;
 	const jobs = new Map<string, ScheduledMessage>();
+
+	const notifyChanged = (): void => {
+		try {
+			onChange?.();
+		} catch {
+			// UI refresh hooks must never break schedule state transitions.
+		}
+	};
 
 	const nextId = (): string => {
 		let id = "";
@@ -189,6 +199,7 @@ export function createScheduleController(pi: ExtensionAPI, clock: ScheduleClock 
 		if (!jobs.has(job.id)) return;
 		jobs.delete(job.id);
 		clearJobTimer(job);
+		notifyChanged();
 		try {
 			let idle = true;
 			try {
@@ -225,6 +236,7 @@ export function createScheduleController(pi: ExtensionAPI, clock: ScheduleClock 
 		jobs.set(job.id, job);
 		appendEntry({ action: "scheduled", createdAt: job.createdAt, dueAt: job.dueAt, id: job.id, message: job.message });
 		armJob(job, ctx);
+		notifyChanged();
 		ctx.ui.notify(`Scheduled ${job.id} in ${formatScheduleDuration(delayMs)} (${formatDueTime(job.dueAt)}): ${previewMessage(message)}`, "info");
 	};
 
@@ -234,6 +246,7 @@ export function createScheduleController(pi: ExtensionAPI, clock: ScheduleClock 
 		clearJobTimer(job);
 		jobs.delete(id);
 		appendEntry({ action: "cancelled", cancelledAt: clock.now(), id });
+		notifyChanged();
 		return true;
 	};
 
@@ -243,7 +256,9 @@ export function createScheduleController(pi: ExtensionAPI, clock: ScheduleClock 
 		},
 		clearTimers(): void {
 			for (const job of jobs.values()) clearJobTimer(job);
+			const changed = jobs.size > 0;
 			jobs.clear();
+			if (changed) notifyChanged();
 		},
 		async handleCommand(args: string, ctx: ExtensionCommandContext): Promise<void> {
 			const parsed = parseScheduleCommandArgs(args);
@@ -287,6 +302,19 @@ export function createScheduleController(pi: ExtensionAPI, clock: ScheduleClock 
 				if (typeof data.id === "string") jobs.delete(data.id);
 			}
 			for (const job of jobs.values()) armJob(job, ctx);
+			notifyChanged();
+		},
+		renderPreviewLines(width: number): string[] {
+			const pending = [...jobs.values()].sort((a, b) => a.dueAt - b.dueAt);
+			const shown = pending.slice(0, 3).map((job) => {
+				const line = `┃ Scheduled ${job.id}: ${formatDueTime(job.dueAt)} — ${previewMessage(job.message, 120)}`;
+				return truncateToWidth(ansiGreen(line), width, "");
+			});
+			if (pending.length > shown.length) shown.push(truncateToWidth(ansiGreen(`┃ Scheduled: +${pending.length - shown.length} more`), width, ""));
+			return shown;
+		},
+		setOnChange(callback: (() => void) | undefined): void {
+			onChange = callback;
 		},
 	};
 }

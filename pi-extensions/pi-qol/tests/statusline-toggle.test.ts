@@ -131,7 +131,7 @@ test("session_start installs the QOL statusline by default", async () => {
 });
 
 test("statusline.enabled=false keeps QOL editor helpers but skips statusline/footer replacement", async () => {
-	writeQolConfig({ "statusline.enabled": false, "sessionSearch.enabled": false, "sessionAutoRename.enabled": false });
+	writeQolConfig({ "enableScheduleCommand": false, "statusline.enabled": false, "sessionSearch.enabled": false, "sessionAutoRename.enabled": false });
 	const fake = makeFakeApi();
 	qolDefault(fake.api);
 	const ctx = makeCtx();

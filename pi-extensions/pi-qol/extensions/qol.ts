@@ -118,7 +118,6 @@ export default function qol(pi: ExtensionAPI): void {
 	let autoRenameInProgress = false;
 	let autoRenameGeneration = 0;
 	let latestSystemPromptOptions: unknown;
-	const scheduleController = createScheduleController(pi);
 
 	const resetAutoRename = () => {
 		autoRenameAttempted = false;
@@ -377,6 +376,8 @@ export default function qol(pi: ExtensionAPI): void {
 	let lastSessionTitle: string | undefined;
 
 	const requestRender = () => activeTui?.requestRender();
+	const scheduleController = createScheduleController(pi);
+	scheduleController.setOnChange(requestRender);
 	const statuslineEnabled = (ctx: ExtensionContext): boolean => settingBoolean("statusline.enabled", true, ctx.cwd);
 	const refreshStatusline = (ctx: ExtensionContext) => {
 		if (!statuslineEnabled(ctx)) return Promise.resolve();
@@ -546,7 +547,8 @@ export default function qol(pi: ExtensionAPI): void {
 		resetAutoRename();
 		resetBudgetGuard();
 		resetThinkingTimer(ctx);
-		if (settingBoolean("enableScheduleCommand", true, ctx.cwd)) scheduleController.restoreFromBranch(ctx);
+		const scheduleEnabled = settingBoolean("enableScheduleCommand", true, ctx.cwd);
+		if (scheduleEnabled) scheduleController.restoreFromBranch(ctx);
 		else scheduleController.clearTimers();
 		void consumePendingSessionSearchContext(pi, ctx, event.reason);
 		installAutocompleteHintStyling(ctx);
@@ -565,20 +567,22 @@ export default function qol(pi: ExtensionAPI): void {
 					? new QolCompactPromptEditor(tui, theme, keybindings, Math.max(0, Math.floor(settingNumber("inputBottomPaddingLines", DEFAULT_INPUT_BOTTOM_PADDING_LINES, ctx.cwd))), ctx)
 					: new QolEditor(tui, theme, keybindings, ctx);
 			});
-			if (showStatusline) {
+			if (showStatusline || scheduleEnabled) {
 				const statusWidgetTimer = setTimeout(() => {
 					ctx.ui.setWidget("statusline", (tui, theme) => {
 						activeTui = tui;
 						return {
 							invalidate() {},
 							render(width: number): string[] {
-								return [renderStatusLine(width, ctx, gitState ?? makeFallbackGitState(ctx.cwd), pi, theme)];
+								const lines = scheduleEnabled ? scheduleController.renderPreviewLines(width) : [];
+								if (showStatusline) lines.push(renderStatusLine(width, ctx, gitState ?? makeFallbackGitState(ctx.cwd), pi, theme));
+								return lines;
 							},
 						};
 					});
 				}, 0);
 				statusWidgetTimer.unref?.();
-				if (settingBoolean("replaceFooter", true, ctx.cwd)) {
+				if (showStatusline && settingBoolean("replaceFooter", true, ctx.cwd)) {
 					ctx.ui.setFooter((tui, _theme, footerData) => {
 						activeTui = tui;
 						const unsubscribe = footerData.onBranchChange(() => {

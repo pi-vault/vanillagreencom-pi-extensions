@@ -56,7 +56,7 @@ Restart Pi after installation.
 
 Arguments support autocomplete.
 
-`/schedule` accepts `ms`, `s`, `m`, `h`, and `d` units; bare numbers mean minutes. Manage pending prompts with `/schedule list` and `/schedule cancel <id|all>`. Schedules are stored in the Pi session and re-armed on reload/resume; if Pi is not running at the due time, an overdue prompt sends when that session is next loaded.
+`/schedule` accepts `ms`, `s`, `m`, `h`, and `d` units; bare numbers mean minutes. Pending prompts render above the statusline like steering/follow-up previews until they are sent or cancelled. Manage pending prompts with `/schedule list` and `/schedule cancel <id|all>`. Schedules are stored in the Pi session and re-armed on reload/resume; if Pi is not running at the due time, an overdue prompt sends when that session is next loaded.
 
 ## Settings
 

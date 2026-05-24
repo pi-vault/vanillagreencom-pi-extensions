@@ -89,6 +89,7 @@ test("handleCommand schedules a user message without sending immediately", async
 	await controller.handleCommand("20m this is my message", ctx);
 
 	expect(sent).toHaveLength(0);
+	expect(controller.renderPreviewLines(200).join("\n")).toContain("this is my message");
 	expect(clock.timers[0]?.delayMs).toBe(20 * 60 * 1000);
 	expect(entries[0]?.customType).toBe(SCHEDULE_ENTRY_TYPE);
 	expect(entries[0]?.data).toMatchObject({ action: "scheduled", message: "this is my message" });
@@ -99,6 +100,21 @@ test("handleCommand schedules a user message without sending immediately", async
 
 	expect(sent).toEqual([{ content: "this is my message", options: undefined }]);
 	expect(entries[1]?.data).toMatchObject({ action: "delivered" });
+	expect(controller.renderPreviewLines(200)).toEqual([]);
+});
+
+test("renderPreviewLines uses queued-message style and caps visible rows", async () => {
+	const { controller, ctx } = makeHarness();
+	await controller.handleCommand("1m first", ctx);
+	await controller.handleCommand("2m second", ctx);
+	await controller.handleCommand("3m third", ctx);
+	await controller.handleCommand("4m fourth", ctx);
+
+	const lines = controller.renderPreviewLines(200);
+	expect(lines).toHaveLength(4);
+	expect(lines[0]).toContain("┃ Scheduled");
+	expect(lines[0]).toContain("first");
+	expect(lines[3]).toContain("+1 more");
 });
 
 test("handleCommand queues as a follow-up when the timer fires while the agent is busy", async () => {
