@@ -426,6 +426,9 @@ let extensionApi: ExtensionAPI | undefined;
 let piUI: ExtensionUIContext | undefined;
 let extraUsageHelperInFlight: Promise<string> | null = null;
 
+const RATE_LIMIT_AUTO_RESUME_EVENT = "vstack:rate-limit";
+const RATE_LIMIT_TOKEN = "\x1b[31m[rate-limit]\x1b[39m";
+
 export function isExtraUsageRequiredMessage(value: unknown): boolean {
 	let text: string;
 	if (typeof value === "string") text = value;
@@ -435,6 +438,40 @@ export function isExtraUsageRequiredMessage(value: unknown): boolean {
 		catch { text = String(value); }
 	}
 	return /extra[-\s]?usage|overage|extra usage billing|extra usage credits|1M context/i.test(text);
+}
+
+export function uniqueNonEmptyLines(values: unknown[]): string[] {
+	const seen = new Set<string>();
+	const out: string[] = [];
+	for (const value of values) {
+		const text = typeof value === "string" ? value.trim() : value == null ? "" : String(value).trim();
+		if (!text || seen.has(text)) continue;
+		seen.add(text);
+		out.push(text);
+	}
+	return out;
+}
+
+export function formatResetTimestamp(value: unknown): string {
+	const parsed = typeof value === "number" ? value : typeof value === "string" ? Date.parse(value) : Number.NaN;
+	if (!Number.isFinite(parsed)) return "unknown";
+	return new Date(parsed).toLocaleString(undefined, {
+		day: "numeric",
+		hour: "numeric",
+		minute: "2-digit",
+		month: "short",
+		second: "2-digit",
+		timeZoneName: "short",
+		year: "numeric",
+	});
+}
+
+function emitRateLimitEvent(payload: Record<string, unknown>): void {
+	try {
+		extensionApi?.events?.emit?.(RATE_LIMIT_AUTO_RESUME_EVENT, payload);
+	} catch {
+		// Cross-extension broker is best-effort only.
+	}
 }
 
 function extraUsageAllowed(config: Config): boolean {
@@ -1257,8 +1294,10 @@ async function consumeQuery(
 					ctx().currentPiStream?.push({ type: "text_delta", contentIndex: idx, delta: text, partial: ctx().turnOutput });
 					ctx().currentPiStream?.push({ type: "text_end", contentIndex: idx, content: text, partial: ctx().turnOutput });
 				} else if (message.subtype !== "success" && isExtraUsageRequiredMessage(message)) {
-					const errors = Array.isArray((message as any).errors) ? (message as any).errors.join("\n") : message.subtype;
+					const errorLines = Array.isArray((message as any).errors) ? uniqueNonEmptyLines((message as any).errors) : [];
+					const errors = errorLines.length > 0 ? errorLines.join("\n") : String(message.subtype ?? "Claude Code rate limit");
 					const openedExtraUsage = launchExtraUsageHelperIfAllowed(cwd, bridgeConfig, "result error");
+					ctx().handledTerminalError = true;
 					ctx().turnOutput.stopReason = "error";
 					ctx().turnOutput.errorMessage = `${errors}${openedExtraUsage ? "\n\nOpened Claude Code /extra-usage helper. Complete billing/admin flow in the browser, then retry the prompt." : "\n\nRun /claude-bridge:extra, or enable Allow extra usage helper in settings."}`;
 					ctx().currentPiStream?.push({ type: "error", reason: "error", error: ctx().turnOutput });
@@ -1277,10 +1316,21 @@ async function consumeQuery(
 				const info = (message as any).rate_limit_info;
 				debug("consumeQuery: rate_limit_event", JSON.stringify(info).slice(0, 300));
 				if (info?.status === "rejected") {
-					const resetsAt = info.resetsAt ? new Date(info.resetsAt).toLocaleTimeString() : "unknown";
+					const resetsAt = formatResetTimestamp(info.resetsAt);
+					const resetAtMs = typeof info.resetsAt === "string" ? Date.parse(info.resetsAt) : undefined;
 					const reason = `${info.rateLimitType ?? "unknown"} rate limit`;
 					const launchedExtraUsage = isExtraUsageRequiredMessage(info) && launchExtraUsageHelperIfAllowed(cwd, bridgeConfig, reason);
-					piUI?.notify(`Claude rate limited (${reason}) — resets at ${resetsAt}${launchedExtraUsage ? "; opened /extra-usage helper" : ""}`, "warning");
+					emitRateLimitEvent({
+						model: model.id,
+						provider: PROVIDER_ID,
+						rateLimitType: info.rateLimitType,
+						reason,
+						resetAt: info.resetsAt,
+						...(Number.isFinite(resetAtMs) ? { resetAtMs } : {}),
+						source: "claude-bridge",
+						status: "rejected",
+					});
+					piUI?.notify(`${RATE_LIMIT_TOKEN} Claude ${reason} hit — resets ${resetsAt}${launchedExtraUsage ? "; opened /extra-usage helper" : ""}`, "warning");
 				} else if (info?.status === "allowed_warning") {
 					piUI?.notify(`Claude rate limit warning: ${Math.round(info.utilization ?? 0)}% used (${info.rateLimitType ?? ""})`, "warning");
 				}
@@ -1588,13 +1638,18 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 		})
 		.catch((error) => {
 			debug(`provider: query error, model=${model.id}, aborted=${Boolean(options?.signal?.aborted)}, error=`, error);
-			const openedExtraUsage = isExtraUsageRequiredMessage(error) && launchExtraUsageHelperIfAllowed(cwd, bridgeConfig, "query error");
+			const suppressDuplicateError = ctx().handledTerminalError || !ctx().currentPiStream;
+			const openedExtraUsage = !suppressDuplicateError && isExtraUsageRequiredMessage(error) && launchExtraUsageHelperIfAllowed(cwd, bridgeConfig, "query error");
 			if ((wasAborted || options?.signal?.aborted) && sharedSession) {
 				sharedSession = { ...sharedSession, needsRebuild: true, forceRotate: true };
 			} else {
 				sharedSession = null;
 			}
 			ctx().deferredUserMessages = [];
+			if (suppressDuplicateError) {
+				debug("provider: suppressing duplicate query error after terminal error was already emitted");
+				return;
+			}
 			if (ctx().turnOutput) {
 				ctx().turnOutput.stopReason = options?.signal?.aborted ? "aborted" : "error";
 				ctx().turnOutput.errorMessage = `${error instanceof Error ? error.message : String(error)}${openedExtraUsage ? "\n\nOpened Claude Code /extra-usage helper. Complete billing/admin flow in the browser, then retry the prompt." : ""}`;

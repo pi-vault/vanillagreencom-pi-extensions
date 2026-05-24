@@ -16,6 +16,7 @@ Quality-of-life extension for Pi: compact statusline, multiline input, session n
 - `/context` shows a Claude-style context-window breakdown.
 - `/handoff <goal>` drafts a focused prompt for a new session.
 - `/schedule 20m <message>` sends a delayed prompt without invoking the model until the timer fires.
+- Optional rate-limit auto-resume detects 429/reset times and sends a configurable continuation after reset if no later turn has started.
 - Permission gate prompts before risky `bash` commands. Default match: `rm -Rf`.
 - Notifications for ready, questions, blocked states, and task completion.
 - Thinking timer next to collapsed `Thinking...` labels.
@@ -58,6 +59,8 @@ Arguments support autocomplete.
 
 `/schedule` accepts `ms`, `s`, `m`, `h`, and `d` units; bare numbers mean minutes. Pending prompts render above the statusline like steering/follow-up previews until they are sent or cancelled. Manage pending prompts with `/schedule list` and `/schedule cancel <id|all>`. Schedules are stored in the Pi session and re-armed on reload/resume; if Pi is not running at the due time, an overdue prompt sends when that session is next loaded.
 
+Rate-limit auto-resume is opt-in. When enabled, QOL listens for provider 429 responses, Claude bridge reset events, and assistant rate-limit error messages. If the agent stops and no newer turn has started, QOL shows a red ASCII `[rate-limit]` preview and sends the configured continuation at the reported reset time plus the buffer.
+
 ## Settings
 
 Open `/extensions:settings`; settings appear under the **QOL** tab. Names below match the labels shown there.
@@ -93,6 +96,7 @@ Glyph style: each package exposes `glyphStyle` (`unicode` default, `ascii` for t
 | --- | --- |
 | Enable /rename command | Register the `/rename` command. |
 | Enable /schedule command | Register `/schedule` for timer-based prompts, useful for retrying after rate limits reset. |
+| Auto-resume after rate limits | Opt-in continuation scheduler for rate-limit stops with reset times. |
 | Auto-name new sessions | Generate a friendly session name from the first prompt. |
 | Auto-rename model | Model used for title generation. |
 | Auto-rename fallback model | Model tried when the primary fails. |
@@ -101,6 +105,18 @@ Glyph style: each package exposes `glyphStyle` (`unicode` default, `ascii` for t
 | Notify on auto-rename | Show a notification when auto-renaming. |
 
 Advanced: input cap, title length, output tokens, timeout, custom prompt template, and debug logging.
+
+### Rate-limit recovery
+
+| Setting | What it does |
+| --- | --- |
+| Auto-resume after rate limits | Enable the opt-in scheduler. |
+| Auto-resume message | User message sent at reset time. Default: `Hit API rate limit. It has been reset. Continue`. |
+| Reset buffer seconds | Extra wait after the provider reset timestamp. |
+| Maximum auto-resume delay | Ignore reset times farther away than this limit. |
+| Notify on auto-resume | Show Pi UI notices when scheduled/sent/failed. |
+
+Auto-resume cancels as soon as a newer agent turn starts, so manual continuation wins. It works best when the provider exposes `Retry-After`/rate-limit reset headers or when `pi-claude-bridge` emits Claude Code reset metadata.
 
 ### Handoff
 

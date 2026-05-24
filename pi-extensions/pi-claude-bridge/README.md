@@ -77,9 +77,11 @@ Open `/extensions:settings`; settings appear under the **Claude Bridge** tab.
 | Allow extra usage helper | Let the bridge launch Claude Code's `/extra-usage` flow when extra usage is required. Billing/admin approval still happens in Claude's browser page. |
 | Claude executable path | Explicit `claude` binary path; empty auto-detects. |
 
-## Extra usage
+## Extra usage and rate limits
 
 Claude Code's `/extra-usage` local command works through the Claude Agent SDK. In Pi, use `/claude-bridge:extra` to run that flow from claude-bridge. Persist automatic launch on extra-usage errors with **Allow extra usage helper** in `/extensions:settings`.
+
+When Claude Code emits rate-limit reset metadata, the bridge shows one red ASCII `[rate-limit]` Pi warning with the reset timestamp including timezone context, deduplicates repeated Claude Code error lines, and suppresses the SDK's follow-up `Claude Code returned an error result: ...` wrapper when the bridge already emitted the terminal error. The bridge also emits `vstack:rate-limit` on Pi's extension event bus so `pi-qol` can opt into reset-time auto-resume.
 
 ## Debugging
 

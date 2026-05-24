@@ -355,6 +355,51 @@
           "requiresReload": true
         },
         {
+          "key": "rateLimitAutoResume.enabled",
+          "label": "Auto-resume after rate limits",
+          "description": "When Pi detects a rate-limit stop with a reset time, schedule a follow-up user message at the reset time so the agent can continue if nothing else has continued since.",
+          "type": "boolean",
+          "default": false,
+          "category": "Rate Limit Recovery",
+          "apply": "live"
+        },
+        {
+          "key": "rateLimitAutoResume.message",
+          "label": "Auto-resume message",
+          "description": "User message sent after a detected rate limit resets.",
+          "type": "string",
+          "default": "Hit API rate limit. It has been reset. Continue",
+          "category": "Rate Limit Recovery",
+          "apply": "live"
+        },
+        {
+          "key": "rateLimitAutoResume.bufferSeconds",
+          "label": "Reset buffer seconds",
+          "description": "Seconds to wait after the reported reset time before sending the auto-resume message.",
+          "type": "number",
+          "default": 10,
+          "category": "Rate Limit Recovery",
+          "apply": "live"
+        },
+        {
+          "key": "rateLimitAutoResume.maxDelayMinutes",
+          "label": "Maximum auto-resume delay",
+          "description": "Ignore detected reset times farther away than this many minutes, to avoid stale or malformed schedules.",
+          "type": "number",
+          "default": 1440,
+          "category": "Rate Limit Recovery",
+          "apply": "live"
+        },
+        {
+          "key": "rateLimitAutoResume.notify",
+          "label": "Notify on auto-resume",
+          "description": "Show Pi UI notices when rate-limit auto-resume is scheduled, sent, or fails.",
+          "type": "boolean",
+          "default": true,
+          "category": "Rate Limit Recovery",
+          "apply": "live"
+        },
+        {
           "key": "handoffReviewPrompt",
           "label": "Review handoff prompt",
           "description": "Open an editor to review or edit the generated handoff prompt before creating the new session.",

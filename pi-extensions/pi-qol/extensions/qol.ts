@@ -46,6 +46,7 @@ import {
 	restorePendingQueueThemePatch,
 } from "./qol/pending-queue.js";
 import { permissionGateMatch, permissionGatePrompt } from "./qol/permission-gate.js";
+import { createRateLimitAutoResumeController, RATE_LIMIT_AUTO_RESUME_EVENT } from "./qol/rate-limit-auto-resume.js";
 import {
 	autoRenameEnabled,
 	autoRenameNotify,
@@ -378,6 +379,8 @@ export default function qol(pi: ExtensionAPI): void {
 	const requestRender = () => activeTui?.requestRender();
 	const scheduleController = createScheduleController(pi);
 	scheduleController.setOnChange(requestRender);
+	const rateLimitAutoResumeController = createRateLimitAutoResumeController(pi);
+	rateLimitAutoResumeController.setOnChange(requestRender);
 	const statuslineEnabled = (ctx: ExtensionContext): boolean => settingBoolean("statusline.enabled", true, ctx.cwd);
 	const refreshStatusline = (ctx: ExtensionContext) => {
 		if (!statuslineEnabled(ctx)) return Promise.resolve();
@@ -539,6 +542,10 @@ export default function qol(pi: ExtensionAPI): void {
 		const event = data as QuestionOpenedEventLike;
 		notifyQuestionOpened(currentCtx, event, "question");
 	});
+	pi.events.on(RATE_LIMIT_AUTO_RESUME_EVENT, (payload: unknown) => {
+		if (!currentCtx) return;
+		rateLimitAutoResumeController.noteExternalRateLimitEvent(payload, currentCtx);
+	});
 
 	pi.on("session_start", (event, ctx) => {
 		currentCtx = ctx;
@@ -548,6 +555,7 @@ export default function qol(pi: ExtensionAPI): void {
 		resetBudgetGuard();
 		resetThinkingTimer(ctx);
 		const scheduleEnabled = settingBoolean("enableScheduleCommand", true, ctx.cwd);
+		const rateLimitAutoResumeEnabled = rateLimitAutoResumeController.enabled(ctx);
 		if (scheduleEnabled) scheduleController.restoreFromBranch(ctx);
 		else scheduleController.clearTimers();
 		void consumePendingSessionSearchContext(pi, ctx, event.reason);
@@ -567,14 +575,15 @@ export default function qol(pi: ExtensionAPI): void {
 					? new QolCompactPromptEditor(tui, theme, keybindings, Math.max(0, Math.floor(settingNumber("inputBottomPaddingLines", DEFAULT_INPUT_BOTTOM_PADDING_LINES, ctx.cwd))), ctx)
 					: new QolEditor(tui, theme, keybindings, ctx);
 			});
-			if (showStatusline || scheduleEnabled) {
+			if (showStatusline || scheduleEnabled || rateLimitAutoResumeEnabled) {
 				const statusWidgetTimer = setTimeout(() => {
 					ctx.ui.setWidget("statusline", (tui, theme) => {
 						activeTui = tui;
 						return {
 							invalidate() {},
 							render(width: number): string[] {
-								const lines = scheduleEnabled ? scheduleController.renderPreviewLines(width) : [];
+								const lines = rateLimitAutoResumeController.enabled(ctx) ? rateLimitAutoResumeController.renderPreviewLines(width) : [];
+								if (scheduleEnabled) lines.push(...scheduleController.renderPreviewLines(width));
 								if (showStatusline) lines.push(renderStatusLine(width, ctx, gitState ?? makeFallbackGitState(ctx.cwd), pi, theme));
 								return lines;
 							},
@@ -614,6 +623,7 @@ export default function qol(pi: ExtensionAPI): void {
 		cavemanUnsubscribe?.();
 		cavemanUnsubscribe = undefined;
 		scheduleController.clearTimers();
+		rateLimitAutoResumeController.clearTimers();
 		resetAutoRename();
 		resetBudgetGuard();
 		clearIdleCompactionTimer();
@@ -645,6 +655,7 @@ export default function qol(pi: ExtensionAPI): void {
 	pi.on("agent_start", (_event, ctx) => {
 		clearIdleCompactionTimer();
 		clearTmuxWindowMark();
+		rateLimitAutoResumeController.noteAgentStart(ctx);
 		if (ctx.hasUI) {
 			void refreshStatusline(ctx);
 			requestRender();
@@ -671,6 +682,7 @@ export default function qol(pi: ExtensionAPI): void {
 		}
 	});
 	pi.on("message_end", (event, ctx) => {
+		rateLimitAutoResumeController.noteMessageEnd(event, ctx);
 		if (!updateThinkingTimerEnabled(ctx)) return;
 		const message = event.message as any;
 		if (!message || message.role !== "assistant" || !Array.isArray(message.content)) return;
@@ -684,6 +696,7 @@ export default function qol(pi: ExtensionAPI): void {
 			void refreshStatusline(ctx);
 			requestRender();
 		}
+		rateLimitAutoResumeController.noteAgentEnd(event, ctx);
 		maybeFireBudgetGuard(ctx);
 		scheduleIdleCompaction(ctx);
 		void attemptAutoRename(ctx);
@@ -719,6 +732,9 @@ export default function qol(pi: ExtensionAPI): void {
 		currentCtx = ctx;
 		if (settingBoolean("enableScheduleCommand", true, ctx.cwd)) scheduleController.restoreFromBranch(ctx);
 		else scheduleController.clearTimers();
+	});
+	pi.on("after_provider_response", (event, ctx) => {
+		rateLimitAutoResumeController.noteProviderResponse(event, ctx);
 	});
 	pi.on("session_before_compact", (event, ctx) => handleQolCompaction(event, ctx));
 	pi.on("session_before_tree", (event, ctx) => handleQolBranchSummary(event, ctx));

@@ -24,6 +24,7 @@ export class QueryContext {
 	turnToolCallIds: string[] = [];
 	nextHandlerIdx = 0;
 	deferredUserMessages: string[] = [];
+	handledTerminalError = false;
 
 	// Per-turn (reset together)
 	turnOutput: AssistantMessage | null = null;
@@ -47,6 +48,7 @@ export class QueryContext {
 		this.turnStarted = false;
 		this.turnSawStreamEvent = false;
 		this.turnSawToolCall = false;
+		this.handledTerminalError = false;
 		// turnToolCallIds and nextHandlerIdx are NOT reset — they persist across
 		// tool-result delivery callbacks within the same assistant message.
 	}
