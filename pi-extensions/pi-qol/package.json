@@ -1,7 +1,7 @@
 {
   "name": "@vanillagreen/pi-qol",
   "version": "1.5.0",
-  "description": "Pi quality-of-life extension: compact statusline/π prompt, reliable multiline input, styled pasted-image chips, session naming/search/context import, handoff, permission prompts, notifications, custom compaction, and a collapsed-thinking timer.",
+  "description": "Pi quality-of-life extension: compact statusline/π prompt, reliable multiline input, styled pasted-image chips, session naming/search/context import, scheduled prompts, handoff, permission prompts, notifications, custom compaction, and a collapsed-thinking timer.",
   "license": "MIT",
   "keywords": [
     "pi-package",
@@ -338,6 +338,16 @@
           "key": "enableHandoffCommand",
           "label": "Enable /handoff command",
           "description": "Register the handoff command to generate a focused prompt and create a new session with the prompt as a draft.",
+          "type": "boolean",
+          "default": true,
+          "category": "Session",
+          "apply": "reload",
+          "requiresReload": true
+        },
+        {
+          "key": "enableScheduleCommand",
+          "label": "Enable /schedule command",
+          "description": "Register /schedule for timer-based user messages, e.g. /schedule 20m retry after rate reset. The timer runs in the extension without invoking the model immediately.",
           "type": "boolean",
           "default": true,
           "category": "Session",

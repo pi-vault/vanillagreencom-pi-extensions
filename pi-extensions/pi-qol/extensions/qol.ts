@@ -55,6 +55,7 @@ import {
 	isStaleCtxError,
 	withAutoRenamePrefix,
 } from "./qol/session-rename.js";
+import { createScheduleController, getScheduleArgumentCompletions } from "./qol/schedule.js";
 import {
 	consumePendingSessionSearchContext,
 	openQolSessionSearch,
@@ -117,6 +118,7 @@ export default function qol(pi: ExtensionAPI): void {
 	let autoRenameInProgress = false;
 	let autoRenameGeneration = 0;
 	let latestSystemPromptOptions: unknown;
+	const scheduleController = createScheduleController(pi);
 
 	const resetAutoRename = () => {
 		autoRenameAttempted = false;
@@ -544,6 +546,8 @@ export default function qol(pi: ExtensionAPI): void {
 		resetAutoRename();
 		resetBudgetGuard();
 		resetThinkingTimer(ctx);
+		if (settingBoolean("enableScheduleCommand", true, ctx.cwd)) scheduleController.restoreFromBranch(ctx);
+		else scheduleController.clearTimers();
 		void consumePendingSessionSearchContext(pi, ctx, event.reason);
 		installAutocompleteHintStyling(ctx);
 		installPendingQueueThemePatch(ctx);
@@ -605,6 +609,7 @@ export default function qol(pi: ExtensionAPI): void {
 	pi.on("session_shutdown", (_event, ctx) => {
 		cavemanUnsubscribe?.();
 		cavemanUnsubscribe = undefined;
+		scheduleController.clearTimers();
 		resetAutoRename();
 		resetBudgetGuard();
 		clearIdleCompactionTimer();
@@ -706,6 +711,11 @@ export default function qol(pi: ExtensionAPI): void {
 		void refreshStatusline(ctx);
 		requestRender();
 	});
+	pi.on("session_tree", (_event, ctx) => {
+		currentCtx = ctx;
+		if (settingBoolean("enableScheduleCommand", true, ctx.cwd)) scheduleController.restoreFromBranch(ctx);
+		else scheduleController.clearTimers();
+	});
 	pi.on("session_before_compact", (event, ctx) => handleQolCompaction(event, ctx));
 	pi.on("session_before_tree", (event, ctx) => handleQolBranchSummary(event, ctx));
 	pi.on("tool_call", async (event: any, ctx) => {
@@ -760,6 +770,14 @@ export default function qol(pi: ExtensionAPI): void {
 		pi.registerCommand("handoff", {
 			description: "Focused context handoff to a new session.",
 			handler: async (args, ctx) => runHandoff(args, ctx),
+		});
+	}
+
+	if (settingBoolean("enableScheduleCommand", true)) {
+		pi.registerCommand("schedule", {
+			description: "Send a user message after a timer without invoking the model now.",
+			getArgumentCompletions: getScheduleArgumentCompletions,
+			handler: async (args, ctx) => scheduleController.handleCommand(args, ctx),
 		});
 	}
 

@@ -5,7 +5,7 @@
 ![Session search popup](https://raw.githubusercontent.com/vanillagreencom/vstack/main/pi-extensions/pi-qol/assets/session-search.gif)
 ![/context usage breakdown](https://raw.githubusercontent.com/vanillagreencom/vstack/main/pi-extensions/pi-qol/assets/context-usage.png)
 
-Quality-of-life extension for Pi: compact statusline, multiline input, session naming and search, notifications, and a permission gate.
+Quality-of-life extension for Pi: compact statusline, multiline input, session naming and search, scheduled prompts, notifications, and a permission gate.
 
 ## Highlights
 
@@ -15,6 +15,7 @@ Quality-of-life extension for Pi: compact statusline, multiline input, session n
 - `/search` browses previous sessions with snippet previews; the configured shortcut opens it instantly.
 - `/context` shows a Claude-style context-window breakdown.
 - `/handoff <goal>` drafts a focused prompt for a new session.
+- `/schedule 20m <message>` sends a delayed prompt without invoking the model until the timer fires.
 - Permission gate prompts before risky `bash` commands. Default match: `rm -Rf`.
 - Notifications for ready, questions, blocked states, and task completion.
 - Thinking timer next to collapsed `Thinking...` labels.
@@ -51,8 +52,11 @@ Restart Pi after installation.
 | `/search [query]` | Open previous-session search. |
 | `/search:refresh` | Refresh the session search cache. |
 | `/handoff <goal>` | Draft a handoff prompt for a new session. |
+| `/schedule <delay> <message>` | Send a user message after a timer without invoking the model now. Example: `/schedule 20m retry the previous request`. |
 
 Arguments support autocomplete.
+
+`/schedule` accepts `ms`, `s`, `m`, `h`, and `d` units; bare numbers mean minutes. Manage pending prompts with `/schedule list` and `/schedule cancel <id|all>`. Schedules are stored in the Pi session and re-armed on reload/resume; if Pi is not running at the due time, an overdue prompt sends when that session is next loaded.
 
 ## Settings
 
@@ -88,6 +92,7 @@ Glyph style: each package exposes `glyphStyle` (`unicode` default, `ascii` for t
 | Setting | What it does |
 | --- | --- |
 | Enable /rename command | Register the `/rename` command. |
+| Enable /schedule command | Register `/schedule` for timer-based prompts, useful for retrying after rate limits reset. |
 | Auto-name new sessions | Generate a friendly session name from the first prompt. |
 | Auto-rename model | Model used for title generation. |
 | Auto-rename fallback model | Model tried when the primary fails. |
