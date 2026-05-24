@@ -21,7 +21,7 @@ import {
 	taskNumberById,
 	traceViewerItems,
 } from "../extensions/subagent/browser.js";
-import { latestDashboardActivity, renderDashboardWidgetLines } from "../extensions/subagent/dashboard.js";
+import { latestDashboardActivity, renderDashboardWidgetLines, sortDashboardItems } from "../extensions/subagent/dashboard.js";
 import { COMPLETION_SUMMARY_UNAVAILABLE, extractLastAssistantTextFromTranscriptContent, highlightInlinePreview, oneLinePreview, parseTranscriptUsage } from "../extensions/subagent/format.js";
 import { oneShotTranscriptPath } from "../extensions/subagent/paths.js";
 import { formatTaskRecordResult } from "../extensions/subagent/renderers.js";
@@ -277,6 +277,49 @@ test("dashboard label uses occurrence number even when persisted task numbers ar
 	assert.match(plain, /reviewer-arch #2 +· working/);
 	assert.doesNotMatch(plain, /reviewer-arch #1\b/);
 	assert.match(plain, /reviewer-arch +· completed/);
+});
+
+test("dashboard sort keeps working first and newest invocation first without updatedAt churn", () => {
+	const olderWorking = dashboardItem({
+		agent: "rust",
+		taskId: "running-old",
+		status: "running",
+		startedAt: "2026-05-14T05:00:00.000Z",
+		updatedAt: "2026-05-14T05:30:00.000Z",
+	});
+	const newerWorking = dashboardItem({
+		agent: "scout",
+		taskId: "running-new",
+		status: "running",
+		startedAt: "2026-05-14T05:10:00.000Z",
+		updatedAt: "2026-05-14T05:11:00.000Z",
+	});
+	const olderAttention = dashboardItem({
+		agent: "reviewer-arch",
+		taskId: "failed-old",
+		status: "failed",
+		startedAt: "2026-05-14T05:15:00.000Z",
+		updatedAt: "2026-05-14T05:40:00.000Z",
+	});
+	const newerAttention = dashboardItem({
+		agent: "reviewer-test",
+		taskId: "failed-new",
+		status: "failed",
+		startedAt: "2026-05-14T05:20:00.000Z",
+		updatedAt: "2026-05-14T05:21:00.000Z",
+	});
+	const completedNewest = dashboardItem({
+		agent: "reviewer-doc",
+		taskId: "completed-newest",
+		status: "completed",
+		startedAt: "2026-05-14T05:25:00.000Z",
+		updatedAt: "2026-05-14T05:26:00.000Z",
+	});
+
+	assert.deepEqual(
+		sortDashboardItems([completedNewest, olderAttention, olderWorking, newerAttention, newerWorking]).map((item) => item.taskId),
+		["running-new", "running-old", "failed-new", "failed-old", "completed-newest"],
+	);
 });
 
 test("dashboard mini widget shows session-mode chips", () => {
@@ -730,6 +773,49 @@ test("Monitor active/completed sections and tree expansion work", () => {
 	const collapsedActive = monitorTreeRows(groups, new Set(["active"]));
 	assert.equal(collapsedActive.find((row) => row.kind === "section" && row.section === "active")?.collapsed, true);
 	assert.equal(collapsedActive.filter((row) => row.kind === "session").length, 1);
+});
+
+test("Monitor sorts sessions by newest invocation without updatedAt churn", () => {
+	const olderActive = record("planner", "planner-1700000000-aaaaaaaa", "2026-05-14T05:00:00.000Z", {
+		kind: "oneshot",
+		status: "running",
+		completedAt: undefined,
+		updatedAt: "2026-05-14T05:30:00.000Z",
+	});
+	const newerActive = record("reviewer-test", "reviewer-test-1700000600-bbbbbbbb", "2026-05-14T05:10:00.000Z", {
+		kind: "oneshot",
+		status: "running",
+		completedAt: undefined,
+		updatedAt: "2026-05-14T05:11:00.000Z",
+	});
+	const newestCompleted = record("reviewer-doc", "reviewer-doc-1700001200-cccccccc", "2026-05-14T05:20:00.000Z", {
+		kind: "oneshot",
+		status: "completed",
+		updatedAt: "2026-05-14T05:21:00.000Z",
+	});
+	const paneOld = record("rust", "rust-1700001800-dddddddd", "2026-05-14T05:30:00.000Z", {
+		kind: "pane",
+		paneId: "%9",
+		status: "running",
+		completedAt: undefined,
+		updatedAt: "2026-05-14T06:30:00.000Z",
+	});
+	const paneNew = record("rust", "rust-1700002100-eeeeeeee", "2026-05-14T05:35:00.000Z", {
+		kind: "pane",
+		paneId: "%9",
+		status: "running",
+		completedAt: undefined,
+		updatedAt: "2026-05-14T05:36:00.000Z",
+	});
+
+	const groups = buildMonitorSessionGroups([olderActive, newestCompleted, newerActive, paneOld, paneNew]);
+	const rows = monitorTreeRows(groups);
+	const sessionAgents = rows.filter((row) => row.kind === "session").map((row) => row.group.agent);
+	assert.deepEqual(sessionAgents, ["rust", "reviewer-test", "planner", "reviewer-doc"]);
+
+	const rustGroup = groups.find((group) => group.agent === "rust")!;
+	assert.deepEqual(rustGroup.records.map((item) => item.taskId), [paneNew.taskId, paneOld.taskId]);
+	assert.equal(rustGroup.latestAt, paneNew.createdAt);
 });
 
 test("Monitor clamp keeps section rows selectable", () => {

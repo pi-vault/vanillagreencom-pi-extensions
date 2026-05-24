@@ -7,7 +7,6 @@ import {
 	monitorSessionKey,
 	monitorStatusIsActive,
 	monitorStatusIsTerminal,
-	recordLatestTimestamp,
 	taskNumberById,
 	usageSum,
 	type MonitorSessionType,
@@ -89,6 +88,11 @@ function recordClockTime(record: PaneTaskRecord): string {
 	return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+function recordInvocationTimestamp(record: PaneTaskRecord): number {
+	const value = Date.parse(record.createdAt ?? "");
+	return Number.isFinite(value) ? value : 0;
+}
+
 export function monitorTaskRowLabel(record: PaneTaskRecord, taskNumbers: Map<string, number>): string {
 	const number = taskNumbers.get(record.taskId);
 	const clock = recordClockTime(record);
@@ -108,13 +112,13 @@ export function buildMonitorSessionGroups(records: PaneTaskRecord[]): MonitorSes
 	const groups: MonitorSessionGroup[] = [];
 	for (const [id, bucket] of bySession) {
 		const groupRecords = [...bucket.records].sort((a, b) => {
-			const delta = recordLatestTimestamp(b) - recordLatestTimestamp(a);
+			const delta = recordInvocationTimestamp(b) - recordInvocationTimestamp(a);
 			return delta !== 0 ? delta : b.taskId.localeCompare(a.taskId);
 		});
 		const latest = groupRecords[0];
 		if (!latest) continue;
 		const created = groupRecords.reduce((min, record) => Math.min(min, Date.parse(record.createdAt) || min), Number.POSITIVE_INFINITY);
-		const latestAtTs = groupRecords.reduce((max, record) => Math.max(max, recordLatestTimestamp(record)), 0);
+		const latestInvocationAtTs = groupRecords.reduce((max, record) => Math.max(max, recordInvocationTimestamp(record)), 0);
 		const kind = bucket.type === "pane" ? "pane" : "oneshot";
 		groups.push({
 			agent: latest.agent,
@@ -123,7 +127,7 @@ export function buildMonitorSessionGroups(records: PaneTaskRecord[]): MonitorSes
 			isActive: groupRecords.some((record) => monitorStatusIsActive(record.status)),
 			isCompleted: groupRecords.every((record) => monitorStatusIsTerminal(record.status)),
 			kind,
-			latestAt: latestAtTs ? new Date(latestAtTs).toISOString() : latest.completedAt ?? latest.updatedAt ?? latest.createdAt,
+			latestAt: latestInvocationAtTs ? new Date(latestInvocationAtTs).toISOString() : latest.createdAt,
 			paneId: groupRecords.find((record) => record.paneId)?.paneId,
 			records: groupRecords,
 			sessionKey: groupRecords.find((record) => record.sessionKey)?.sessionKey,

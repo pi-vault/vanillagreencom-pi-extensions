@@ -70,7 +70,7 @@ export function sortDashboardItems(items: SubagentDashboardItem[]): SubagentDash
 		if (rank !== 0) return rank;
 		const aKey = a.startedAt ?? a.taskId;
 		const bKey = b.startedAt ?? b.taskId;
-		if (aKey !== bKey) return aKey < bKey ? -1 : 1;
+		if (aKey !== bKey) return aKey > bKey ? -1 : 1;
 		return a.agent.localeCompare(b.agent) || a.taskId.localeCompare(b.taskId);
 	});
 }
