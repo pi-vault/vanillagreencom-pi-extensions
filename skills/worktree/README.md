@@ -41,7 +41,7 @@ Cleanup script:
 "$CODEX_SOURCE_TREE_PATH/.agents/skills/worktree/scripts/worktree" codex-cleanup "$CODEX_WORKTREE_PATH"
 ```
 
-At the start of an issue thread, normalize the app-created branch before running issue orchestration:
+`codex-branch` normalization is automatic under `linear-orch`: `session-init` runs it for you when you invoke `initialize [ISSUE_ID]` or `start [ISSUE_ID]` in a Codex-managed worktree. You only need to run it by hand for a raw worktree workflow that does not go through `linear-orch`:
 
 ```bash
 "$CODEX_SOURCE_TREE_PATH/.agents/skills/worktree/scripts/worktree" codex-branch CC-123 "$CODEX_WORKTREE_PATH"
