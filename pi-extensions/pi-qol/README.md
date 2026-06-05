@@ -13,6 +13,7 @@ Quality-of-life extension for Pi: compact statusline, multiline input, session n
 - Newline-insert in the editor (multi-line drafts without auto-submit), with a fallback binding for terminals that can't distinguish the primary key.
 - Sessions auto-name from your first prompt. `/rename` overrides anytime.
 - `/search` browses previous sessions with snippet previews; the configured shortcut opens it instantly.
+- Session search reads prompt snippets line-by-line, so very large session JSONL files do not have to be materialized just to browse, search, or import context.
 - `/context` shows a Claude-style context-window breakdown.
 - `/handoff <goal>` drafts a focused prompt for a new session.
 - `/schedule 20m <message>` or `/schedule 1h45m <message>` sends a delayed prompt without invoking the model until the timer fires.

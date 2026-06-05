@@ -6,6 +6,7 @@ import { findAppendSystemScopeRoot } from "../extensions/manager/append-system.t
 import { planUninstall, planUpdate, toggleItem } from "../extensions/manager/actions.ts";
 import { applyUpdateMetadata, buildInventory } from "../extensions/manager/inventory.ts";
 import { npmCachePath } from "../extensions/manager/paths.ts";
+import { gitPackageDirCandidates } from "../extensions/manager/versions.ts";
 
 const rootTmp = join(process.cwd(), "tmp", "pi-extension-manager-inventory-tests");
 const originalEnv = {
@@ -186,6 +187,26 @@ test("reads settings schemas from project git package clones", () => {
 	expect(item?.state).toBe("active");
 	expect(item?.settingsSchema?.map((schema) => schema.key)).toEqual(["gitFlag"]);
 	expect(item?.packageDir).toBe(gitPackageDir);
+});
+
+test("rejects unsafe git package clone components", () => {
+	const project = join(rootTmp, "project");
+	const projectPi = join(project, ".pi");
+	const validPackageDir = join(projectPi, "git", "github.com", "acme", "pi-package");
+	const maliciousSource = "git:github.com/acme/../../escape@v1.0.0";
+
+	expect(gitPackageDirCandidates("git:github.com/acme/pi-package@v1.0.0", "project", projectPi)).toEqual([validPackageDir]);
+	expect(gitPackageDirCandidates("git:git@github.com:acme/pi-package.git@v1.0.0", "project", projectPi)).toEqual([validPackageDir]);
+	expect(gitPackageDirCandidates(maliciousSource, "project", projectPi)).toEqual([]);
+
+	writeJson(join(projectPi, "settings.json"), { packages: [maliciousSource] });
+	writePackage(join(projectPi, "escape"), "escaped-package", "Escaped Package", "escapedFlag");
+
+	const inv = inventory(project);
+	expect(inv.packages.some((pkg) => pkg.packageName === "escaped-package")).toBe(false);
+	const item = inv.packages.find((pkg) => pkg.sourceName === maliciousSource);
+	expect(item?.state).toBe("broken");
+	expect(item?.sourcePath).toBe(maliciousSource);
 });
 
 test("toggles project npm packages by original settings source", () => {

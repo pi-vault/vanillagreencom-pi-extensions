@@ -10,6 +10,7 @@ import {
 	SESSION_SEARCH_STATUS_KEY,
 } from "../constants.js";
 import { expandHome, piSettingsPaths, settingBoolean, settingNumber, settingString, settingStringAllowEmpty } from "../settings.js";
+import { forEachSessionJsonlLine } from "./jsonl.js";
 import type {
 	QolSessionPaletteAction,
 	QolSessionSearchPendingMessage,
@@ -166,15 +167,14 @@ export function sessionUserMessages(sessionPath: string): QolSessionUserMessage[
 	if (cached) return cached;
 	const messages: QolSessionUserMessage[] = [];
 	try {
-		const lines = readFileSync(sessionPath, "utf8").split(/\r?\n/);
-		for (const line of lines) {
-			if (!line.trim()) continue;
+		forEachSessionJsonlLine(sessionPath, (line) => {
+			if (!line.trim()) return;
 			let entry: any;
-			try { entry = JSON.parse(line); } catch { continue; }
+			try { entry = JSON.parse(line); } catch { return; }
 			const message = entry?.type === "message" ? entry.message : undefined;
-			if (!message || message.role !== "user") continue;
+			if (!message || message.role !== "user") return;
 			const text = oneLine(messageContentText(message.content));
-			if (!text) continue;
+			if (!text) return;
 			messages.push({
 				entryId: typeof entry.id === "string" ? entry.id : undefined,
 				index: messages.length + 1,
@@ -182,7 +182,7 @@ export function sessionUserMessages(sessionPath: string): QolSessionUserMessage[
 				text,
 				timestamp: sessionMessageTimestamp(entry, message),
 			});
-		}
+		});
 	} catch {
 		// Ignore unreadable sessions; callers fall back to SessionInfo.firstMessage.
 	}

@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { SessionManager, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
@@ -13,6 +12,7 @@ import {
 import { settingNumber, settingString } from "../settings.js";
 import { sessionDisplayName } from "./cache.js";
 import { QolSessionSearchLoadingComponent } from "./component.js";
+import { forEachSessionJsonlLine } from "./jsonl.js";
 import type { QolSessionSearchPendingMessage, QolSessionSearchResult } from "./types.js";
 
 export function trimSessionSummaryInput(text: string, cwd: string): string {
@@ -33,14 +33,13 @@ function messagesForSessionSummary(sessionPath: string): AgentMessage[] {
 		// Fall back to a direct JSONL parse below.
 	}
 	try {
-		const lines = readFileSync(sessionPath, "utf8").split(/\r?\n/);
 		const messages: AgentMessage[] = [];
-		for (const line of lines) {
-			if (!line.trim()) continue;
+		forEachSessionJsonlLine(sessionPath, (line) => {
+			if (!line.trim()) return;
 			let entry: any;
-			try { entry = JSON.parse(line); } catch { continue; }
+			try { entry = JSON.parse(line); } catch { return; }
 			if (entry?.type === "message" && entry.message) messages.push(entry.message);
-		}
+		});
 		return messages;
 	} catch {
 		return [];

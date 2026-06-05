@@ -8,6 +8,7 @@ Polished session manager overlay. Complements Pi's built-in `/resume` with searc
 
 - Browse current-project sessions or all sessions.
 - Search by tokens, quoted phrases, or `re:<regex>`.
+- Reads session prompt snippets line-by-line, so very large session JSONL files do not have to be materialized just to browse or search.
 - Threaded lineage view follows Pi `parentSession` relationships.
 - Detail pane shows each session CWD plus its saved model.
 - Resume preserves the session's saved model. If your active model differs, a confirmation lets you pick either.

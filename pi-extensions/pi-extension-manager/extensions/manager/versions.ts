@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { npmCachePath } from "./paths.js";
 import { runCommand } from "./process.js";
 import { NPM_CACHE_TTL_MS, type NpmCache, type Scope, type SettingsFile, type SourceIndex, type SourceIndexEntry } from "./types.js";
@@ -169,6 +169,26 @@ export function resolveNpmPackageDir(npmName: string, scope: Scope, baseDir: str
 	return undefined;
 }
 
+const UNSAFE_GIT_COMPONENT_RE = /[\\/]|[\0-\x1f\x7f]/;
+
+function isSafeGitComponent(value: string): boolean {
+	return value.length > 0 && value !== "." && value !== ".." && !UNSAFE_GIT_COMPONENT_RE.test(value);
+}
+
+function isInsidePath(root: string, candidate: string): boolean {
+	const rel = relative(root, candidate);
+	return rel === "" || (rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function safeGitPackageDir(baseDir: string, host: string, repoPath: string): string | undefined {
+	if (!isSafeGitComponent(host)) return undefined;
+	const parts = repoPath.replace(/\.git$/, "").split("/");
+	if (parts.length === 0 || parts.some((part) => !isSafeGitComponent(part))) return undefined;
+	const root = resolve(baseDir, "git");
+	const candidate = resolve(root, host, ...parts);
+	return isInsidePath(root, candidate) ? candidate : undefined;
+}
+
 export function gitPackageDirCandidates(source: string, scope: Scope, baseDir: string): string[] {
 	if (!(source.startsWith("git:") || source.startsWith("http://") || source.startsWith("https://") || source.startsWith("ssh://") || source.startsWith("git://"))) return [];
 	let spec = source.startsWith("git:") ? source.slice("git:".length) : source;
@@ -198,8 +218,8 @@ export function gitPackageDirCandidates(source: string, scope: Scope, baseDir: s
 		return [];
 	}
 	if (!host || !repoPath) return [];
-	repoPath = repoPath.replace(/\.git$/, "");
-	return [join(baseDir, "git", host, ...repoPath.split("/").filter(Boolean))];
+	const dir = safeGitPackageDir(baseDir, host, repoPath);
+	return dir ? [dir] : [];
 }
 
 export function npmInstalledVersion(npmName: string, cwd: string): string | undefined {

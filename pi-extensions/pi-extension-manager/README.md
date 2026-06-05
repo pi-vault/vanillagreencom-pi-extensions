@@ -55,3 +55,5 @@ Glyph style: each package exposes `glyphStyle` (`unicode` default, `ascii` for t
 ## Notes
 
 Package enable/disable and updates take effect after `/reload` or restart — Pi doesn't currently support unloading already-loaded extensions. npm update/uninstall actions run inside Pi's scope-local npm directory (`<scope>/npm`), matching Pi 0.75+ user package installs under `~/.pi/agent/npm/`. Command execution resolves Windows npm-family shims without requiring external runtime dependencies.
+
+Git package entries are inspected only under Pi's managed clone root (`<scope>/git/<host>/<repo>`). Entries with unsafe host or path components are shown as broken instead of reading package metadata from outside that root.

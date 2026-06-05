@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
 import { basename } from "node:path";
+import { forEachSessionJsonlLine } from "./session-lines.js";
 import { oneLine } from "./text.js";
 import type { SessionInfo, SessionUserMessage } from "./types.js";
 
@@ -43,17 +43,16 @@ function sessionUserMessages(sessionPath: string): SessionUserMessage[] {
 	if (cached) return cached;
 	const messages: SessionUserMessage[] = [];
 	try {
-		const lines = readFileSync(sessionPath, "utf8").split(/\r?\n/);
-		for (const line of lines) {
-			if (!line.trim()) continue;
+		forEachSessionJsonlLine(sessionPath, (line) => {
+			if (!line.trim()) return;
 			let entry: any;
-			try { entry = JSON.parse(line); } catch { continue; }
+			try { entry = JSON.parse(line); } catch { return; }
 			const message = entry?.type === "message" ? entry.message : undefined;
-			if (!message || message.role !== "user") continue;
+			if (!message || message.role !== "user") return;
 			const text = oneLine(messageContentText(message.content));
-			if (!text) continue;
+			if (!text) return;
 			messages.push({ index: messages.length + 1, text, timestamp: sessionMessageTimestamp(entry, message) });
-		}
+		});
 	} catch {
 		// Ignore unreadable sessions; callers fall back to SessionInfo.firstMessage.
 	}

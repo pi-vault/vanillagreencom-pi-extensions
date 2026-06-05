@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync } from "node:fs";
 import { rm, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { SessionManager, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { canonicalPath, expandHome } from "./paths.js";
+import { forEachSessionJsonlLine } from "./session-lines.js";
 import { configuredSessionDir, settingBoolean } from "./settings.js";
 import { LEGACY_STATUS_KEY, VSTACK_MODAL_LOCK_SYMBOL, type Scope, type SessionInfo, type VstackModalLock } from "./types.js";
 
@@ -58,16 +59,15 @@ function appendSessionInfoFallback(sessionPath: string, name: string): void {
 	const ids = new Set<string>();
 	let parentId: string | null = null;
 	try {
-		const lines = readFileSync(sessionPath, "utf8").split(/\r?\n/);
-		for (const line of lines) {
-			if (!line.trim()) continue;
+		forEachSessionJsonlLine(sessionPath, (line) => {
+			if (!line.trim()) return;
 			const entry = JSON.parse(line) as { type?: string; id?: string };
-			if (entry.type === "session") continue;
+			if (entry.type === "session") return;
 			if (typeof entry.id === "string") {
 				ids.add(entry.id);
 				parentId = entry.id;
 			}
-		}
+		});
 	} catch {
 		// If parsing fails, still append a valid standalone session_info entry.
 	}
